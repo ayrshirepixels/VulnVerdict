@@ -1,0 +1,94 @@
+@page "/assets"
+@inject IDbContextFactory<VvDbContext> Db
+@inject InventoryService Inventory
+@inject SettingsService Settings
+
+<PageTitle>Assets - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Assets</h1>
+    <p class="lead">Everything the connectors can see, merged across sources. Unknown hosts came from the discovery sweep and were claimed by no adapter.</p>
+
+    @if (_cov is not null)
+    {
+        <div class="stat-row">
+            <div class="stat"><b>@_cov.Assets</b><span>assets seen</span></div>
+            <div class="stat"><b>@_cov.Sources</b><span>sources</span></div>
+            <div class="stat" style="@(_cov.Unknown > 0 ? "border-top:3px solid var(--amber)" : "")"><b>@_cov.Unknown</b><span>unknown hosts</span></div>
+            <div class="stat"><b>@_cov.UncoveredVms.Count</b><span>VMs with no collector</span></div>
+            <div class="stat"><b>@_cov.Stale</b><span>not seen for 30 days</span></div>
+        </div>
+        @if (_cov.UncoveredVms.Count > 0)
+        {
+            <div class="alert alert-warn"><b>Unknown coverage.</b> The hypervisor lists @_cov.UncoveredVms.Count VM@(_cov.UncoveredVms.Count == 1 ? "" : "s") that no server collector has seen: @string.Join(", ", _cov.UncoveredVms.Take(8).Select(v => v.DisplayName))@(_cov.UncoveredVms.Count > 8 ? ", ..." : ""). Add a WinRM or SSH connector that reaches them.</div>
+        }
+    }
+
+    <div class="filters">
+        <select @bind="_kind" @bind:after="Reload"><option value="">Any kind</option>@foreach (var k in Enum.GetValues<AssetKind>()) { <option value="@k">@k</option> }</select>
+        <select @bind="_exposure" @bind:after="Reload"><option value="">Any exposure</option><option value="Internet">Internet-facing</option><option value="Internal">Internal</option><option value="Isolated">Isolated</option></select>
+        <select @bind="_crit" @bind:after="Reload"><option value="">Any criticality</option><option value="Critical">Critical</option><option value="Standard">Standard</option><option value="Low">Low</option></select>
+        <select @bind="_state" @bind:after="Reload"><option value="live">Live</option><option value="unknown">Unknown hosts</option><option value="stale">Stale (30+ days)</option><option value="archived">Archived</option></select>
+        <input type="text" placeholder="name, hostname or IP" @bind="_search" @bind:event="oninput" @bind:after="Reload" style="min-width:220px" />
+        <span class="muted">@_rows.Count shown</span>
+    </div>
+
+    <table class="table">
+        <thead><tr><th>Asset</th><th>Kind</th><th>OS</th><th>Exposure</th><th>Criticality</th><th class="num">Software</th><th class="num">Fix today</th><th class="num">This week</th><th>Sources</th><th>Last seen</th></tr></thead>
+        <tbody>
+            @foreach (var r in _rows)
+            {
+                <tr>
+                    <td><a href="/assets/@r.Asset.Id">@r.Asset.DisplayName</a>@(r.Asset.Unknown ? " (unknown)" : "")<br /><small class="muted">@string.Join(", ", InventoryService.Json(r.Asset.IpAddressesJson).Take(3))</small></td>
+                    <td>@r.Asset.Kind</td>
+                    <td>@r.Asset.OsProduct @r.Asset.OsVersion</td>
+                    <td>@r.Asset.Exposure.Plain()</td>
+                    <td>@r.Asset.Criticality</td>
+                    <td class="num">@r.Software</td>
+                    <td class="num">@(r.Today > 0 ? r.Today.ToString() : "")</td>
+                    <td class="num">@(r.Week > 0 ? r.Week.ToString() : "")</td>
+                    <td><small>@string.Join(", ", r.Asset.Sources.Select(s => s.AdapterId).Distinct())</small></td>
+                    <td>@Ui.Ago(r.Asset.LastSeen)</td>
+                </tr>
+            }
+            @if (_rows.Count == 0) { <tr><td colspan="10" class="muted">No assets yet. Add a connector under <a href="/connectors">Connectors</a>.</td></tr> }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private sealed record Row(Asset Asset, int Software, int Today, int Week);
+    private List<Row> _rows = new();
+    private InventoryService.Coverage? _cov;
+    private string _kind = "", _exposure = "", _crit = "", _state = "live", _search = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cov = await Inventory.CoverageAsync();
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        var staleBefore = DateTime.UtcNow.AddDays(-30);
+        var q = db.Assets.AsNoTracking().Include(a => a.Sources).AsQueryable();
+        q = _state switch
+        {
+            "unknown" => q.Where(a => a.Unknown && !a.Archived),
+            "stale" => q.Where(a => !a.Archived && a.LastSeen < staleBefore),
+            "archived" => q.Where(a => a.Archived),
+            _ => q.Where(a => !a.Archived && a.LastSeen >= staleBefore)
+        };
+        if (Enum.TryParse<AssetKind>(_kind, out var k)) q = q.Where(a => a.Kind == k);
+        if (Enum.TryParse<Exposure>(_exposure, out var e)) q = q.Where(a => a.Exposure == e);
+        if (Enum.TryParse<Criticality>(_crit, out var c)) q = q.Where(a => a.Criticality == c);
+        if (!string.IsNullOrWhiteSpace(_search)) { var t = _search.Trim(); q = q.Where(a => a.DisplayName.Contains(t) || a.HostnamesJson.Contains(t) || a.IpAddressesJson.Contains(t)); }
+        var assets = await q.OrderBy(a => a.DisplayName).Take(500).ToListAsync();
+        var ids = assets.Select(a => a.Id).ToList();
+        var sw = await db.Software.Where(s => ids.Contains(s.AssetId)).GroupBy(s => s.AssetId).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
+        var vd = await db.Verdicts.Where(v => v.AssetId != null && ids.Contains(v.AssetId.Value) && v.State == VerdictState.Open && v.Tier >= VerdictTier.FixThisWeek)
+            .GroupBy(v => new { v.AssetId, v.Tier }).Select(g => new { g.Key.AssetId, g.Key.Tier, N = g.Count() }).ToListAsync();
+        _rows = assets.Select(a => new Row(a, sw.GetValueOrDefault(a.Id), vd.Where(x => x.AssetId == a.Id && x.Tier == VerdictTier.FixToday).Sum(x => x.N), vd.Where(x => x.AssetId == a.Id && x.Tier == VerdictTier.FixThisWeek).Sum(x => x.N))).ToList();
+    }
+}

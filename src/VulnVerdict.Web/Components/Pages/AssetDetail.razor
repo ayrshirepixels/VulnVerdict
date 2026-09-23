@@ -1,0 +1,204 @@
+@page "/assets/{Id:guid}"
+@using System.Text.Json
+@inject IDbContextFactory<VvDbContext> Db
+@inject SettingsService Settings
+@inject ConnectorService Connectors
+
+<PageTitle>@(_a?.DisplayName ?? "Asset") - VulnVerdict</PageTitle>
+
+<div class="page">
+    @if (_a is null) { <h1>Asset</h1><p class="muted">Not found.</p> }
+    else
+    {
+        <h1>@_a.DisplayName</h1>
+        <p class="lead">@_a.Kind@(_a.OsProduct is null ? "" : ", " + _a.OsProduct + " " + _a.OsVersion + (_a.OsBuild is null ? "" : " build " + _a.OsBuild)). First seen @Ui.Local(_a.FirstSeen, _tz, "d MMM yyyy"), last seen @Ui.Ago(_a.LastSeen).@(_a.Unknown ? " Unknown host: seen by discovery only." : "")</p>
+        @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+
+        <div class="grid grid-2">
+            <div class="card">
+                <h2>Identity</h2>
+                <dl class="kv">
+                    <dt>Hostnames</dt><dd>@string.Join(", ", InventoryService.Json(_a.HostnamesJson))</dd>
+                    <dt>IP addresses</dt><dd>@string.Join(", ", InventoryService.Json(_a.IpAddressesJson))</dd>
+                    <dt>MAC addresses</dt><dd>@string.Join(", ", InventoryService.Json(_a.MacAddressesJson))</dd>
+                    <dt>Owner</dt><dd>@(_a.Owner ?? "-")</dd>
+                    <dt>Sources</dt><dd>@foreach (var s in _a.Sources) { <div>@(_connectorNames.GetValueOrDefault(s.ConnectorId, s.AdapterId)) (@s.AdapterId): id @s.ExternalId, seen @Ui.Ago(s.LastSeen)</div> }</dd>
+                </dl>
+            </div>
+            <div class="card">
+                <h2>Exposure and criticality</h2>
+                <AuthorizeView Roles="Administrator,Operator" Context="auth">
+                    <Authorized>
+                        <div class="form">
+                            <div class="row">
+                                <div><label>Exposure</label>
+                                    <select @bind="_a.Exposure"><option value="@Exposure.Internet">Internet-facing</option><option value="@Exposure.Internal">Internal network only</option><option value="@Exposure.Isolated">Isolated or management network</option></select>
+                                    <label class="check" style="margin-top:6px"><input type="checkbox" @bind="_a.ExposurePinned" /> Pin (connectors stop changing it)</label></div>
+                                <div><label>Criticality</label>
+                                    <select @bind="_a.Criticality"><option value="@Criticality.Critical">Critical</option><option value="@Criticality.Standard">Standard</option><option value="@Criticality.Low">Low</option></select>
+                                    <label class="check" style="margin-top:6px"><input type="checkbox" @bind="_a.CriticalityPinned" /> Pin</label></div>
+                            </div>
+                            <div><label>Note</label><input type="text" @bind="_a.Note" /></div>
+                            <div class="btn-row"><button class="btn" @onclick="SaveAsync">Save</button>@if (!_a.Archived) { <button class="btn btn-secondary" @onclick="ArchiveAsync">Archive</button> }</div>
+                        </div>
+                    </Authorized>
+                    <NotAuthorized><p>@_a.Exposure.Plain(), @_a.Criticality</p></NotAuthorized>
+                </AuthorizeView>
+                <p class="muted" style="font-size:13px;margin-top:10px">Exposure evidence: @(_a.ExposureEvidence ?? "none recorded; defaults to internal")</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Compensating controls</h2>
+            <p class="muted" style="margin-top:0">A documented control lowers verdicts on this asset one step and is named in the explanation. It never lowers "exploited in the wild and internet-facing".</p>
+            @if (_controls.Count > 0)
+            {
+                <table class="table">
+                    <thead><tr><th>Control</th><th>Description</th><th>Applies to</th><th>Expires</th><th>Recorded by</th><th></th></tr></thead>
+                    <tbody>@foreach (var c in _controls) { <tr><td>@c.KindText</td><td>@c.Description</td><td>@(c.ProductNorm ?? "everything on this asset")</td><td>@(c.Expiry is null ? "never" : Ui.Local(c.Expiry, _tz, "d MMM yyyy"))</td><td>@c.CreatedBy</td><td><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => RemoveControlAsync(c.Id)">Remove</button></AuthorizeView></td></tr> }</tbody>
+                </table>
+            }
+            <AuthorizeView Roles="Administrator,Operator" Context="auth">
+                <div class="form" style="margin-top:10px"><div class="row-3">
+                    <div><label>Kind</label><select @bind="_ctlKind">@foreach (var k in Enum.GetValues<ControlKind>()) { <option value="@k">@(new CompensatingControl { Kind = k }.KindText)</option> }</select></div>
+                    <div><label>Description</label><input type="text" @bind="_ctlDesc" placeholder="Cloudflare WAF in front of the site" /></div>
+                    <div><label>Only for product (optional)</label><input type="text" @bind="_ctlProduct" placeholder="e.g. Internet Information Services" /></div>
+                </div><div class="row"><div><label>Expires (optional)</label><input type="date" @bind="_ctlExpiry" /></div><div style="align-self:end"><button class="btn btn-secondary" @onclick="AddControlAsync">Add control</button></div></div></div>
+            </AuthorizeView>
+        </div>
+
+        <div class="card">
+            <h2>Verdicts on this asset</h2>
+            @if (_verdicts.Count == 0) { <p class="muted" style="margin:0">None open.</p> }
+            else
+            {
+                <table class="table">
+                    <thead><tr><th>Verdict</th><th>CVE</th><th>Software</th><th>Sentence</th><th>State</th></tr></thead>
+                    <tbody>@foreach (var v in _verdicts) { <tr><td><TierBadge Tier="v.Tier" Rule="v.RuleNumber" Confidence="v.Confidence" /></td><td><a href="/verdicts/@v.Id">@v.CveId</a></td><td>@v.SoftwareInstance?.Display</td><td>@v.Sentence</td><td><span class="@Ui.StateClass(v.State)">@v.State.Plain()</span></td></tr> }</tbody>
+                </table>
+                <p class="muted"><a href="/verdicts?q=@Uri.EscapeDataString(_a.DisplayName)&state=">All verdicts for this asset, including dismissed</a></p>
+            }
+        </div>
+
+        @if (_findings.Count > 0)
+        {
+            <div class="card">
+                <h2>What other scanners say</h2>
+                <p class="muted" style="margin-top:0">Findings supplied by third-party scanners. Evidence and a second opinion, never the verdict.</p>
+                <table class="table"><thead><tr><th>Source</th><th>Finding</th><th>CVEs</th><th>Their severity</th><th>Ours</th></tr></thead>
+                    <tbody>@foreach (var f in _findings) { var ids = InventoryService.Json(f.CveIdsJson); <tr><td>@f.Source</td><td>@f.Title</td><td>@string.Join(", ", ids.Take(5))</td><td>@f.SourceSeverity</td><td>@Agree(ids)</td></tr> }</tbody></table>
+            </div>
+        }
+
+        <div class="card">
+            <h2>Software (@_software.Count)</h2>
+            <div class="filters"><input type="text" placeholder="filter" @bind="_swFilter" @bind:event="oninput" style="min-width:200px" /></div>
+            <table class="table">
+                <thead><tr><th>Product</th><th>Version</th><th>Kind</th><th>Mapped to</th><th>Listening</th><th>Source</th></tr></thead>
+                <tbody>
+                    @foreach (var s in _software.Where(s => string.IsNullOrWhiteSpace(_swFilter) || s.Display.Contains(_swFilter, StringComparison.OrdinalIgnoreCase)).Take(400))
+                    {
+                        <tr style="@(s.Enabled ? "" : "opacity:.6")">
+                            <td>@s.Vendor @s.Product@(s.Enabled ? "" : " (disabled)")</td><td>@s.Version</td><td>@s.Kind</td>
+                            <td>@(s.MappingStatus == MappingStatus.Unmapped ? "needs mapping" : s.MappingStatus == MappingStatus.Package ? "package (" + s.Ecosystem + ")" : s.MappingStatus == MappingStatus.Ignored ? "ignored" : s.MappedVendorNorm + "/" + s.MappedProductNorm + " (" + s.MappingStatus.ToString().ToLowerInvariant() + ")")</td>
+                            <td><small>@Listeners(s.ListenersJson)</small></td>
+                            <td><small>@(_connectorNames.GetValueOrDefault(s.ConnectorId, s.ConnectorId))</small></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private Asset? _a;
+    private List<SoftwareInstance> _software = new();
+    private List<Verdict> _verdicts = new();
+    private List<ExternalFinding> _findings = new();
+    private List<CompensatingControl> _controls = new();
+    private Dictionary<string, string> _connectorNames = new();
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+    private string _swFilter = "", _ctlDesc = "", _ctlProduct = "";
+    private ControlKind _ctlKind = ControlKind.WafInFront;
+    private DateTime? _ctlExpiry;
+    private string? _notice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tz = (await Settings.LoadAsync()).ResolveTimeZone();
+        _connectorNames = (await Connectors.ListAsync()).ToDictionary(c => c.Id.ToString("N"), c => c.DisplayName);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        _a = await db.Assets.AsNoTracking().Include(a => a.Sources).FirstOrDefaultAsync(a => a.Id == Id);
+        if (_a is null) return;
+        _software = await db.Software.AsNoTracking().Where(s => s.AssetId == Id).OrderBy(s => s.Kind).ThenBy(s => s.Product).ToListAsync();
+        _verdicts = await db.Verdicts.AsNoTracking().Include(v => v.SoftwareInstance).Where(v => v.AssetId == Id && v.State == VerdictState.Open && v.Tier >= VerdictTier.NextPatchCycle).OrderByDescending(v => v.Tier).ThenBy(v => v.SlaDue).ToListAsync();
+        _findings = await db.Findings.AsNoTracking().Where(f => f.AssetId == Id).OrderByDescending(f => f.LastSeen).Take(200).ToListAsync();
+        _controls = await db.Controls.AsNoTracking().Where(c => c.AssetId == Id).ToListAsync();
+    }
+
+    private string Agree(List<string> ids)
+    {
+        var ours = _verdicts.Where(v => ids.Contains(v.CveId)).Select(v => v.Tier.Plain()).Distinct().ToList();
+        return ours.Count == 0 ? "not matched by us (check mapping)" : string.Join(", ", ours);
+    }
+
+    private static string Listeners(string? json)
+    {
+        try { return json is null ? "" : string.Join(" ", JsonSerializer.Deserialize<List<VulnVerdict.Core.Adapters.Listener>>(json)!.Select(l => l.Protocol + "/" + l.Port)); } catch { return ""; }
+    }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task SaveAsync()
+    {
+        if (_a is null) return;
+        await using var db = await Db.CreateDbContextAsync();
+        var row = await db.Assets.FirstAsync(a => a.Id == Id);
+        var before = row.Exposure + "/" + row.Criticality;
+        row.Exposure = _a.Exposure; row.ExposurePinned = _a.ExposurePinned; row.Criticality = _a.Criticality; row.CriticalityPinned = _a.CriticalityPinned; row.Note = _a.Note;
+        if (_a.ExposurePinned) row.ExposureEvidence = "Set by " + await ActorAsync();
+        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "asset.update", Target = row.DisplayName, Before = before, After = row.Exposure + "/" + row.Criticality });
+        await db.SaveChangesAsync();
+        await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+        _notice = "Saved; verdicts are re-evaluated within a minute.";
+        await LoadAsync();
+    }
+
+    private async Task ArchiveAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        await db.Assets.Where(a => a.Id == Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.Archived, true));
+        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "asset.archive", Target = _a!.DisplayName });
+        await db.SaveChangesAsync();
+        _notice = "Archived."; await LoadAsync();
+    }
+
+    private async Task AddControlAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        db.Controls.Add(new CompensatingControl { Id = Guid.NewGuid(), AssetId = Id, Kind = _ctlKind, Description = _ctlDesc, ProductNorm = string.IsNullOrWhiteSpace(_ctlProduct) ? null : Normalizer.Norm(_ctlProduct), Expiry = _ctlExpiry?.ToUniversalTime(), CreatedAt = DateTime.UtcNow, CreatedBy = await ActorAsync() });
+        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "control.add", Target = _a!.DisplayName, After = _ctlKind + ": " + _ctlDesc });
+        await db.SaveChangesAsync();
+        await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+        _ctlDesc = ""; _ctlProduct = ""; _ctlExpiry = null; _notice = "Control recorded; verdicts are re-evaluated within a minute.";
+        await LoadAsync();
+    }
+
+    private async Task RemoveControlAsync(Guid id)
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        await db.Controls.Where(c => c.Id == id).ExecuteDeleteAsync();
+        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "control.remove", Target = _a!.DisplayName });
+        await db.SaveChangesAsync();
+        await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+        await LoadAsync();
+    }
+}

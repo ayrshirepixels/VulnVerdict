@@ -1,0 +1,174 @@
+@page "/connectors"
+@using VulnVerdict.Core.Adapters
+@implements IDisposable
+@inject ConnectorService ConnectorSvc
+@inject SettingsService Settings
+
+<PageTitle>Connectors - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Connectors</h1>
+    <p class="lead">Every source is an adapter, every adapter is one credential form: a hostname and a read-only account. Adapters never write to the source. Three failures in a row alert the administrator.</p>
+
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+    <AuthorizeView Roles="Administrator,Operator">
+        <div class="card">
+            <h2>@(_editId is null ? "Add a connector" : "Edit connector")</h2>
+            <div class="form">
+                <div class="row">
+                    <div><label>Source</label>
+                        <select @bind="_adapterId" @bind:after="AdapterChanged" disabled="@(_editId is not null)">
+                            <option value="">choose...</option>
+                            @foreach (var a in ConnectorSvc.Adapters) { <option value="@a.Metadata.Id">@a.Metadata.DisplayName</option> }
+                        </select></div>
+                    <div><label>Name (as shown in evidence)</label><input type="text" @bind="_name" placeholder="@(_adapter?.Metadata.DisplayName)" /></div>
+                </div>
+                @if (_adapter is not null)
+                {
+                    <p class="muted" style="margin:0">@_adapter.Metadata.Description<br /><b>Minimum permission:</b> @_adapter.Metadata.MinimumPermission @if (_adapter.Metadata.DocsUrl is not null) { <a href="@_adapter.Metadata.DocsUrl" target="_blank" rel="noopener noreferrer">vendor instructions</a> }</p>
+                    @foreach (var f in _adapter.Metadata.Form)
+                    {
+                        <div>
+                            @if (f.Type == CredentialTypes.Bool)
+                            {
+                                <label class="check"><input type="checkbox" checked="@(_values.GetValueOrDefault(f.Key) == "true")" @onchange="e => SetBool(f.Key, e)" /> @f.Label</label>
+                            }
+                            else if (f.Type == CredentialTypes.TextArea)
+                            {
+                                <label>@f.Label@(f.Required ? "" : " (optional)")</label>
+                                <textarea value="@_values.GetValueOrDefault(f.Key)" @oninput="e => SetText(f.Key, e)" rows="4"></textarea>
+                            }
+                            else
+                            {
+                                <label>@f.Label@(f.Required ? "" : " (optional)")</label>
+                                <input type="@InputType(f)" value="@_values.GetValueOrDefault(f.Key)" @oninput="e => SetText(f.Key, e)" autocomplete="off" placeholder="@(f.Type == CredentialTypes.Password && _editId is not null ? "unchanged" : "")" />
+                            }
+                            @if (f.Help is not null) { <div class="help">@f.Help</div> }
+                        </div>
+                    }
+                    <div class="row"><div><label>Collect every (minutes)</label><input type="number" @bind="_interval" /></div><div style="align-self:end"><label class="check"><input type="checkbox" @bind="_enabled" /> Enabled</label></div></div>
+                    <div class="btn-row">
+                        <button class="btn btn-secondary" @onclick="TestAsync" disabled="@_busy">Test connection</button>
+                        <button class="btn" @onclick="SaveAsync" disabled="@_busy">Save</button>
+                        @if (_editId is not null) { <button class="btn btn-secondary" @onclick="Reset">Cancel</button><button class="btn btn-danger" @onclick="DeleteAsync">Delete</button> }
+                    </div>
+                    @if (_testResult is not null) { <div class="alert @(_testResult.Ok ? "alert-ok" : "alert-error")" style="margin-top:8px">@_testResult.Message</div> }
+                }
+            </div>
+        </div>
+    </AuthorizeView>
+
+    <table class="table">
+        <thead><tr><th>Connector</th><th>Source</th><th>Every</th><th>Last success</th><th class="num">Assets</th><th class="num">Software</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var c in _list)
+            {
+                var stale = c.LastSuccess is null || DateTime.UtcNow - c.LastSuccess.Value > TimeSpan.FromMinutes(c.IntervalMinutes * 3);
+                <tr style="@(c.Enabled ? "" : "opacity:.6")">
+                    <td><b>@c.DisplayName</b>@(c.Enabled ? "" : " (disabled)")</td>
+                    <td>@(ConnectorSvc.Adapter(c.AdapterId)?.Metadata.DisplayName ?? c.AdapterId)</td>
+                    <td>@c.IntervalMinutes min</td>
+                    <td style="@(stale && c.Enabled ? "color:var(--amber-ink)" : "")">@Ui.Ago(c.LastSuccess)</td>
+                    <td class="num">@c.AssetsLastRun</td><td class="num">@c.SoftwareLastRun</td>
+                    <td>
+                        @if (c.Running) { <span class="state state-open">running</span> <span class="progress">@c.Progress</span> }
+                        else if (c.RunRequested) { <span class="state">queued</span> }
+                        else if (c.ConsecutiveFailures > 0) { <span style="color:var(--amber-ink)">failed @c.ConsecutiveFailures time@(c.ConsecutiveFailures == 1 ? "" : "s"): @c.LastError</span> }
+                        else if (c.LastSuccess is not null) { <span class="state state-closed">ok</span> <span class="progress">@c.Progress</span>@if (c.LastError is not null) { <div class="progress">@c.LastError</div> } }
+                        else { <span class="muted">not run yet</span> }
+                    </td>
+                    <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button><button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button></AuthorizeView></td>
+                </tr>
+            }
+            @if (_list.Count == 0) { <tr><td colspan="8" class="muted">No connectors yet. The watchlist works without any; connectors add the estate.</td></tr> }
+        </tbody>
+    </table>
+
+    <div class="card" style="margin-top:20px">
+        <h2>Available sources</h2>
+        <table class="table"><thead><tr><th>Source</th><th>What it sees</th><th>Needs</th></tr></thead>
+            <tbody>@foreach (var a in ConnectorSvc.Adapters) { <tr><td><b>@a.Metadata.DisplayName</b><br /><small class="muted">@a.Metadata.Vendor</small></td><td>@a.Metadata.Description</td><td>@a.Metadata.MinimumPermission</td></tr> }</tbody></table>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private List<Connector> _list = new();
+    private string _adapterId = "", _name = "";
+    private IInventoryAdapter? _adapter;
+    private Dictionary<string, string> _values = new();
+    private int _interval = 240;
+    private bool _enabled = true, _busy;
+    private Guid? _editId;
+    private TestResult? _testResult;
+    private string? _notice, _error;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _list = await ConnectorSvc.ListAsync();
+        _timer = new System.Threading.Timer(async _ => { try { _list = await ConnectorSvc.ListAsync(); await InvokeAsync(StateHasChanged); } catch { } }, null, 5000, 5000);
+    }
+
+    private void AdapterChanged()
+    {
+        _adapter = ConnectorSvc.Adapter(_adapterId);
+        _values = new();
+        if (_adapter is not null)
+        {
+            _interval = _adapter.Metadata.DefaultIntervalMinutes;
+            foreach (var f in _adapter.Metadata.Form) if (f.Default is not null) _values[f.Key] = f.Default;
+        }
+        _testResult = null;
+    }
+
+    private void Edit(Connector c)
+    {
+        _editId = c.Id; _adapterId = c.AdapterId; _adapter = ConnectorSvc.Adapter(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
+        _values = ConnectorSvc.Decrypt(c);
+        foreach (var f in _adapter?.Metadata.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
+        _testResult = null; _notice = null; _error = null;
+    }
+
+    private void SetText(string key, ChangeEventArgs e) => _values[key] = e.Value?.ToString() ?? string.Empty;
+    private static string InputType(CredentialField f) => f.Type == CredentialTypes.Password ? "password" : f.Type == CredentialTypes.Number ? "number" : "text";
+    private void SetBool(string key, ChangeEventArgs e) => _values[key] = e.Value is bool b && b ? "true" : "false";
+
+    private void Reset() { _editId = null; _adapterId = ""; _adapter = null; _name = ""; _values = new(); _testResult = null; _enabled = true; }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task TestAsync()
+    {
+        _busy = true; _testResult = null;
+        _testResult = await ConnectorSvc.TestAsync(_adapterId, new Dictionary<string, string>(_values), _editId);
+        _busy = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            var c = await ConnectorSvc.SaveAsync(_editId, _adapterId, _name, new Dictionary<string, string>(_values), _enabled, _interval, await ActorAsync());
+            await ConnectorSvc.RequestRunAsync(c.Id);
+            _notice = c.DisplayName + " saved; first collection starts within a minute.";
+            Reset(); _list = await ConnectorSvc.ListAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_editId is null) return;
+        await ConnectorSvc.DeleteAsync(_editId.Value, await ActorAsync());
+        _notice = "Connector deleted. Its assets stay, marked unknown, until archived."; Reset(); _list = await ConnectorSvc.ListAsync();
+    }
+
+    private async Task RunNow(Guid id) { await ConnectorSvc.RequestRunAsync(id); _list = await ConnectorSvc.ListAsync(); }
+
+    public void Dispose() => _timer?.Dispose();
+}

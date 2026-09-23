@@ -75,7 +75,7 @@ public class CveParseTests
     [Fact]
     public void Sentence_reads_like_the_brief()
     {
-        var entry = new WatchlistEntry { Vendor = "Fortinet", Product = "FortiOS", Version = "7.2.5", AssetName = "FW-EDGE-01", Exposure = Exposure.Internet, Criticality = Criticality.Critical };
+        var entry = new Subject("Fortinet", "FortiOS", "7.2.5", "FW-EDGE-01", Exposure.Internet, Criticality.Critical);
         var cvss = CvssVector.Parse("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H");
         var inputs = new DecisionInputs(Exploitation.Active, true, AttackVector.Network, Exposure.Internet, Criticality.Critical);
         var s = SentenceBuilder.Build(entry, inputs, cvss, VerdictTier.FixToday, "7.2.8", MatchConfidence.Exact, false);

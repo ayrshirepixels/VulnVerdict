@@ -1,0 +1,87 @@
+@page "/mapping"
+@inject IDbContextFactory<VvDbContext> Db
+@inject InventoryService Inventory
+@inject WatchlistService WatchlistSvc
+@inject SettingsService Settings
+
+<PageTitle>Needs mapping - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Needs mapping</h1>
+    <p class="lead">Software the connectors found that could not be tied to a vendor's CVE naming. Until it is mapped it produces no verdicts, which is the dangerous direction, so this queue is prominent. Accepted mappings are remembered as aliases.</p>
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+
+    <div class="filters"><input type="text" placeholder="filter" @bind="_filter" @bind:event="oninput" style="min-width:220px" /><span class="muted">@_groups.Count product names unmapped across @_groups.Sum(g => g.Instances) installs</span></div>
+
+    <table class="table">
+        <thead><tr><th>Vendor / product as reported</th><th class="num">Installs</th><th>Example version</th><th>Map to (search the CVE catalogue)</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var g in _groups.Where(g => string.IsNullOrWhiteSpace(_filter) || (g.Vendor + " " + g.Product).Contains(_filter, StringComparison.OrdinalIgnoreCase)).Take(200))
+            {
+                var key = g.VendorNorm + "|" + g.ProductNorm;
+                <tr>
+                    <td><b>@g.Product</b><br /><small class="muted">@g.Vendor</small></td>
+                    <td class="num">@g.Instances</td>
+                    <td>@g.Version</td>
+                    <td>
+                        <div class="suggest">
+                            <input class="input" type="text" value="@_search.GetValueOrDefault(key)" @oninput="e => Suggest(key, e.Value?.ToString() ?? string.Empty)" placeholder="@g.Product" autocomplete="off" />
+                            @if (_suggestions.TryGetValue(key, out var list) && list.Count > 0)
+                            {
+                                <ul>@foreach (var s in list) { <li @onclick="() => Accept(g, s)">@s.Vendor / @s.Product <small>@s.CveCount CVEs</small></li> }</ul>
+                            }
+                        </div>
+                    </td>
+                    <td><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => Ignore(g)">Ignore</button></AuthorizeView></td>
+                </tr>
+            }
+            @if (_groups.Count == 0) { <tr><td colspan="5" class="muted">Nothing to map. Everything the connectors report is tied to CVE naming.</td></tr> }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private sealed record Group(string Vendor, string Product, string VendorNorm, string ProductNorm, int Instances, string Version);
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private List<Group> _groups = new();
+    private readonly Dictionary<string, string> _search = new();
+    private readonly Dictionary<string, List<CnaProduct>> _suggestions = new();
+    private string _filter = "";
+    private string? _notice;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        _groups = (await db.Software.AsNoTracking().Where(s => s.MappingStatus == MappingStatus.Unmapped)
+            .GroupBy(s => new { s.VendorNorm, s.ProductNorm })
+            .Select(g => new { g.Key.VendorNorm, g.Key.ProductNorm, Vendor = g.Min(x => x.Vendor), Product = g.Min(x => x.Product), N = g.Count(), Version = g.Max(x => x.Version) })
+            .OrderByDescending(g => g.N).ToListAsync())
+            .Select(g => new Group(g.Vendor ?? "", g.Product ?? "", g.VendorNorm, g.ProductNorm, g.N, g.Version ?? "")).ToList();
+    }
+
+    private async Task Suggest(string key, string term)
+    {
+        _search[key] = term;
+        _suggestions[key] = term.Length < 2 ? new() : await WatchlistSvc.SearchProductsAsync(term, 8);
+    }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task Accept(Group g, CnaProduct target)
+    {
+        await Inventory.AcceptMappingAsync(g.VendorNorm, g.ProductNorm, target.VendorNorm, target.ProductNorm, await ActorAsync());
+        await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+        _notice = g.Product + " now maps to " + target.Vendor + " / " + target.Product + " (" + g.Instances + " installs). Verdicts follow within a minute.";
+        _suggestions.Remove(g.VendorNorm + "|" + g.ProductNorm);
+        await LoadAsync();
+    }
+
+    private async Task Ignore(Group g)
+    {
+        await Inventory.IgnoreMappingAsync(g.VendorNorm, g.ProductNorm, await ActorAsync());
+        _notice = g.Product + " ignored.";
+        await LoadAsync();
+    }
+}

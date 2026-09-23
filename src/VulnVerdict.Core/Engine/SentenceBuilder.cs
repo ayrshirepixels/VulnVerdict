@@ -2,20 +2,43 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Engine;
 
+/// <summary>What a verdict is about: a product at a version on an asset, from the watchlist or from inventory.</summary>
+public sealed record Subject(
+    string Vendor,
+    string Product,
+    string? Version,
+    string? AssetName,
+    Exposure Exposure,
+    Criticality Criticality,
+    Guid? WatchlistEntryId = null,
+    Guid? SoftwareInstanceId = null,
+    Guid? AssetId = null,
+    string? MappedVendorNorm = null,
+    string? MappedProductNorm = null,
+    MatchConfidence ProductConfidence = MatchConfidence.Exact,
+    bool FeatureDisabled = false,
+    string? Purl = null,
+    string? Ecosystem = null,
+    DateTime DeclaredAt = default)
+{
+    public string ProductText => (Vendor + " " + Product).Trim();
+    public string Display => ProductText + (string.IsNullOrWhiteSpace(Version) ? "" : " " + Version) + (string.IsNullOrWhiteSpace(AssetName) ? "" : " on " + AssetName);
+    public string VendorNorm => MappedVendorNorm ?? Normalizer.Norm(Vendor);
+    public string ProductNorm => MappedProductNorm ?? Normalizer.Norm(Product);
+}
+
 /// <summary>
 /// Section 6.5. Template: {Product} {version} on {asset}: {exploitation phrase}, {attack path phrase}, {exposure phrase}. {Fix phrase}.
 /// Example: "FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8."
 /// </summary>
 public static class SentenceBuilder
 {
-    public static string Build(WatchlistEntry entry, DecisionInputs inputs, CvssVector? cvss, VerdictTier tier, string? fixedIn, MatchConfidence confidence, bool versionUnknown)
+    public static string Build(Subject subject, DecisionInputs inputs, CvssVector? cvss, VerdictTier tier, string? fixedIn, MatchConfidence confidence, bool versionUnknown, IReadOnlyList<string>? modifiers = null)
     {
-        var product = (entry.Vendor + " " + entry.Product).Trim();
-        var version = string.IsNullOrWhiteSpace(entry.Version) ? "" : " " + entry.Version;
-        var asset = string.IsNullOrWhiteSpace(entry.AssetName) ? "" : " on " + entry.AssetName;
+        var head = subject.ProductText + (string.IsNullOrWhiteSpace(subject.Version) ? "" : " " + subject.Version) + (string.IsNullOrWhiteSpace(subject.AssetName) ? "" : " on " + subject.AssetName);
 
         if (tier == VerdictTier.NotAffected)
-            return product + version + asset + ": not affected, the installed version is outside the affected range.";
+            return head + (subject.FeatureDisabled ? ": not affected, the vulnerable feature is disabled." : ": not affected, the installed version is outside the affected range.");
 
         var exploitation = inputs.Exploitation switch
         {
@@ -38,13 +61,15 @@ public static class SentenceBuilder
         var fix = !string.IsNullOrWhiteSpace(fixedIn) ? " Fixed in " + fixedIn + "."
                 : tier >= VerdictTier.NextPatchCycle ? " Check the vendor advisory for the fix." : "";
 
+        var modifier = modifiers is { Count: > 0 } ? " Lowered one step because " + string.Join(" and ", modifiers) + "." : "";
+
         var check = confidence == MatchConfidence.Possible
-            ? (string.IsNullOrWhiteSpace(entry.Version) ? " Check this: the installed version is not on the watchlist."
-               : versionUnknown ? " Check this: the vendor's affected-version data could not be read against " + entry.Version + "."
+            ? (string.IsNullOrWhiteSpace(subject.Version) ? " Check this: the installed version is not recorded."
+               : versionUnknown ? " Check this: the vendor's affected-version data could not be read against " + subject.Version + "."
                : " Check this: the product match is not certain.")
             : "";
 
-        return product + version + asset + ": " + exploitation + ", " + path + ", " + exposure + "." + fix + check;
+        return head + ": " + exploitation + ", " + path + ", " + exposure + "." + fix + modifier + check;
     }
 
     public static string AttackPath(DecisionInputs inputs, CvssVector? cvss)

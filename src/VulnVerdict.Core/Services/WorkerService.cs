@@ -42,8 +42,9 @@ public sealed class WorkerService : BackgroundService
             {
                 await HeartbeatAsync(ct);
                 var feedsRan = await RunDueFeedsAsync(ct);
+                var connectorsRan = await RunDueConnectorsAsync(ct);
                 var evaluateRequested = await EvaluateRequestedAsync(ct);
-                if (feedsRan || evaluateRequested || await EvaluationDueAsync(ct))
+                if (feedsRan || connectorsRan || evaluateRequested || await EvaluationDueAsync(ct))
                 {
                     using var scope = _sp.CreateScope();
                     await scope.ServiceProvider.GetRequiredService<VerdictEvaluator>().EvaluateAllAsync(ct);
@@ -146,6 +147,35 @@ public sealed class WorkerService : BackgroundService
             await db.FeedStatuses.Where(f => f.Name == feed).ExecuteUpdateAsync(u => u.SetProperty(f => f.Progress, msg.Length > 256 ? msg[..256] : msg));
         }
         catch { }
+    }
+
+    /// <summary>Section 9.1: run connectors that are due or requested; three failures in a row raise the administrator alert.</summary>
+    private async Task<bool> RunDueConnectorsAsync(CancellationToken ct)
+    {
+        using var scope = _sp.CreateScope();
+        var connectors = scope.ServiceProvider.GetRequiredService<ConnectorService>();
+        var inventory = scope.ServiceProvider.GetRequiredService<InventoryService>();
+        var now = DateTime.UtcNow;
+        var any = false;
+        foreach (var c in await connectors.ListAsync(ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!c.Enabled && !c.RunRequested) continue;
+            var due = c.RunRequested || c.LastSuccess is null || now - c.LastSuccess.Value >= TimeSpan.FromMinutes(c.IntervalMinutes);
+            if (c.LastError is not null && c.LastSuccess is not null && c.LastAttempt is not null && now - c.LastAttempt.Value < TimeSpan.FromMinutes(15) && !c.RunRequested) due = false;
+            if (!due) continue;
+            var before = c.ConsecutiveFailures;
+            var result = await connectors.RunAsync(c.Id, ct);
+            if (result is not null) any = true;
+            else if (before + 1 == 3)
+                await AdminAlertAsync(scope.ServiceProvider, "Connector " + c.DisplayName + " has failed three times in a row", "Adapter: " + c.AdapterId + "\nLast error: " + c.LastError, ct);
+        }
+        if (any)
+        {
+            await inventory.HousekeepAsync(ct);
+            await inventory.RemapAsync(ct);
+        }
+        return any;
     }
 
     private async Task<bool> EvaluateRequestedAsync(CancellationToken ct)

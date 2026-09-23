@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using VulnVerdict.Core.Adapters;
 using VulnVerdict.Core.Data;
 using VulnVerdict.Core.Digest;
 using VulnVerdict.Core.Engine;
@@ -14,41 +15,49 @@ namespace VulnVerdict.Core;
 public static class CoreServices
 {
     /// <summary>
-    /// Registers the database (Postgres or SQLite), feeds, engine services and optionally the worker.
-    /// provider: "postgres" | "sqlite". role: "all" | "web" | "worker".
+    /// Registers the database (Postgres or SQLite, each with its own migrations), feeds, adapters, engine services and
+    /// optionally the worker. provider: "postgres" | "sqlite". role: "all" | "web" | "worker".
     /// </summary>
     public static IServiceCollection AddVulnVerdictCore(this IServiceCollection services, string provider, string connectionString, WorkerOptions worker, string role)
     {
-        services.AddDbContextFactory<VvDbContext>(o =>
-        {
-            if (provider.Equals("postgres", StringComparison.OrdinalIgnoreCase) || provider.Equals("postgresql", StringComparison.OrdinalIgnoreCase))
-                o.UseNpgsql(connectionString, n => n.CommandTimeout(300));
-            else
-                o.UseSqlite(connectionString, s => s.CommandTimeout(300));
-        });
-        // scoped DbContext resolved from the factory for components that prefer it
+        var postgres = provider.Equals("postgres", StringComparison.OrdinalIgnoreCase) || provider.Equals("postgresql", StringComparison.OrdinalIgnoreCase);
+        // both contexts are registered so design-time tooling can generate migrations for either provider
+        services.AddDbContextFactory<SqliteVvDbContext>(o => o.UseSqlite(postgres ? "Data Source=:memory:" : connectionString, s => s.CommandTimeout(300)));
+        services.AddDbContextFactory<PostgresVvDbContext>(o => o.UseNpgsql(postgres ? connectionString : "Host=localhost;Database=design", n => n.CommandTimeout(300)));
+        services.AddSingleton<IDbContextFactory<VvDbContext>>(sp => postgres
+            ? new ContextFactory<PostgresVvDbContext>(sp.GetRequiredService<IDbContextFactory<PostgresVvDbContext>>())
+            : new ContextFactory<SqliteVvDbContext>(sp.GetRequiredService<IDbContextFactory<SqliteVvDbContext>>()));
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<VvDbContext>>().CreateDbContext());
 
         services.AddSingleton(worker);
         services.AddHttpClient("feeds", c =>
         {
             c.Timeout = TimeSpan.FromMinutes(30);
-            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.1"));
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
             c.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             c.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
         });
-
         services.AddHttpClient("mail", c =>
         {
             c.Timeout = TimeSpan.FromSeconds(30);
-            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.1"));
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
         });
-
         services.AddHttpClient("llm", c =>
         {
-            c.Timeout = TimeSpan.FromMinutes(3); // local models can take a while to load
-            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.1"));
+            c.Timeout = TimeSpan.FromMinutes(3);
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
         });
+        // adapters talk to customer systems that often have private certificates; the connector form has a "verify TLS" switch
+        services.AddHttpClient("adapter", c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(5);
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
+        });
+        services.AddHttpClient("adapter-insecure", c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(5);
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator });
 
         services.AddSingleton<SettingsService>();
         services.AddSingleton<EmailService>();
@@ -57,6 +66,8 @@ public static class CoreServices
         services.AddSingleton<WatchlistService>();
         services.AddSingleton<DigestService>();
         services.AddSingleton<LlmService>();
+        services.AddSingleton<InventoryService>();
+        services.AddSingleton<ConnectorService>();
 
         services.AddSingleton<IFeed, KevFeed>();
         services.AddSingleton<IFeed, EpssFeed>();
@@ -65,31 +76,36 @@ public static class CoreServices
         services.AddSingleton<IFeed, NucleiFeed>();
         services.AddSingleton<IFeed>(_ => new CveListFeed { MinYear = worker.CveMinYear });
 
+        AdapterRegistry.Register(services);
+
         if (role is "all" or "worker") services.AddHostedService<WorkerService>();
         if (role is "all" or "web") services.AddHostedService<WorkerMonitorService>();
         return services;
     }
 
-    /// <summary>Create the schema and seed the alias table. EnsureCreated is used for the MVP; migrations come with phase 3.</summary>
+    private sealed class ContextFactory<T> : IDbContextFactory<VvDbContext> where T : VvDbContext
+    {
+        private readonly IDbContextFactory<T> _inner;
+        public ContextFactory(IDbContextFactory<T> inner) => _inner = inner;
+        public VvDbContext CreateDbContext() => _inner.CreateDbContext();
+        public async Task<VvDbContext> CreateDbContextAsync(CancellationToken ct = default) => await _inner.CreateDbContextAsync(ct);
+    }
+
+    /// <summary>Apply migrations (waiting for Postgres to come up on Compose start) and seed the alias table.</summary>
     public static async Task InitialiseDatabaseAsync(IServiceProvider sp, CancellationToken ct = default)
     {
         var factory = sp.GetRequiredService<IDbContextFactory<VvDbContext>>();
         await using var db = await factory.CreateDbContextAsync(ct);
-        if (db.Database.IsSqlite())
+        for (var i = 0; i < 30; i++)
         {
-            await db.Database.EnsureCreatedAsync(ct);
-            await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct);
-        }
-        else
-        {
-            // wait for Postgres to accept connections (Compose start-up)
-            for (var i = 0; i < 30; i++)
+            try { await db.Database.MigrateAsync(ct); break; }
+            catch (Exception ex) when (i < 29 && !db.Database.IsSqlite())
             {
-                try { await db.Database.EnsureCreatedAsync(ct); break; }
-                catch when (i < 29) { await Task.Delay(2000, ct); }
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger("Startup").LogWarning("Database not ready ({Error}); retrying", ex.Message);
+                await Task.Delay(2000, ct);
             }
         }
-        await PatchSchemaAsync(db, ct);
+        if (db.Database.IsSqlite()) await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct);
         if (!await db.Aliases.AnyAsync(ct))
         {
             db.Aliases.AddRange(SeedAliases.Select(a => new ProductAlias { AliasNorm = Normalizer.Norm(a.Alias), VendorNorm = Normalizer.Norm(a.Vendor), ProductNorm = Normalizer.Norm(a.Product) }));
@@ -97,52 +113,27 @@ public static class CoreServices
         }
     }
 
-    /// <summary>
-    /// Additive schema upgrade for databases created by an earlier build: EnsureCreated does nothing on an
-    /// existing database, so tables (and their indexes) that the model has but the database lacks are created
-    /// from the model's own create script. Column changes still need a proper migration (phase 3).
-    /// </summary>
-    private static async Task PatchSchemaAsync(VvDbContext db, CancellationToken ct)
-    {
-        var existing = new HashSet<string>(db.Database.IsSqlite()
-            ? await db.Database.SqlQueryRaw<string>("SELECT name AS \"Value\" FROM sqlite_master WHERE type = 'table'").ToListAsync(ct)
-            : await db.Database.SqlQueryRaw<string>("SELECT tablename AS \"Value\" FROM pg_tables WHERE schemaname = 'public'").ToListAsync(ct),
-            StringComparer.OrdinalIgnoreCase);
-        var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var script = db.Database.GenerateCreateScript();
-        foreach (var raw in script.Split(';'))
-        {
-            var stmt = raw.Trim();
-            if (stmt.Length == 0) continue;
-            var tableMatch = System.Text.RegularExpressions.Regex.Match(stmt, "^CREATE TABLE \"?([A-Za-z0-9_]+)\"?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (tableMatch.Success)
-            {
-                var name = tableMatch.Groups[1].Value;
-                if (existing.Contains(name)) continue;
-                await db.Database.ExecuteSqlRawAsync(stmt, ct);
-                created.Add(name);
-                continue;
-            }
-            var indexMatch = System.Text.RegularExpressions.Regex.Match(stmt, "^CREATE (?:UNIQUE )?INDEX .* ON \"?([A-Za-z0-9_]+)\"?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (indexMatch.Success && created.Contains(indexMatch.Groups[1].Value))
-                await db.Database.ExecuteSqlRawAsync(stmt, ct);
-        }
-    }
-
-    /// <summary>Common display names mapped to the CNA vendor/product spelling. Grown by the needs-mapping queue in phase 3.</summary>
-    private static readonly (string Alias, string Vendor, string Product)[] SeedAliases =
+    /// <summary>Common display names mapped to the CNA vendor/product spelling. Grown by the needs-mapping queue.</summary>
+    public static readonly (string Alias, string Vendor, string Product)[] SeedAliases =
     {
         ("FortiGate", "Fortinet", "FortiOS"),
         ("FortiGate firewall", "Fortinet", "FortiOS"),
         ("Fortinet FortiGate", "Fortinet", "FortiOS"),
         ("FortiClient EMS", "Fortinet", "FortiClientEMS"),
         ("FortiClient Enterprise Management Server", "Fortinet", "FortiClientEMS"),
+        ("FortiClient", "Fortinet", "FortiClientWindows"),
+        ("FortiSwitch", "Fortinet", "FortiSwitch"),
+        ("FortiAP", "Fortinet", "FortiAP"),
+        ("Windows Server 2016", "Microsoft", "Windows Server 2016"),
         ("Windows Server 2019", "Microsoft", "Windows Server 2019"),
         ("Windows Server 2022", "Microsoft", "Windows Server 2022"),
         ("Windows Server 2025", "Microsoft", "Windows Server 2025"),
+        ("Windows 10", "Microsoft", "Windows 10 Version 22H2"),
+        ("Windows 11", "Microsoft", "Windows 11 Version 24H2"),
         ("Exchange Server", "Microsoft", "Microsoft Exchange Server 2019 Cumulative Update 14"),
         ("vCenter", "VMware", "vCenter Server"),
         ("VMware vCenter", "VMware", "vCenter Server"),
+        ("VMware vCenter Server", "VMware", "vCenter Server"),
         ("ESXi", "VMware", "ESXi"),
         ("VMware ESXi", "VMware", "ESXi"),
         ("Cisco ASA", "Cisco", "Cisco Adaptive Security Appliance (ASA) Software"),
@@ -157,14 +148,17 @@ public static class CoreServices
         ("Veeam", "Veeam", "Backup & Replication"),
         ("SQL Server 2019", "Microsoft", "Microsoft SQL Server 2019 (GDR)"),
         ("SQL Server 2022", "Microsoft", "Microsoft SQL Server 2022 (GDR)"),
+        ("Microsoft SQL Server", "Microsoft", "Microsoft SQL Server 2022 (GDR)"),
         ("IIS", "Microsoft", "Internet Information Services"),
+        ("Internet Information Services", "Microsoft", "Internet Information Services"),
         ("Apache", "Apache Software Foundation", "Apache HTTP Server"),
         ("Apache httpd", "Apache Software Foundation", "Apache HTTP Server"),
         ("nginx", "F5", "NGINX Open Source"),
         ("OpenSSH", "OpenBSD", "OpenSSH"),
         ("Chrome", "Google", "Chrome"),
         ("Google Chrome", "Google", "Chrome"),
-        ("Firefox", "Mozilla", "Firefox"),
+        ("Mozilla Firefox", "Mozilla", "Firefox"),
+        ("Microsoft Edge", "Microsoft", "Microsoft Edge (Chromium-based)"),
         ("Ubiquiti UniFi", "Ubiquiti", "UniFi Network Application"),
         ("UniFi", "Ubiquiti", "UniFi Network Application"),
         ("Synology DSM", "Synology", "DiskStation Manager (DSM)"),
@@ -183,6 +177,24 @@ public static class CoreServices
         ("Zimbra", "Zimbra", "Zimbra Collaboration Suite"),
         ("WordPress", "WordPress", "WordPress"),
         ("Ollama", "ollama", "ollama"),
+        ("7-Zip", "7-Zip", "7-Zip"),
+        ("Adobe Acrobat Reader DC", "Adobe", "Acrobat Reader"),
+        ("Adobe Acrobat", "Adobe", "Acrobat Reader"),
+        ("Notepad++", "Notepad++", "Notepad++"),
+        ("VLC media player", "VideoLAN", "VLC"),
+        ("Zoom", "Zoom Communications, Inc", "Zoom Workplace App"),
+        ("Microsoft Teams", "Microsoft", "Microsoft Teams"),
+        ("Microsoft Office", "Microsoft", "Microsoft 365 Apps for Enterprise"),
+        ("Microsoft 365 Apps", "Microsoft", "Microsoft 365 Apps for Enterprise"),
+        ("Docker Desktop", "Docker", "Docker Desktop"),
+        ("PuTTY", "PuTTY", "PuTTY"),
+        ("WinRAR", "RARLAB", "WinRAR"),
+        ("Java", "Oracle Corporation", "Java SE JDK and JRE"),
+        ("Oracle Java", "Oracle Corporation", "Java SE JDK and JRE"),
+        ("Node.js", "Node.js", "Node"),
+        ("Python", "Python Software Foundation", "CPython"),
+        ("iDRAC", "Dell", "Integrated Dell Remote Access Controller 9"),
+        ("iLO", "Hewlett Packard Enterprise (HPE)", "HPE Integrated Lights-Out 5 (iLO 5)"),
     };
 }
 
