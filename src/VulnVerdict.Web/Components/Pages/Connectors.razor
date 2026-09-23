@@ -19,16 +19,17 @@
             <div class="form">
                 <div class="row">
                     <div><label>Source</label>
-                        <select @bind="_adapterId" @bind:after="AdapterChanged" disabled="@(_editId is not null)">
+                        <select @bind="_metaId" @bind:after="AdapterChanged" disabled="@(_editId is not null)">
                             <option value="">choose...</option>
-                            @foreach (var a in ConnectorSvc.Adapters) { <option value="@a.Metadata.Id">@a.Metadata.DisplayName</option> }
+                            @foreach (var a in ConnectorSvc.Adapters.Select(x => x.Metadata)) { <option value="@a.Id">@a.DisplayName</option> }
+                            @foreach (var a in ConnectorSvc.TicketAdapters.Select(x => x.Metadata)) { <option value="@a.Id">Tickets: @a.DisplayName</option> }
                         </select></div>
-                    <div><label>Name (as shown in evidence)</label><input type="text" @bind="_name" placeholder="@(_adapter?.Metadata.DisplayName)" /></div>
+                    <div><label>Name (as shown in evidence)</label><input type="text" @bind="_name" placeholder="@(_meta?.DisplayName)" /></div>
                 </div>
-                @if (_adapter is not null)
+                @if (_meta is not null)
                 {
-                    <p class="muted" style="margin:0">@_adapter.Metadata.Description<br /><b>Minimum permission:</b> @_adapter.Metadata.MinimumPermission @if (_adapter.Metadata.DocsUrl is not null) { <a href="@_adapter.Metadata.DocsUrl" target="_blank" rel="noopener noreferrer">vendor instructions</a> }</p>
-                    @foreach (var f in _adapter.Metadata.Form)
+                    <p class="muted" style="margin:0">@_meta.Description<br /><b>Minimum permission:</b> @_meta.MinimumPermission @if (_meta.DocsUrl is not null) { <a href="@_meta.DocsUrl" target="_blank" rel="noopener noreferrer">vendor instructions</a> }</p>
+                    @foreach (var f in _meta.Form)
                     {
                         <div>
                             @if (f.Type == CredentialTypes.Bool)
@@ -68,7 +69,7 @@
                 var stale = c.LastSuccess is null || DateTime.UtcNow - c.LastSuccess.Value > TimeSpan.FromMinutes(c.IntervalMinutes * 3);
                 <tr style="@(c.Enabled ? "" : "opacity:.6")">
                     <td><b>@c.DisplayName</b>@(c.Enabled ? "" : " (disabled)")</td>
-                    <td>@(ConnectorSvc.Adapter(c.AdapterId)?.Metadata.DisplayName ?? c.AdapterId)</td>
+                    <td>@(ConnectorSvc.Metadata(c.AdapterId)?.DisplayName ?? c.AdapterId)</td>
                     <td>@c.IntervalMinutes min</td>
                     <td style="@(stale && c.Enabled ? "color:var(--amber-ink)" : "")">@Ui.Ago(c.LastSuccess)</td>
                     <td class="num">@c.AssetsLastRun</td><td class="num">@c.SoftwareLastRun</td>
@@ -79,7 +80,7 @@
                         else if (c.LastSuccess is not null) { <span class="state state-closed">ok</span> <span class="progress">@c.Progress</span>@if (c.LastError is not null) { <div class="progress">@c.LastError</div> } }
                         else { <span class="muted">not run yet</span> }
                     </td>
-                    <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button><button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button></AuthorizeView></td>
+                    <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth">@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button> }<button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button></AuthorizeView></td>
                 </tr>
             }
             @if (_list.Count == 0) { <tr><td colspan="8" class="muted">No connectors yet. The watchlist works without any; connectors add the estate.</td></tr> }
@@ -89,15 +90,15 @@
     <div class="card" style="margin-top:20px">
         <h2>Available sources</h2>
         <table class="table"><thead><tr><th>Source</th><th>What it sees</th><th>Needs</th></tr></thead>
-            <tbody>@foreach (var a in ConnectorSvc.Adapters) { <tr><td><b>@a.Metadata.DisplayName</b><br /><small class="muted">@a.Metadata.Vendor</small></td><td>@a.Metadata.Description</td><td>@a.Metadata.MinimumPermission</td></tr> }</tbody></table>
+            <tbody>@foreach (var a in ConnectorSvc.Adapters.Select(x => x.Metadata).Concat(ConnectorSvc.TicketAdapters.Select(x => x.Metadata))) { <tr><td><b>@a.DisplayName</b><br /><small class="muted">@a.Vendor</small></td><td>@a.Description</td><td>@a.MinimumPermission</td></tr> }</tbody></table>
     </div>
 </div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
     private List<Connector> _list = new();
-    private string _adapterId = "", _name = "";
-    private IInventoryAdapter? _adapter;
+    private string _metaId = "", _name = "";
+    private AdapterMetadata? _meta;
     private Dictionary<string, string> _values = new();
     private int _interval = 240;
     private bool _enabled = true, _busy;
@@ -114,21 +115,21 @@
 
     private void AdapterChanged()
     {
-        _adapter = ConnectorSvc.Adapter(_adapterId);
+        _meta = ConnectorSvc.Metadata(_metaId);
         _values = new();
-        if (_adapter is not null)
+        if (_meta is not null)
         {
-            _interval = _adapter.Metadata.DefaultIntervalMinutes;
-            foreach (var f in _adapter.Metadata.Form) if (f.Default is not null) _values[f.Key] = f.Default;
+            _interval = _meta.DefaultIntervalMinutes;
+            foreach (var f in _meta.Form) if (f.Default is not null) _values[f.Key] = f.Default;
         }
         _testResult = null;
     }
 
     private void Edit(Connector c)
     {
-        _editId = c.Id; _adapterId = c.AdapterId; _adapter = ConnectorSvc.Adapter(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
+        _editId = c.Id; _metaId = c.AdapterId; _meta = ConnectorSvc.Metadata(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
         _values = ConnectorSvc.Decrypt(c);
-        foreach (var f in _adapter?.Metadata.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
+        foreach (var f in _meta?.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
         _testResult = null; _notice = null; _error = null;
     }
 
@@ -136,14 +137,14 @@
     private static string InputType(CredentialField f) => f.Type == CredentialTypes.Password ? "password" : f.Type == CredentialTypes.Number ? "number" : "text";
     private void SetBool(string key, ChangeEventArgs e) => _values[key] = e.Value is bool b && b ? "true" : "false";
 
-    private void Reset() { _editId = null; _adapterId = ""; _adapter = null; _name = ""; _values = new(); _testResult = null; _enabled = true; }
+    private void Reset() { _editId = null; _metaId = ""; _meta = null; _name = ""; _values = new(); _testResult = null; _enabled = true; }
 
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
 
     private async Task TestAsync()
     {
         _busy = true; _testResult = null;
-        _testResult = await ConnectorSvc.TestAsync(_adapterId, new Dictionary<string, string>(_values), _editId);
+        _testResult = await ConnectorSvc.TestAsync(_metaId, new Dictionary<string, string>(_values), _editId);
         _busy = false;
     }
 
@@ -152,7 +153,7 @@
         _busy = true; _error = null; _notice = null;
         try
         {
-            var c = await ConnectorSvc.SaveAsync(_editId, _adapterId, _name, new Dictionary<string, string>(_values), _enabled, _interval, await ActorAsync());
+            var c = await ConnectorSvc.SaveAsync(_editId, _metaId, _name, new Dictionary<string, string>(_values), _enabled, _interval, await ActorAsync());
             await ConnectorSvc.RequestRunAsync(c.Id);
             _notice = c.DisplayName + " saved; first collection starts within a minute.";
             Reset(); _list = await ConnectorSvc.ListAsync();

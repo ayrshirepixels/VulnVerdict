@@ -48,6 +48,25 @@ public sealed class AppSettings
     // api
     public string ApiToken { get; set; } = "";
 
+    // tickets (section 11.3): "email" or the id of a ticket-adapter connector
+    public string TicketChannel { get; set; } = "email";
+
+    // webhooks (section 11.4): verdict created, promoted, closed
+    public string WebhookUrl { get; set; } = "";
+    public string WebhookSecret { get; set; } = "";
+
+    // weekly management report (section 11.2 item 8)
+    public string ReportRecipients { get; set; } = "";
+    public string ReportDay { get; set; } = "Monday";
+
+    // central service, licence, MSP (section 10.2, phase 5)
+    public string BundleUrl { get; set; } = "";
+    public string LicenceKey { get; set; } = "";
+    public bool TelemetryOptIn { get; set; }
+    public bool MspReportOptIn { get; set; }
+    public string MspPortalUrl { get; set; } = "";
+    public string MspTenantToken { get; set; } = "";
+
     // AI explanations (section 12): none | anthropic | openai | openai-compatible (Ollama, vLLM, LM Studio)
     public string LlmProvider { get; set; } = "none";
     public string LlmApiKey { get; set; } = "";
@@ -71,7 +90,7 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey) };
+    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken) };
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 
