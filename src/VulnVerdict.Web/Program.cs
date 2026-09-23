@@ -159,7 +159,8 @@ var api = app.MapGroup("/api").RequireRateLimiting("api").AllowAnonymous().AddEn
     var settings = ctx.HttpContext.RequestServices.GetRequiredService<SettingsService>();
     var s = await settings.LoadAsync();
     var header = ctx.HttpContext.Request.Headers.Authorization.ToString();
-    if (string.IsNullOrEmpty(s.ApiToken) || header != "Bearer " + s.ApiToken) return Results.Unauthorized();
+    if (string.IsNullOrEmpty(s.ApiToken) || header != "Bearer " + s.ApiToken)
+        return Results.Json(new { error = "unauthorized", hint = "send Authorization: Bearer <API token from Settings>" }, statusCode: StatusCodes.Status401Unauthorized);
     return await next(ctx);
 });
 api.MapGet("/verdicts", async (VvDbContext db, string? tier, string? state) =>

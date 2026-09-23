@@ -44,12 +44,19 @@ public static class CoreServices
             c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.1"));
         });
 
+        services.AddHttpClient("llm", c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(3); // local models can take a while to load
+            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.1"));
+        });
+
         services.AddSingleton<SettingsService>();
         services.AddSingleton<EmailService>();
         services.AddSingleton<VerdictEvaluator>();
         services.AddSingleton<VerdictWorkflow>();
         services.AddSingleton<WatchlistService>();
         services.AddSingleton<DigestService>();
+        services.AddSingleton<LlmService>();
 
         services.AddSingleton<IFeed, KevFeed>();
         services.AddSingleton<IFeed, EpssFeed>();
@@ -82,10 +89,43 @@ public static class CoreServices
                 catch when (i < 29) { await Task.Delay(2000, ct); }
             }
         }
+        await PatchSchemaAsync(db, ct);
         if (!await db.Aliases.AnyAsync(ct))
         {
             db.Aliases.AddRange(SeedAliases.Select(a => new ProductAlias { AliasNorm = Normalizer.Norm(a.Alias), VendorNorm = Normalizer.Norm(a.Vendor), ProductNorm = Normalizer.Norm(a.Product) }));
             await db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Additive schema upgrade for databases created by an earlier build: EnsureCreated does nothing on an
+    /// existing database, so tables (and their indexes) that the model has but the database lacks are created
+    /// from the model's own create script. Column changes still need a proper migration (phase 3).
+    /// </summary>
+    private static async Task PatchSchemaAsync(VvDbContext db, CancellationToken ct)
+    {
+        var existing = new HashSet<string>(db.Database.IsSqlite()
+            ? await db.Database.SqlQueryRaw<string>("SELECT name AS \"Value\" FROM sqlite_master WHERE type = 'table'").ToListAsync(ct)
+            : await db.Database.SqlQueryRaw<string>("SELECT tablename AS \"Value\" FROM pg_tables WHERE schemaname = 'public'").ToListAsync(ct),
+            StringComparer.OrdinalIgnoreCase);
+        var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var script = db.Database.GenerateCreateScript();
+        foreach (var raw in script.Split(';'))
+        {
+            var stmt = raw.Trim();
+            if (stmt.Length == 0) continue;
+            var tableMatch = System.Text.RegularExpressions.Regex.Match(stmt, "^CREATE TABLE \"?([A-Za-z0-9_]+)\"?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (tableMatch.Success)
+            {
+                var name = tableMatch.Groups[1].Value;
+                if (existing.Contains(name)) continue;
+                await db.Database.ExecuteSqlRawAsync(stmt, ct);
+                created.Add(name);
+                continue;
+            }
+            var indexMatch = System.Text.RegularExpressions.Regex.Match(stmt, "^CREATE (?:UNIQUE )?INDEX .* ON \"?([A-Za-z0-9_]+)\"?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (indexMatch.Success && created.Contains(indexMatch.Groups[1].Value))
+                await db.Database.ExecuteSqlRawAsync(stmt, ct);
         }
     }
 

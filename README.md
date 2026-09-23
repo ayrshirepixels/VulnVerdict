@@ -15,6 +15,8 @@ This repository is the internal MVP (phases 1 and 2 of the build brief): feeds, 
 - **Tickets**: one email per Fix today or Fix this week verdict to the helpdesk intake address, with a stable correlation key in the subject.
 - **Workflow**: done, snooze, accept risk (owner, reason, expiry), suppression rules (CVE, product or asset scope, with expiry). Promotions re-open snoozed and accepted items and appear under "Changed".
 - **Self-monitoring**: feed health on the Sources page and in the digest footer; stale feeds, a stopped worker or an unsendable digest email the administrator.
+- **Mail**: SMTP, or the SendGrid or Brevo HTTP API, chosen in Settings with your own key.
+- **AI explanations (optional, bring your own key)**: "Explain in plain English" per CVE and "How an attacker would have to do it here" per verdict, from Anthropic, OpenAI or any OpenAI-compatible endpoint (Ollama for fully offline sites). The model never decides a verdict; it explains one. Only the product, version, exposure level and public CVE text are sent, never asset names or addresses. Results are cached with provider, model and prompt version recorded.
 - **Security**: local admin created at install, optional OpenID Connect (Entra, Google, generic) with group-to-role mapping, three roles, audit log, encrypted secrets, CSP and security headers, login rate limiting, only port 443 exposed through Caddy.
 - **API**: token-authenticated read endpoints for verdicts, watchlist and digest, plus watchlist import.
 
@@ -29,6 +31,8 @@ docker compose up -d --build
 ```
 
 Open `https://<VV_HOSTNAME>/`, create the administrator account, set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
+
+Compose is the supported install for the internal MVP. For the product (phase 5) the same stack ships two ways: this Compose file for people who already run Docker, and an OVA (Ubuntu LTS with Docker and this Compose pre-installed, first-boot wizard for hostname and admin account) for people who do not. Both point at the same signed feed bundle from the central service.
 
 The image runs as `web` and `worker` from the same build; Postgres holds the data; Caddy terminates TLS with an internal CA by default (delete `tls internal` in the Caddyfile for Let's Encrypt on a public name).
 

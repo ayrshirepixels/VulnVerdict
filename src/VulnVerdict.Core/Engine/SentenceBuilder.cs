@@ -39,7 +39,9 @@ public static class SentenceBuilder
                 : tier >= VerdictTier.NextPatchCycle ? " Check the vendor advisory for the fix." : "";
 
         var check = confidence == MatchConfidence.Possible
-            ? (versionUnknown ? " Check this: the installed version is not on the watchlist." : " Check this: the match is not certain.")
+            ? (string.IsNullOrWhiteSpace(entry.Version) ? " Check this: the installed version is not on the watchlist."
+               : versionUnknown ? " Check this: the vendor's affected-version data could not be read against " + entry.Version + "."
+               : " Check this: the product match is not certain.")
             : "";
 
         return product + version + asset + ": " + exploitation + ", " + path + ", " + exposure + "." + fix + check;

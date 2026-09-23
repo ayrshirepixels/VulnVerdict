@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @inject SettingsService SettingsSvc
 @inject EmailService Email
+@inject LlmService Llm
 @inject AuthService Auth
 @inject NavigationManager Nav
 
@@ -110,6 +111,29 @@
         </div>
 
         <div class="card">
+            <h2>AI explanations</h2>
+            <p class="muted" style="margin-top:0">Optional. The AI never decides a verdict; it explains one in plain English and describes how an attacker would have to go about it. Bring your own key and model. Only the product, version, exposure level and the public CVE text are sent; asset names and addresses never leave the box. Results are cached with the model and prompt version recorded.</p>
+            <div class="form">
+                <div class="row-3">
+                    <div><label>Provider</label>
+                        <select @bind="_s.LlmProvider">
+                            <option value="none">Off</option>
+                            <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="openai-compatible">OpenAI-compatible endpoint (Ollama, vLLM, LM Studio)</option>
+                        </select></div>
+                    <div><label>Model</label><input type="text" @bind="_s.LlmModel" placeholder="@(_s.LlmProvider == "anthropic" ? "claude-opus-5" : _s.LlmProvider == "openai" ? "the model name from your OpenAI account" : "llama3.1")" /></div>
+                    <div><label>API key</label><input type="password" @bind="_s.LlmApiKey" autocomplete="new-password" /><div class="help">Stored encrypted. Optional for a local endpoint.</div></div>
+                </div>
+                @if (_s.LlmProvider == "openai-compatible")
+                {
+                    <div><label>Base URL</label><input type="text" @bind="_s.LlmBaseUrl" placeholder="http://ollama:11434/v1" /><div class="help">The endpoint must serve /chat/completions. For a fully offline site, run Ollama on the same VM.</div></div>
+                }
+                <div class="btn-row"><button class="btn btn-secondary" @onclick="TestLlm" disabled="@_busy">Save and test the AI connection</button></div>
+            </div>
+        </div>
+
+        <div class="card">
             <h2>API</h2>
             <p class="muted" style="margin-top:0">Read verdicts, the watchlist and the digest, or import a watchlist, with <code>Authorization: Bearer TOKEN</code> against <code>/api/verdicts</code>, <code>/api/watchlist</code> and <code>/api/digest</code>.</p>
             <div class="form"><div class="row"><div><label>API token</label><input type="text" @bind="_s.ApiToken" /></div><div style="align-self:end"><button class="btn btn-secondary" @onclick="() => _s.ApiToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24)).ToLowerInvariant()">Generate</button></div></div></div>
@@ -139,6 +163,20 @@
             _notice = "Settings saved.";
         }
         catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task TestLlm()
+    {
+        await Save();
+        if (_error is not null) return;
+        _busy = true;
+        try
+        {
+            var reply = await Llm.TestAsync();
+            _notice = "Settings saved. The model replied: " + reply.Trim();
+        }
+        catch (Exception ex) { _error = "AI test failed: " + ex.Message; }
         _busy = false;
     }
 

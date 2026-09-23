@@ -2,6 +2,7 @@
 @using System.Text.Json
 @inject IDbContextFactory<VvDbContext> Db
 @inject VerdictWorkflow Workflow
+@inject LlmService Llm
 @inject SettingsService Settings
 @inject NavigationManager Nav
 
@@ -76,6 +77,27 @@
                 }
             </div>
         </div>
+
+        @if (_llm)
+        {
+            <div class="card">
+                <h2>In plain English</h2>
+                <p class="muted" style="margin-top:0">Written by the AI model you configured, from the public CVE text and the abstracted inputs above. It explains the verdict; it never decides it.</p>
+                @if (_aiError is not null) { <div class="alert alert-error">@_aiError</div> }
+                <div class="grid grid-2">
+                    <div>
+                        <h3>What this vulnerability is</h3>
+                        @if (_narrative is null) { <button class="btn btn-secondary btn-sm" @onclick="() => Ai(false)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Explain in plain English")</button> }
+                        else { <p>@_narrative.Text</p><p class="muted" style="font-size:12px">@_narrative.Provider / @_narrative.Model, @Ui.Local(_narrative.CreatedAt, _tz) <a href="" @onclick="() => Ai(false, true)" @onclick:preventDefault="true">regenerate</a></p> }
+                    </div>
+                    <div>
+                        <h3>How an attacker would have to do it here</h3>
+                        @if (_story is null) { <button class="btn btn-secondary btn-sm" @onclick="() => Ai(true)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Tell the attack story")</button> }
+                        else { <p>@_story.Text</p><p class="muted" style="font-size:12px">@_story.Provider / @_story.Model, @Ui.Local(_story.CreatedAt, _tz) <a href="" @onclick="() => Ai(true, true)" @onclick:preventDefault="true">regenerate</a></p> }
+                    </div>
+                </div>
+            </div>
+        }
 
         <div class="card">
             <h2>Evidence chain</h2>
@@ -216,6 +238,21 @@
     private TimeZoneInfo _tz = TimeZoneInfo.Utc;
     private bool _loaded;
     private double? BaseScore => _cve?.CvssV40Score ?? _cve?.CvssV31Score;
+    private bool _llm, _aiBusy;
+    private Narrative? _narrative, _story;
+    private string? _aiError;
+
+    private async Task Ai(bool story, bool refresh = false)
+    {
+        _aiBusy = true; _aiError = null;
+        try
+        {
+            if (story) _story = await Llm.AttackStoryAsync(Id, refresh);
+            else _narrative = await Llm.CveNarrativeAsync(_v!.CveId, refresh);
+        }
+        catch (Exception ex) { _aiError = ex.Message; }
+        _aiBusy = false;
+    }
     private Dialog _dialog = Dialog.None;
     private string _reason = "", _owner = "", _scope = "Cve";
     private DateTime? _date;
@@ -242,6 +279,12 @@
         _cvss = CvssVector.Parse(_cve?.CvssV40Vector) ?? CvssVector.Parse(_cve?.CvssV31Vector);
         try { _evidence = JsonSerializer.Deserialize<List<EvidenceClaim>>(_v.EvidenceJson) ?? new(); } catch { _evidence = new(); }
         try { _refs = _cve?.ReferencesJson is null ? new() : JsonSerializer.Deserialize<List<string>>(_cve.ReferencesJson) ?? new(); } catch { _refs = new(); }
+        _llm = await Llm.IsConfiguredAsync();
+        if (_llm)
+        {
+            _narrative = await Llm.GetCachedAsync("cve:" + _v.CveId);
+            _story = await Llm.GetCachedAsync("verdict:" + Id);
+        }
     }
 
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);

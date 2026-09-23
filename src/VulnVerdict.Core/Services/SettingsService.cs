@@ -48,6 +48,14 @@ public sealed class AppSettings
     // api
     public string ApiToken { get; set; } = "";
 
+    // AI explanations (section 12): none | anthropic | openai | openai-compatible (Ollama, vLLM, LM Studio)
+    public string LlmProvider { get; set; } = "none";
+    public string LlmApiKey { get; set; } = "";
+    public string LlmModel { get; set; } = "";
+    public string LlmBaseUrl { get; set; } = "";
+    public bool LlmConfigured => LlmProvider is not ("none" or "") && !string.IsNullOrWhiteSpace(LlmModel)
+        && (LlmProvider.Equals("openai-compatible", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(LlmApiKey));
+
     public IEnumerable<string> Recipients => DigestRecipients.Split(new[] { ',', ';', '\n', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public bool MailConfigured => !string.IsNullOrWhiteSpace(SmtpFrom) && (MailTransport.Equals("smtp", StringComparison.OrdinalIgnoreCase)
         ? !string.IsNullOrWhiteSpace(SmtpHost)
@@ -63,7 +71,7 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken) };
+    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey) };
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 
