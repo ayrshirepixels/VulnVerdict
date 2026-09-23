@@ -1,0 +1,153 @@
+@page "/suppressions"
+@inject IDbContextFactory<VvDbContext> Db
+@inject VerdictWorkflow Workflow
+@inject SettingsService Settings
+
+<PageTitle>Suppressions - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Suppressions and accepted risks</h1>
+    <p class="lead">Rules that hide verdicts, and risks someone has signed off. Everything here has an owner and, ideally, an expiry.</p>
+
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+    <AuthorizeView Roles="Administrator,Operator">
+        <div class="card">
+            <h2>Add a suppression rule</h2>
+            <div class="form">
+                <div class="row-3">
+                    <div><label>Scope</label>
+                        <select @bind="_scope">
+                            <option value="Cve">A CVE, on every asset</option>
+                            <option value="Product">A product (vendor / product)</option>
+                            <option value="WatchlistEntry">A watchlist entry</option>
+                        </select></div>
+                    @if (_scope == "Cve") { <div><label>CVE id</label><input type="text" @bind="_cve" placeholder="CVE-2024-21762" /></div> }
+                    else if (_scope == "Product") { <div><label>Vendor</label><input type="text" @bind="_vendor" /></div><div><label>Product</label><input type="text" @bind="_product" /></div> }
+                    else
+                    {
+                        <div><label>Entry</label>
+                            <select @bind="_entryId">
+                                <option value="">choose...</option>
+                                @foreach (var e in _entries) { <option value="@e.Id">@e.DisplayName (@e.Vendor @e.Product)</option> }
+                            </select></div>
+                    }
+                </div>
+                <div class="row"><div><label>Reason</label><input type="text" @bind="_reason" /></div><div><label>Expires (optional)</label><input type="date" @bind="_expiry" /></div></div>
+                <div class="btn-row"><button class="btn" @onclick="AddAsync">Add rule</button></div>
+            </div>
+        </div>
+    </AuthorizeView>
+
+    <div class="card">
+        <h2>Suppression rules</h2>
+        @if (_rules.Count == 0) { <p class="muted" style="margin:0">None.</p> }
+        else
+        {
+            <table class="table">
+                <thead><tr><th>Scope</th><th>Reason</th><th>Owner</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var r in _rules)
+                    {
+                        <tr style="@(r.IsExpired(DateTime.UtcNow) ? "opacity:.55" : "")">
+                            <td>@Describe(r)</td><td>@r.Reason</td><td>@r.Owner</td><td>@(r.Expiry is null ? "never" : Ui.Local(r.Expiry, _tz, "d MMM yyyy") + (r.IsExpired(DateTime.UtcNow) ? " (expired)" : ""))</td><td>@Ui.Local(r.CreatedAt, _tz, "d MMM yyyy")</td>
+                            <td><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => RemoveAsync(r.Id)">Remove</button></AuthorizeView></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <div class="card">
+        <h2>Accepted risks and snoozes</h2>
+        @if (_parked.Count == 0) { <p class="muted" style="margin:0">None.</p> }
+        else
+        {
+            <table class="table">
+                <thead><tr><th>State</th><th>CVE</th><th>Asset</th><th>Verdict</th><th>Owner</th><th>Reason</th><th>Until</th></tr></thead>
+                <tbody>
+                    @foreach (var v in _parked)
+                    {
+                        <tr>
+                            <td><span class="@Ui.StateClass(v.State)">@v.State.Plain()</span></td>
+                            <td><a href="/verdicts/@v.Id">@v.CveId</a></td>
+                            <td>@v.WatchlistEntry?.DisplayName</td>
+                            <td><TierBadge Tier="v.Tier" Rule="v.RuleNumber" Confidence="v.Confidence" /></td>
+                            <td>@v.StateOwner</td><td>@v.StateReason</td>
+                            <td>@Ui.Local(v.SnoozedUntil ?? v.AcceptedRiskExpiry, _tz, "d MMM yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private List<SuppressionRule> _rules = new();
+    private List<Verdict> _parked = new();
+    private List<WatchlistEntry> _entries = new();
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+    private string _scope = "Cve", _cve = "", _vendor = "", _product = "", _reason = "", _entryId = "";
+    private DateTime? _expiry;
+    private string? _notice, _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tz = (await Settings.LoadAsync()).ResolveTimeZone();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        _rules = await db.Suppressions.AsNoTracking().OrderByDescending(r => r.CreatedAt).ToListAsync();
+        _entries = await db.Watchlist.AsNoTracking().OrderBy(w => w.AssetName ?? w.Product).ToListAsync();
+        _parked = await db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).Where(v => v.State == VerdictState.AcceptedRisk || v.State == VerdictState.Snoozed).OrderBy(v => v.SnoozedUntil ?? v.AcceptedRiskExpiry).ToListAsync();
+    }
+
+    private string Describe(SuppressionRule r) => r.Scope switch
+    {
+        SuppressionScope.Cve => "CVE " + r.CveId,
+        SuppressionScope.Product => "Product " + r.VendorNorm + " / " + r.ProductNorm,
+        _ => "Entry " + (_entries.FirstOrDefault(e => e.Id == r.WatchlistEntryId)?.DisplayName ?? r.WatchlistEntryId.ToString())
+    };
+
+    private async Task AddAsync()
+    {
+        _error = null; _notice = null;
+        try
+        {
+            var scope = Enum.Parse<SuppressionScope>(_scope);
+            var rule = new SuppressionRule { Scope = scope, Reason = string.IsNullOrWhiteSpace(_reason) ? "suppressed" : _reason, Expiry = _expiry?.ToUniversalTime() };
+            var actor = Ui.Actor((await AuthState).User);
+            rule.Owner = actor;
+            switch (scope)
+            {
+                case SuppressionScope.Cve:
+                    if (string.IsNullOrWhiteSpace(_cve)) throw new ArgumentException("CVE id is required");
+                    rule.CveId = _cve.Trim().ToUpperInvariant(); break;
+                case SuppressionScope.Product:
+                    if (string.IsNullOrWhiteSpace(_product)) throw new ArgumentException("Product is required");
+                    rule.VendorNorm = Normalizer.Norm(_vendor); rule.ProductNorm = Normalizer.Norm(_product); break;
+                default:
+                    if (!Guid.TryParse(_entryId, out var id)) throw new ArgumentException("Choose a watchlist entry");
+                    rule.WatchlistEntryId = id; break;
+            }
+            await Workflow.AddSuppressionAsync(rule, actor);
+            _notice = "Rule added and applied."; _cve = ""; _vendor = ""; _product = ""; _reason = ""; _expiry = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        await Workflow.RemoveSuppressionAsync(id, Ui.Actor((await AuthState).User));
+        _notice = "Rule removed; affected verdicts re-opened.";
+        await LoadAsync();
+    }
+}

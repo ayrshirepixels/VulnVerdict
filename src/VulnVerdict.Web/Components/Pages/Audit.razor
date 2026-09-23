@@ -1,0 +1,32 @@
+@page "/audit"
+@attribute [Authorize(Roles = "Administrator")]
+@inject IDbContextFactory<VvDbContext> Db
+@inject SettingsService Settings
+
+<PageTitle>Audit log - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Audit log</h1>
+    <p class="lead">Every state change with actor, time and before/after. Last 300 entries.</p>
+    <table class="table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Before</th><th>After</th></tr></thead>
+        <tbody>
+            @foreach (var a in _rows)
+            {
+                <tr><td>@Ui.Local(a.At, _tz)</td><td>@a.Actor</td><td>@a.Action</td><td>@a.Target</td><td class="muted">@a.Before</td><td>@a.After</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<AuditEntry> _rows = new();
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tz = (await Settings.LoadAsync()).ResolveTimeZone();
+        await using var db = await Db.CreateDbContextAsync();
+        _rows = await db.Audit.AsNoTracking().OrderByDescending(a => a.At).Take(300).ToListAsync();
+    }
+}

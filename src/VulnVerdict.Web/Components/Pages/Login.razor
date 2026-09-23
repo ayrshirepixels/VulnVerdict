@@ -1,0 +1,56 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout EmptyLayout
+@inject AuthService Auth
+@inject SettingsService Settings
+@inject NavigationManager Nav
+
+<PageTitle>Sign in - VulnVerdict</PageTitle>
+
+<div class="auth-wrap">
+    <div class="auth-card">
+        <div class="brand"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></div>
+        <p class="muted" style="margin:0 0 18px">Cut the noise. Know your risk.</p>
+
+        @if (Error is not null)
+        {
+            <div class="alert alert-error">Wrong username or password.</div>
+        }
+
+        <form method="post" action="/auth/login" class="form">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <div>
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+            </div>
+            <div>
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required />
+            </div>
+            <div class="btn-row">
+                <button type="submit" class="btn">Sign in</button>
+                @if (_oidc)
+                {
+                    <a class="btn btn-secondary" href="/auth/oidc?returnUrl=@Uri.EscapeDataString(ReturnUrl ?? "/")">@_oidcName</a>
+                }
+            </div>
+        </form>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    private bool _oidc;
+    private string _oidcName = "Single sign-on";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Auth.HasUsersAsync()) { Nav.NavigateTo("/setup"); return; }
+        var s = await Settings.LoadAsync();
+        _oidc = s.OidcEnabled && !string.IsNullOrWhiteSpace(s.OidcAuthority) && !string.IsNullOrWhiteSpace(s.OidcClientId);
+        _oidcName = string.IsNullOrWhiteSpace(s.OidcDisplayName) ? "Single sign-on" : s.OidcDisplayName;
+    }
+}

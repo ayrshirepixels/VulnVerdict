@@ -1,0 +1,12 @@
+[
+  { "vendor": "Fortinet", "product": "FortiOS", "version": "7.2.5", "assetName": "FW-EDGE-01", "exposure": "Internet", "criticality": "Critical" },
+  { "vendor": "Microsoft", "product": "Windows Server 2022", "version": "10.0.20348.2000", "assetName": "DC-01", "exposure": "Internal", "criticality": "Critical" },
+  { "vendor": "VMware", "product": "vCenter Server", "version": "8.0.2", "assetName": "VCSA-01", "exposure": "Isolated", "criticality": "Critical" },
+  { "vendor": "Microsoft", "product": "Microsoft Exchange Server 2019 Cumulative Update 14", "assetName": "MAIL-01", "exposure": "Internet", "criticality": "Critical", "note": "version unknown: verdicts show as check this until it is added" },
+  { "vendor": "Progress Software Corporation", "product": "Telerik UI for ASP.NET AJAX", "version": "2023.1.117", "assetName": "WEB-01", "exposure": "Internet", "criticality": "Standard" },
+  { "vendor": "Ivanti", "product": "Connect Secure", "version": "22.7R2.4", "assetName": "VPN-01", "exposure": "Internet", "criticality": "Critical" },
+  { "vendor": "Veeam", "product": "Backup & Replication", "version": "12.1.2.172", "assetName": "BACKUP-01", "exposure": "Internal", "criticality": "Critical" },
+  { "vendor": "Ubiquiti", "product": "UniFi Network Application", "version": "8.0.24", "assetName": "UNIFI-01", "exposure": "Internal", "criticality": "Standard" },
+  { "vendor": "ConnectWise", "product": "ScreenConnect", "version": "23.9.7", "assetName": "REMOTE-01", "exposure": "Internet", "criticality": "Standard" },
+  { "vendor": "Google", "product": "Chrome", "assetName": "Staff laptops", "exposure": "Internal", "criticality": "Low" }
+]

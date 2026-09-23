@@ -1,0 +1,275 @@
+@page "/verdicts/{Id:guid}"
+@using System.Text.Json
+@inject IDbContextFactory<VvDbContext> Db
+@inject VerdictWorkflow Workflow
+@inject SettingsService Settings
+@inject NavigationManager Nav
+
+<PageTitle>@(_v?.CveId ?? "Verdict") - VulnVerdict</PageTitle>
+
+<div class="page">
+    @if (_v is null)
+    {
+        <h1>Verdict</h1>
+        <p class="muted">@(_loaded ? "Not found. It may have been removed when the watchlist changed." : "Loading...")</p>
+    }
+    else
+    {
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <h1 style="margin:0">@_v.CveId</h1>
+            <TierBadge Tier="_v.Tier" Rule="_v.RuleNumber" Confidence="_v.Confidence" />
+            <span class="@Ui.StateClass(_v.State)">@_v.State.Plain()</span>
+        </div>
+        <p style="font-size:17px;margin:12px 0 4px">@_v.Sentence</p>
+        <p class="muted" style="margin:0 0 16px">
+            @if (_v.SlaDue is not null && _v.IsActionable) { <text>Due @Ui.Local(_v.SlaDue, _tz, "d MMM yyyy")@(_v.IsOverdue(DateTime.UtcNow) ? ", overdue" : ""). </text> }
+            First seen @Ui.Local(_v.CreatedAt, _tz). Last evaluated @Ui.Ago(_v.LastEvaluatedAt).
+            @if (_v.StateReason is not null) { <text> @_v.State.Plain(): @_v.StateReason@(_v.StateOwner is null ? "" : " (" + _v.StateOwner + ")").</text> }
+            @if (_v.SnoozedUntil is not null) { <text> Snoozed until @Ui.Local(_v.SnoozedUntil, _tz, "d MMM yyyy").</text> }
+            @if (_v.AcceptedRiskExpiry is not null) { <text> Accepted until @Ui.Local(_v.AcceptedRiskExpiry, _tz, "d MMM yyyy").</text> }
+        </p>
+
+        @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+        @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+        <AuthorizeView Roles="Administrator,Operator">
+            <div class="btn-row" style="margin-bottom:18px">
+                @if (_v.State != VerdictState.Closed) { <button class="btn" @onclick="() => _dialog = Dialog.Done">Done</button> }
+                @if (_v.State == VerdictState.Open)
+                {
+                    <button class="btn btn-secondary" @onclick="() => _dialog = Dialog.Snooze">Snooze</button>
+                    <button class="btn btn-secondary" @onclick="() => _dialog = Dialog.Accept">Accept risk</button>
+                    <button class="btn btn-secondary" @onclick="() => _dialog = Dialog.Suppress">Suppress</button>
+                }
+                @if (_v.State != VerdictState.Open) { <button class="btn btn-secondary" @onclick="Reopen">Re-open</button> }
+            </div>
+        </AuthorizeView>
+
+        <div class="grid grid-2">
+            <div class="card">
+                <h2>Why this verdict</h2>
+                <dl class="kv">
+                    <dt>Rule</dt><dd>@_v.RuleNumber: @DecisionTable.RuleText(_v.RuleNumber)</dd>
+                    <dt>Exploitation</dt><dd>@_v.Exploitation.Plain()@(_v.InKev ? " (in CISA KEV)" : "")</dd>
+                    <dt>Attack path</dt><dd>@_v.AttackVector.Plain()@(_v.Automatable ? "; automatable at scale" : "; not automatable")</dd>
+                    <dt>Exposure</dt><dd>@_v.DeclaredExposure.Plain()@(_v.EffectiveExposure != _v.DeclaredExposure ? ", treated as " + _v.EffectiveExposure.Plain().ToLowerInvariant() + " because of the attack path" : "")</dd>
+                    <dt>Criticality</dt><dd>@_v.Criticality</dd>
+                    <dt>Match confidence</dt><dd>@_v.Confidence.Plain()</dd>
+                    <dt>Fixed in</dt><dd>@(_v.FixedIn ?? "see advisory")</dd>
+                    <dt>Asset</dt><dd>@_v.WatchlistEntry?.DisplayName: @_v.WatchlistEntry?.Vendor @_v.WatchlistEntry?.Product @(_v.WatchlistEntry?.Version ?? "(version not declared)") <a href="/watchlist?edit=@_v.WatchlistEntryId">edit</a></dd>
+                </dl>
+            </div>
+            <div class="card">
+                <h2>About the vulnerability</h2>
+                @if (_cve is not null)
+                {
+                    <p><b>@(_cve.Title ?? _cve.Id)</b></p>
+                    <p>@_cve.Description</p>
+                    <p class="muted">Published @Ui.Local(_cve.Published, _tz, "d MMM yyyy") by @_cve.Assigner. Updated @Ui.Local(_cve.LastModified, _tz, "d MMM yyyy").</p>
+                    @if (_refs.Count > 0)
+                    {
+                        <h3>References</h3>
+                        <ul style="margin:0;padding-left:18px">
+                            @foreach (var r in _refs.Take(8)) { <li><a href="@r" target="_blank" rel="noopener noreferrer">@r</a></li> }
+                        </ul>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Evidence chain</h2>
+            <ol class="evidence">
+                @foreach (var e in _evidence)
+                {
+                    <li>
+                        <div>@e.Claim</div>
+                        <div class="src">@(e.Source.StartsWith("http") ? "" : "Source: ")@if (e.Source.StartsWith("http")) { <a href="@e.Source" target="_blank" rel="noopener noreferrer">@e.Source</a> } else { @e.Source } &middot; retrieved @Ui.Local(e.RetrievedAt, _tz)</div>
+                        @if (e.Excerpt is not null) { <pre class="excerpt">@e.Excerpt</pre> }
+                    </li>
+                }
+            </ol>
+        </div>
+
+        <div class="card">
+            <h2>Explain</h2>
+            <p class="muted" style="margin-top:0">The only place the jargon appears.</p>
+            <div class="grid grid-2">
+                <div>
+                    <h3>SSVC inputs</h3>
+                    <dl class="kv">
+                        <dt>Exploitation</dt><dd>@_v.Exploitation</dd>
+                        <dt>Automatable</dt><dd>@(_v.Automatable ? "yes" : "no")</dd>
+                        <dt>Exposure</dt><dd>@_v.EffectiveExposure</dd>
+                        <dt>Criticality</dt><dd>@_v.Criticality</dd>
+                        <dt>Vulnrichment</dt><dd>Exploitation: @(_cve?.SsvcExploitation ?? "-"), Automatable: @(_cve?.SsvcAutomatable ?? "-")</dd>
+                        <dt>CISA KEV</dt><dd>@(_kev is null ? "not listed" : "added " + _kev.DateAdded.ToString("d MMM yyyy") + (_kev.DueDate is null ? "" : ", federal due " + _kev.DueDate.Value.ToString("d MMM yyyy")) + (_kev.KnownRansomwareUse == "Known" ? ", known ransomware use" : ""))</dd>
+                        <dt>EPSS</dt><dd>@(_epss is null ? "no score" : _epss.Score.ToString("0.000") + " (" + (_epss.Percentile * 100).ToString("0") + "th percentile, " + _epss.ScoreDate.ToString("d MMM yyyy") + ")")</dd>
+                    </dl>
+                </div>
+                <div>
+                    <h3>CVSS vector decoded</h3>
+                    @if (_cvss is null)
+                    {
+                        <p class="muted">No CVSS vector was supplied.</p>
+                    }
+                    else
+                    {
+                        <p><code>@_cvss.Raw</code> @(BaseScore is null ? "" : "base score " + BaseScore)</p>
+                        <dl class="kv">
+                            @foreach (var (m, val, meaning) in _cvss.Decode()) { <dt>@m</dt><dd>@val: @meaning</dd> }
+                        </dl>
+                    }
+                    @if (_signals.Count > 0)
+                    {
+                        <h3>Public exploit references</h3>
+                        <ul style="margin:0;padding-left:18px">
+                            @foreach (var s in _signals) { <li><a href="@s.Url" target="_blank" rel="noopener noreferrer">@s.Source: @(s.Title ?? s.Url)</a></li> }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>History</h2>
+            @if (_history.Count == 0) { <p class="muted" style="margin:0">No changes yet.</p> }
+            else
+            {
+                <table class="table">
+                    <thead><tr><th>When</th><th>Who</th><th>Change</th><th>Reason</th></tr></thead>
+                    <tbody>
+                        @foreach (var h in _history)
+                        {
+                            <tr><td>@Ui.Local(h.At, _tz)</td><td>@h.Actor</td><td>@h.Kind: @h.From to @h.To</td><td>@h.Reason</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+
+    @if (_dialog != Dialog.None && _v is not null)
+    {
+        <div class="dialog-backdrop" @onclick="() => _dialog = Dialog.None">
+            <div class="dialog" @onclick:stopPropagation="true">
+                @switch (_dialog)
+                {
+                    case Dialog.Done:
+                        <h3>Mark as done</h3>
+                        <p>@_v.CveId on @_v.WatchlistEntry?.DisplayName will be closed. It stays closed even if the tier changes later; update the watchlist version so it is re-evaluated as fixed.</p>
+                        <div class="form"><div><label>Reason</label><input type="text" @bind="_reason" placeholder="patched to 7.2.8" /></div></div>
+                        <div class="btn-row" style="margin-top:14px"><button class="btn" @onclick="Done">Confirm done</button><button class="btn btn-secondary" @onclick="() => _dialog = Dialog.None">Cancel</button></div>
+                        break;
+                    case Dialog.Snooze:
+                        <h3>Snooze</h3>
+                        <div class="form">
+                            <div><label>Until</label><input type="date" @bind="_date" /></div>
+                            <div><label>Reason</label><input type="text" @bind="_reason" placeholder="change window on the 30th" /></div>
+                        </div>
+                        <div class="btn-row" style="margin-top:14px"><button class="btn" @onclick="Snooze">Snooze</button><button class="btn btn-secondary" @onclick="() => _dialog = Dialog.None">Cancel</button></div>
+                        break;
+                    case Dialog.Accept:
+                        <h3>Accept the risk</h3>
+                        <div class="form">
+                            <div><label>Owner</label><input type="text" @bind="_owner" placeholder="who is accountable" /></div>
+                            <div><label>Reason</label><input type="text" @bind="_reason" placeholder="feature disabled by configuration, WAF in front, ..." /></div>
+                            <div><label>Expires (optional)</label><input type="date" @bind="_date" /></div>
+                        </div>
+                        <div class="btn-row" style="margin-top:14px"><button class="btn" @onclick="Accept">Accept risk</button><button class="btn btn-secondary" @onclick="() => _dialog = Dialog.None">Cancel</button></div>
+                        break;
+                    case Dialog.Suppress:
+                        <h3>Suppress</h3>
+                        <div class="form">
+                            <div><label>Scope</label>
+                                <select @bind="_scope">
+                                    <option value="Cve">This CVE, on every asset</option>
+                                    <option value="WatchlistEntry">Everything for this asset</option>
+                                    <option value="Product">Everything for @_v.WatchlistEntry?.Vendor @_v.WatchlistEntry?.Product</option>
+                                </select></div>
+                            <div><label>Reason</label><input type="text" @bind="_reason" placeholder="not applicable: module not installed" /></div>
+                            <div><label>Expires (optional)</label><input type="date" @bind="_date" /></div>
+                        </div>
+                        <div class="btn-row" style="margin-top:14px"><button class="btn" @onclick="Suppress">Add suppression</button><button class="btn btn-secondary" @onclick="() => _dialog = Dialog.None">Cancel</button></div>
+                        break;
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private enum Dialog { None, Done, Snooze, Accept, Suppress }
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery(Name = "action")] public string? Action { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Verdict? _v;
+    private Cve? _cve;
+    private KevEntry? _kev;
+    private EpssScore? _epss;
+    private CvssVector? _cvss;
+    private List<ExploitSignal> _signals = new();
+    private List<VerdictHistory> _history = new();
+    private List<EvidenceClaim> _evidence = new();
+    private List<string> _refs = new();
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+    private bool _loaded;
+    private double? BaseScore => _cve?.CvssV40Score ?? _cve?.CvssV31Score;
+    private Dialog _dialog = Dialog.None;
+    private string _reason = "", _owner = "", _scope = "Cve";
+    private DateTime? _date;
+    private string? _notice, _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tz = (await Settings.LoadAsync()).ResolveTimeZone();
+        await LoadAsync();
+        if (Action == "done" && _v is not null && _v.State != VerdictState.Closed && Ui.CanOperate((await AuthState).User)) _dialog = Dialog.Done;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        _v = await db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).FirstOrDefaultAsync(v => v.Id == Id);
+        _loaded = true;
+        if (_v is null) return;
+        _cve = await db.Cves.AsNoTracking().FirstOrDefaultAsync(c => c.Id == _v.CveId);
+        _kev = await db.Kev.AsNoTracking().FirstOrDefaultAsync(k => k.CveId == _v.CveId);
+        _epss = await db.Epss.AsNoTracking().FirstOrDefaultAsync(e => e.CveId == _v.CveId);
+        _signals = await db.ExploitSignals.AsNoTracking().Where(s => s.CveId == _v.CveId).OrderBy(s => s.Source).ToListAsync();
+        _history = await db.VerdictHistory.AsNoTracking().Where(h => h.VerdictId == Id).OrderByDescending(h => h.At).ToListAsync();
+        _cvss = CvssVector.Parse(_cve?.CvssV40Vector) ?? CvssVector.Parse(_cve?.CvssV31Vector);
+        try { _evidence = JsonSerializer.Deserialize<List<EvidenceClaim>>(_v.EvidenceJson) ?? new(); } catch { _evidence = new(); }
+        try { _refs = _cve?.ReferencesJson is null ? new() : JsonSerializer.Deserialize<List<string>>(_cve.ReferencesJson) ?? new(); } catch { _refs = new(); }
+    }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task Run(Func<string, Task> action, string notice)
+    {
+        _error = null; _notice = null;
+        try { await action(await ActorAsync()); _notice = notice; _dialog = Dialog.None; _reason = ""; _owner = ""; _date = null; await LoadAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private Task Done() => Run(a => Workflow.CloseAsync(Id, a, string.IsNullOrWhiteSpace(_reason) ? "marked done" : _reason), "Marked as done.");
+    private Task Reopen() => Run(a => Workflow.ReopenAsync(Id, a), "Re-opened.");
+    private Task Snooze() => Run(a => Workflow.SnoozeAsync(Id, a, (_date ?? DateTime.UtcNow.AddDays(7)).ToUniversalTime(), string.IsNullOrWhiteSpace(_reason) ? "snoozed" : _reason), "Snoozed.");
+    private Task Accept() => Run(a => Workflow.AcceptRiskAsync(Id, a, string.IsNullOrWhiteSpace(_owner) ? a : _owner, string.IsNullOrWhiteSpace(_reason) ? "risk accepted" : _reason, _date?.ToUniversalTime()), "Risk accepted.");
+    private Task Suppress() => Run(async a =>
+    {
+        var scope = Enum.Parse<SuppressionScope>(_scope);
+        await Workflow.AddSuppressionAsync(new SuppressionRule
+        {
+            Scope = scope,
+            CveId = scope == SuppressionScope.Cve ? _v!.CveId : null,
+            VendorNorm = scope == SuppressionScope.Product ? _v!.WatchlistEntry?.VendorNorm : null,
+            ProductNorm = scope == SuppressionScope.Product ? _v!.WatchlistEntry?.ProductNorm : null,
+            WatchlistEntryId = scope == SuppressionScope.WatchlistEntry ? _v!.WatchlistEntryId : null,
+            Reason = string.IsNullOrWhiteSpace(_reason) ? "suppressed" : _reason,
+            Owner = a,
+            Expiry = _date?.ToUniversalTime()
+        }, a);
+    }, "Suppression rule added.");
+}

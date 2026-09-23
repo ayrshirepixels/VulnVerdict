@@ -1,0 +1,15 @@
+<span class="@Ui.TierClass(Tier)" title="Decision table rule @Rule">@Tier.Plain()</span>
+@if (Confidence == MatchConfidence.Possible)
+{
+    <span class="chip chip-check" title="Match is not certain: product name fuzzy match or version unparsed">check this</span>
+}
+else if (Confidence == MatchConfidence.Likely)
+{
+    <span class="chip chip-likely" title="Product matched, version range parsed with lenient rules">likely</span>
+}
+
+@code {
+    [Parameter] public VerdictTier Tier { get; set; }
+    [Parameter] public int Rule { get; set; }
+    [Parameter] public MatchConfidence Confidence { get; set; } = MatchConfidence.Exact;
+}

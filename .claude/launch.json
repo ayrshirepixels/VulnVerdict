@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vulnverdict-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/VulnVerdict.Web",
+        "--launch-profile",
+        "http"
+      ],
+      "port": 5080
+    }
+  ]
+}

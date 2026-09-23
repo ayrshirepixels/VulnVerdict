@@ -1,0 +1,180 @@
+@page "/"
+@inject DigestService Digest
+@inject VerdictWorkflow Workflow
+@inject SettingsService Settings
+@inject IDbContextFactory<VvDbContext> Db
+
+<PageTitle>Today - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Today</h1>
+    <p class="lead">The digest, live. What to fix today, what to fix this week, what changed.</p>
+
+    @if (_workerDead)
+    {
+        <div class="alert alert-error"><b>The worker is not running.</b> Last heartbeat @Ui.Ago(_workerBeat). Feeds, verdicts and digests are not being updated.</div>
+    }
+    @if (_feedsNeverRun)
+    {
+        <div class="alert alert-info"><b>First run.</b> Feeds are loading in the background; the CVE List baseline is large and takes a few minutes. Check <a href="/sources">Sources</a> for progress. Verdicts appear once the CVE list is loaded and the watchlist has entries.</div>
+    }
+    else if (_watchlistEmpty)
+    {
+        <div class="alert alert-info"><b>The watchlist is empty.</b> Add the products you run under <a href="/watchlist">Watchlist</a> and verdicts will appear here.</div>
+    }
+    @if (_d?.FeedWarning is not null)
+    {
+        <div class="alert alert-warn">@_d.FeedWarning</div>
+    }
+    @if (_notice is not null)
+    {
+        <div class="alert alert-ok">@_notice</div>
+    }
+    @if (_error is not null)
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    @if (_d is null)
+    {
+        <p class="muted">Loading...</p>
+    }
+    else
+    {
+        <div class="headline">@_d.Headline</div>
+        <div class="stat-row">
+            <div class="stat today"><b>@_d.FixToday.Count</b><span>fix today</span></div>
+            <div class="stat week"><b>@_d.FixThisWeek.Count</b><span>fix this week</span></div>
+            <div class="stat cycle"><b>@_d.NextPatchCycleCount</b><span>next patch cycle</span></div>
+            <div class="stat saved"><b>@_d.DismissedSinceMonday</b><span>you did not need to read since Monday</span></div>
+            <div class="stat saved"><b>@_d.DismissedTotal</b><span>dismissed in total, with the reason kept</span></div>
+        </div>
+
+        <AuthorizeView Roles="Administrator,Operator">
+            <div class="btn-row" style="margin-bottom:18px">
+                <button class="btn btn-secondary btn-sm" @onclick="SendNow" disabled="@_busy">Send digest now</button>
+                <a class="btn btn-secondary btn-sm" href="/digests/preview">Preview the email</a>
+                <span class="muted" style="font-size:13px">Daily digest @(_lastDigest is null ? "not sent yet" : "last sent " + Ui.Ago(_lastDigest))</span>
+            </div>
+        </AuthorizeView>
+
+        <div class="card">
+            <h2 style="color:var(--today)">Fix today</h2>
+            @Section(_d.FixToday, "var(--today)", "Nothing to fix today.")
+        </div>
+        <div class="card">
+            <h2 style="color:var(--week)">Fix this week</h2>
+            @Section(_d.FixThisWeek, "var(--week)", "Nothing this week.")
+        </div>
+        @if (_d.CheckThese.Count > 0)
+        {
+            <div class="card">
+                <h2>Check these</h2>
+                <p class="muted" style="margin-top:0">Matched on product name but the version could not be confirmed. Add the installed version on the watchlist to settle them. Never emailed as Fix today.</p>
+                @Section(_d.CheckThese, "#9aa1ab", "")
+            </div>
+        }
+        @if (_d.Changed.Count > 0)
+        {
+            <div class="card">
+                <h2 style="color:var(--brand)">Changed since last digest</h2>
+                @Section(_d.Changed, "var(--brand)", "")
+            </div>
+        }
+        @if (_d.Overdue.Count > 0)
+        {
+            <div class="card">
+                <h2 style="color:var(--today)">Overdue</h2>
+                @Section(_d.Overdue, "var(--today)", "")
+            </div>
+        }
+        <div class="card">
+            <h2>Next patch cycle</h2>
+            <p style="margin:0">@_d.NextPatchCycleCount item@(_d.NextPatchCycleCount == 1 ? "" : "s"). <a href="/verdicts?tier=NextPatchCycle">View the list</a>.</p>
+        </div>
+        <p class="muted">@_d.CoverageLine <a href="/verdicts?tier=NotAffected">Browse what was dismissed</a>.</p>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private DigestContent? _d;
+    private bool _workerDead, _feedsNeverRun, _watchlistEmpty, _busy;
+    private DateTime? _workerBeat, _lastDigest;
+    private string? _notice, _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _d = await Digest.BuildAsync();
+        var (alive, beat) = await WorkerMonitorService.WorkerStatusAsync(Settings);
+        _workerDead = !alive; _workerBeat = beat;
+        var last = await Settings.GetStateAsync(SettingsService.Keys.LastDailyDigest);
+        _lastDigest = last is not null && DateTime.TryParse(last, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : null;
+        await using var db = await Db.CreateDbContextAsync();
+        _feedsNeverRun = !await db.FeedStatuses.AnyAsync(f => f.Name == "cvelist" && f.LastSuccess != null);
+        _watchlistEmpty = !await db.Watchlist.AnyAsync(w => w.Enabled);
+    }
+
+    private RenderFragment Section(List<DigestItem> items, string colour, string empty) => __builder =>
+    {
+        if (items.Count == 0)
+        {
+            <p class="muted" style="margin:0">@empty</p>
+            return;
+        }
+        <ul class="verdict-list">
+            @foreach (var i in items)
+            {
+                <li>
+                    <span class="dot" style="background:@colour"></span>
+                    <div class="sentence">
+                        <a href="/verdicts/@i.VerdictId">@i.Sentence</a>
+                        <div class="meta">
+                            @i.CveId
+                            @if (i.Reason is not null) { <text> &middot; @i.Reason</text> }
+                            @if (i.SlaDue is not null) { <text> &middot; due @i.SlaDue.Value.ToString("d MMM")</text> }
+                        </div>
+                    </div>
+                    <AuthorizeView Roles="Administrator,Operator" Context="auth">
+                        <div class="actions">
+                            <button class="btn btn-secondary btn-sm" @onclick="() => Done(i.VerdictId)">Done</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => Snooze(i.VerdictId)">Snooze 7 days</button>
+                        </div>
+                    </AuthorizeView>
+                </li>
+            }
+        </ul>
+    };
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task Done(Guid id)
+    {
+        await Workflow.CloseAsync(id, await ActorAsync(), "marked done from Today");
+        _notice = "Marked as done.";
+        await LoadAsync();
+    }
+
+    private async Task Snooze(Guid id)
+    {
+        await Workflow.SnoozeAsync(id, await ActorAsync(), DateTime.UtcNow.AddDays(7), "snoozed from Today");
+        _notice = "Snoozed for 7 days.";
+        await LoadAsync();
+    }
+
+    private async Task SendNow()
+    {
+        _busy = true; _notice = null; _error = null;
+        try
+        {
+            var run = await Digest.SendDigestAsync(DigestKind.Manual);
+            if (run.SentAt is not null) _notice = "Digest sent to " + run.Recipients + ".";
+            else _error = "Digest not sent: " + run.Error + " The rendered copy is saved under Digests.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+        await LoadAsync();
+    }
+}

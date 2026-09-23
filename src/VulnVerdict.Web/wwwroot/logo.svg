@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="VulnVerdict">
+  <!-- shield: protection -->
+  <path d="M60 10 L98 24 V58 C98 84 80 102 60 111 C40 102 22 84 22 58 V24 Z" fill="none" stroke="#F5F7FA" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M60 27 L84 36 V58 C84 74 74 86 60 93 C46 86 36 74 36 58 V36 Z" fill="none" stroke="#F5F7FA" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M60 27 L36 36 V58 C36 74 46 86 60 93 Z" fill="#F5F7FA"/>
+  <!-- scales: the verdict -->
+  <rect x="10" y="44" width="100" height="6" rx="2" fill="#F5F7FA"/>
+  <rect x="57" y="93" width="6" height="14" fill="#F5F7FA"/>
+  <rect x="42" y="107" width="36" height="6" rx="2" fill="#F5F7FA"/>
+  <g stroke="#F5F7FA" stroke-width="3" fill="none" stroke-linejoin="round">
+    <path d="M18 50 L6 74 M18 50 L30 74 M102 50 L90 74 M102 50 L114 74"/>
+    <path d="M2 74 H34 L29 85 H7 Z"/>
+    <path d="M86 74 H118 L113 85 H91 Z"/>
+  </g>
+  <!-- weights: what is on the scale -->
+  <circle cx="18" cy="70" r="3.5" fill="#FF9F0A"/>
+  <circle cx="102" cy="70" r="3.5" fill="#FF9F0A"/>
+</svg>

@@ -1,0 +1,71 @@
+# VulnVerdict on-premises console. One command: docker compose up -d
+# Then open https://<host>/ and create the administrator account.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vulnverdict
+      POSTGRES_USER: vulnverdict
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vulnverdict -d vulnverdict"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: ${VV_IMAGE:-vulnverdict:latest}
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      Role: web
+      Database__Provider: postgres
+      Database__ConnectionString: "Host=db;Database=vulnverdict;Username=vulnverdict;Password=${DB_PASSWORD}"
+      Worker__DataDir: /data
+    volumes:
+      - data:/data
+    expose:
+      - "8080"
+
+  worker:
+    image: ${VV_IMAGE:-vulnverdict:latest}
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      Role: worker
+      Database__Provider: postgres
+      Database__ConnectionString: "Host=db;Database=vulnverdict;Username=vulnverdict;Password=${DB_PASSWORD}"
+      Worker__DataDir: /data
+      Worker__CveMinYear: ${CVE_MIN_YEAR:-0}
+    volumes:
+      - data:/data
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      VV_HOSTNAME: ${VV_HOSTNAME:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db:
+  data:
+  caddy_data:
+  caddy_config:

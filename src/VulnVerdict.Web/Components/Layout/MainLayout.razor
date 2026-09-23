@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <aside class="sidebar">
+        <a class="brand" href="/"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></a>
+        <div class="tagline">Cut the noise. Know your risk.</div>
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">Today</NavLink>
+            <NavLink href="/verdicts">Verdicts</NavLink>
+            <NavLink href="/watchlist">Watchlist</NavLink>
+            <NavLink href="/suppressions">Suppressions</NavLink>
+            <NavLink href="/digests">Digests</NavLink>
+            <NavLink href="/sources">Sources</NavLink>
+            <AuthorizeView Roles="Administrator">
+                <NavLink href="/settings">Settings</NavLink>
+                <NavLink href="/users">Users</NavLink>
+                <NavLink href="/audit">Audit log</NavLink>
+            </AuthorizeView>
+        </nav>
+        <div class="sidebar-foot">
+            <AuthorizeView>
+                <div class="who">@context.User.Identity?.Name<br /><small>@(context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)</small></div>
+                <form method="post" action="/auth/logout">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+                </form>
+            </AuthorizeView>
+        </div>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Something went wrong in the console.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">x</span>
+</div>

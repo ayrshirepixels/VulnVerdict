@@ -1,0 +1,57 @@
+@page "/digests"
+@page "/digests/{Id:guid}"
+@page "/digests/preview"
+@inject IDbContextFactory<VvDbContext> Db
+@inject SettingsService Settings
+@inject NavigationManager Nav
+
+<PageTitle>Digests - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Digests</h1>
+    <p class="lead">Every digest that was generated, sent or not. The email is the product; this is its record.</p>
+
+    @if (_isPreview || Id is not null)
+    {
+        <p><a href="/digests">All digests</a>@(_run is null ? "" : " - " + _run.Kind + " digest generated " + Ui.Local(_run.GeneratedAt, _tz) + (_run.SentAt is null ? " (not sent" + (_run.Error is null ? "" : ": " + _run.Error) + ")" : " and sent to " + _run.Recipients))</p>
+        <iframe class="digest-frame" src="@(_isPreview ? "/digests/preview/html" : "/digests/" + Id + "/html")" title="Digest email"></iframe>
+    }
+    else
+    {
+        <p><a class="btn btn-secondary btn-sm" href="/digests/preview">Preview what would be sent now</a></p>
+        <table class="table">
+            <thead><tr><th>Generated</th><th>Kind</th><th>Subject</th><th>Sent to</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach (var r in _runs)
+                {
+                    <tr>
+                        <td><a href="/digests/@r.Id">@Ui.Local(r.GeneratedAt, _tz)</a></td>
+                        <td>@r.Kind</td>
+                        <td>@r.Subject</td>
+                        <td>@r.Recipients</td>
+                        <td>@(r.SentAt is null ? "not sent: " + r.Error : "sent")</td>
+                    </tr>
+                }
+                @if (_runs.Count == 0) { <tr><td colspan="5" class="muted">No digests yet. The daily digest goes at the time set under Settings; Fix today items are emailed as soon as they appear.</td></tr> }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private List<DigestRun> _runs = new();
+    private DigestRun? _run;
+    private bool _isPreview;
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _tz = (await Settings.LoadAsync()).ResolveTimeZone();
+        _isPreview = Nav.ToBaseRelativePath(Nav.Uri).StartsWith("digests/preview", StringComparison.OrdinalIgnoreCase);
+        await using var db = await Db.CreateDbContextAsync();
+        if (Id is not null) _run = await db.DigestRuns.AsNoTracking().Select(r => new DigestRun { Id = r.Id, Kind = r.Kind, GeneratedAt = r.GeneratedAt, SentAt = r.SentAt, Recipients = r.Recipients, Subject = r.Subject, Error = r.Error }).FirstOrDefaultAsync(r => r.Id == Id);
+        else if (!_isPreview) _runs = await db.DigestRuns.AsNoTracking().OrderByDescending(r => r.GeneratedAt).Take(100)
+            .Select(r => new DigestRun { Id = r.Id, Kind = r.Kind, GeneratedAt = r.GeneratedAt, SentAt = r.SentAt, Recipients = r.Recipients, Subject = r.Subject, Error = r.Error }).ToListAsync();
+    }
+}

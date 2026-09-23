@@ -1,0 +1,8 @@
+# Only 443 (and 80 for redirects) is exposed. Default is Caddy's internal CA, which suits an
+# internal hostname; import its root certificate on the clients or point at your own CA.
+# For a public hostname with a Let's Encrypt certificate, delete the "tls internal" line.
+{$VV_HOSTNAME} {
+	tls internal
+	encode gzip
+	reverse_proxy web:8080
+}

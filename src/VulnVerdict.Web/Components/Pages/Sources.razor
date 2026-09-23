@@ -1,0 +1,86 @@
+@page "/sources"
+@using VulnVerdict.Core.Feeds
+@implements IDisposable
+@inject IDbContextFactory<VvDbContext> Db
+@inject IEnumerable<IFeed> Feeds
+@inject SettingsService Settings
+
+<PageTitle>Sources - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Sources</h1>
+    <p class="lead">Feed health is a first-class item. Silence means nothing to do, never that the box died. Inventory connectors (endpoint management, WinRM, firewall, hypervisor, SSH, SBOM, SNMP, discovery) arrive in phase 3 and appear here.</p>
+
+    <div class="card">
+        <h2>Worker</h2>
+        <dl class="kv">
+            <dt>Heartbeat</dt><dd>@(_alive ? "running" : "not running") (last @Ui.Ago(_beat))</dd>
+            <dt>Last evaluation</dt><dd>@Ui.Ago(_lastEval)</dd>
+            <dt>Watchlist entries</dt><dd>@_entries</dd>
+            <dt>Verdicts stored</dt><dd>@_verdicts.ToString("N0")</dd>
+            <dt>CVE records</dt><dd>@_cves.ToString("N0") (@_products.ToString("N0") distinct vendor/product pairs)</dd>
+        </dl>
+    </div>
+
+    <table class="table">
+        <thead><tr><th>Feed</th><th>Cadence</th><th>Last success</th><th>Records</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var f in _status)
+            {
+                var feed = Feeds.FirstOrDefault(x => x.Name == f.Name);
+                var stale = f.LastSuccess is null || DateTime.UtcNow - f.LastSuccess.Value > TimeSpan.FromHours(24);
+                <tr>
+                    <td><b>@f.DisplayName</b><br /><small class="muted">@feed?.Licence</small></td>
+                    <td>every @(f.IntervalMinutes >= 60 ? (f.IntervalMinutes / 60) + " h" : f.IntervalMinutes + " min")</td>
+                    <td style="@(stale ? "color:var(--today)" : "")">@Ui.Ago(f.LastSuccess)<br /><small class="muted">@f.Cursor</small></td>
+                    <td class="num">@f.RecordsLastRun.ToString("N0")</td>
+                    <td>
+                        @if (f.Running) { <span class="state state-open">running</span> <span class="progress">@f.Progress</span> }
+                        else if (f.RunRequested) { <span class="state">queued</span> }
+                        else if (f.LastError is not null) { <span style="color:var(--today)">failed @Ui.Ago(f.LastAttempt): @f.LastError</span> }
+                        else if (f.LastSuccess is not null) { <span class="state state-closed">ok</span> <span class="progress">@f.Progress</span> }
+                        else { <span class="muted">waiting for first run</span> }
+                    </td>
+                    <td><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => RunNow(f.Name)" disabled="@(f.Running || f.RunRequested)">Run now</button></AuthorizeView></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="muted">Feeds not yet wired: NVD CPE backfill, OSV and GitHub advisories (SBOM matching, phase 3), vendor PSIRTs and GitHub PoC search (phase 4).</p>
+</div>
+
+@code {
+    private List<FeedStatus> _status = new();
+    private bool _alive;
+    private DateTime? _beat, _lastEval;
+    private int _entries, _verdicts, _cves, _products;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _timer = new System.Threading.Timer(async _ => { try { await LoadAsync(); await InvokeAsync(StateHasChanged); } catch { } }, null, 5000, 5000);
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        _status = await db.FeedStatuses.AsNoTracking().OrderBy(f => f.Name == "cvelist" ? 0 : 1).ThenBy(f => f.DisplayName).ToListAsync();
+        (_alive, _beat) = await WorkerMonitorService.WorkerStatusAsync(Settings);
+        var le = await Settings.GetStateAsync(SettingsService.Keys.LastEvaluation);
+        _lastEval = le is not null && DateTime.TryParse(le, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : null;
+        _entries = await db.Watchlist.CountAsync(w => w.Enabled);
+        _verdicts = await db.Verdicts.CountAsync();
+        _cves = await db.Cves.CountAsync();
+        _products = await db.CnaProducts.CountAsync();
+    }
+
+    private async Task RunNow(string name)
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        await db.FeedStatuses.Where(f => f.Name == name).ExecuteUpdateAsync(u => u.SetProperty(f => f.RunRequested, true));
+        await LoadAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

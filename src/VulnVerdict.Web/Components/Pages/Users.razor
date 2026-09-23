@@ -1,0 +1,99 @@
+@page "/users"
+@attribute [Authorize(Roles = "Administrator")]
+@inject AuthService Auth
+
+<PageTitle>Users - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Users</h1>
+    <p class="lead">Administrator: everything. Operator: verdict workflow, watchlist, suppressions. Viewer: read only. Reporters only receive the digest and are listed under Settings.</p>
+
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+    <div class="card">
+        <h2>Add a local user</h2>
+        <div class="form">
+            <div class="row-3">
+                <div><label>Username</label><input type="text" @bind="_username" /></div>
+                <div><label>Password (12+ characters)</label><input type="password" @bind="_password" autocomplete="new-password" /></div>
+                <div><label>Role</label><select @bind="_role"><option value="Viewer">Viewer</option><option value="Operator">Operator</option><option value="Administrator">Administrator</option></select></div>
+            </div>
+            <div class="btn-row"><button class="btn" @onclick="AddAsync">Add user</button></div>
+        </div>
+    </div>
+
+    <table class="table">
+        <thead><tr><th>Username</th><th>Provider</th><th>Role</th><th>Last login</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var u in _users)
+            {
+                <tr>
+                    <td>@u.Username<br /><small class="muted">@u.Email</small></td>
+                    <td>@u.Provider</td>
+                    <td>
+                        <select class="input" style="width:auto" value="@u.Role" @onchange="e => ChangeRole(u, e.Value?.ToString())">
+                            <option value="Viewer">Viewer</option><option value="Operator">Operator</option><option value="Administrator">Administrator</option>
+                        </select>
+                    </td>
+                    <td>@Ui.Ago(u.LastLoginAt)</td>
+                    <td class="btn-row">
+                        @if (u.Provider == "local") { <button class="btn btn-secondary btn-sm" @onclick="() => _resetFor = u.Id">Reset password</button> }
+                        <button class="btn btn-secondary btn-sm" @onclick="() => DeleteAsync(u.Id)">Delete</button>
+                    </td>
+                </tr>
+                @if (_resetFor == u.Id)
+                {
+                    <tr><td colspan="5"><div class="form" style="max-width:480px"><div class="row"><div><input type="password" @bind="_newPassword" placeholder="new password" autocomplete="new-password" /></div><div class="btn-row"><button class="btn btn-sm" @onclick="() => ResetAsync(u)">Set</button><button class="btn btn-secondary btn-sm" @onclick="() => _resetFor = null">Cancel</button></div></div></div></td></tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private List<AppUser> _users = new();
+    private string _username = "", _password = "", _role = "Operator", _newPassword = "";
+    private Guid? _resetFor;
+    private string? _notice, _error;
+
+    protected override async Task OnInitializedAsync() => _users = await Auth.ListUsersAsync();
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task AddAsync()
+    {
+        _error = null; _notice = null;
+        try
+        {
+            if (_password.Length < 12) throw new ArgumentException("Password must be at least 12 characters");
+            await Auth.CreateLocalUserAsync(_username, _password, Enum.Parse<UserRole>(_role), null, await ActorAsync());
+            _notice = _username + " added."; _username = ""; _password = "";
+            _users = await Auth.ListUsersAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task ChangeRole(AppUser u, string? role)
+    {
+        if (!Enum.TryParse<UserRole>(role, out var r)) return;
+        try { await Auth.UpdateUserAsync(u.Id, r, null, await ActorAsync()); _notice = u.Username + " is now " + r + "."; _users = await Auth.ListUsersAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task ResetAsync(AppUser u)
+    {
+        try
+        {
+            if (_newPassword.Length < 12) throw new ArgumentException("Password must be at least 12 characters");
+            await Auth.UpdateUserAsync(u.Id, u.Role, _newPassword, await ActorAsync()); _notice = "Password reset for " + u.Username + "."; _resetFor = null; _newPassword = "";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        try { await Auth.DeleteUserAsync(id, await ActorAsync()); _notice = "Deleted."; _users = await Auth.ListUsersAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+}

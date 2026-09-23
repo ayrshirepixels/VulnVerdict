@@ -1,0 +1,102 @@
+@page "/verdicts"
+@inject IDbContextFactory<VvDbContext> Db
+@inject NavigationManager Nav
+
+<PageTitle>Verdicts - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Verdicts</h1>
+    <p class="lead">Every CVE matched against the watchlist, including the ones dismissed. Not affected verdicts keep their evidence so a bad match can be spotted.</p>
+
+    <div class="filters">
+        <select @bind="_tier" @bind:after="Reload">
+            <option value="">Any verdict</option>
+            <option value="FixToday">Fix today</option>
+            <option value="FixThisWeek">Fix this week</option>
+            <option value="NextPatchCycle">Next patch cycle</option>
+            <option value="IgnoreTracked">Ignore (tracked)</option>
+            <option value="NotAffected">Not affected</option>
+        </select>
+        <select @bind="_state" @bind:after="Reload">
+            <option value="">Any state</option>
+            <option value="Open">Open</option>
+            <option value="Closed">Closed</option>
+            <option value="Snoozed">Snoozed</option>
+            <option value="Suppressed">Suppressed</option>
+            <option value="AcceptedRisk">Accepted risk</option>
+        </select>
+        <select @bind="_confidence" @bind:after="Reload">
+            <option value="">Any confidence</option>
+            <option value="Exact">Exact</option>
+            <option value="Likely">Likely</option>
+            <option value="Possible">Check this</option>
+        </select>
+        <input type="text" placeholder="CVE id, product or asset" @bind="_search" @bind:event="oninput" @bind:after="Reload" style="min-width:240px" />
+        <span class="muted">@_total match@(_total == 1 ? "" : "es")@(_total > PageSize ? ", first " + PageSize + " shown" : "")</span>
+    </div>
+
+    @if (_rows is null)
+    {
+        <p class="muted">Loading...</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>Verdict</th><th>CVE</th><th>Product</th><th>Sentence</th><th>State</th><th>Due</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var v in _rows)
+                {
+                    <tr>
+                        <td><TierBadge Tier="v.Tier" Rule="v.RuleNumber" Confidence="v.Confidence" /></td>
+                        <td><a href="/verdicts/@v.Id">@v.CveId</a></td>
+                        <td>@v.WatchlistEntry?.DisplayName<br /><small>@v.WatchlistEntry?.Vendor @v.WatchlistEntry?.Product @v.WatchlistEntry?.Version</small></td>
+                        <td>@v.Sentence</td>
+                        <td><span class="@Ui.StateClass(v.State)">@v.State.Plain()</span></td>
+                        <td>@(v.SlaDue?.ToString("d MMM") ?? "-")</td>
+                    </tr>
+                }
+                @if (_rows.Count == 0)
+                {
+                    <tr><td colspan="6" class="muted">No verdicts match these filters.</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private const int PageSize = 200;
+    [SupplyParameterFromQuery(Name = "tier")] public string? TierQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "state")] public string? StateQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    private string _tier = "", _state = "", _confidence = "", _search = "";
+    private List<Verdict>? _rows;
+    private int _total;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tier = TierQuery ?? "";
+        _state = StateQuery ?? (string.IsNullOrEmpty(TierQuery) ? "Open" : "");
+        _search = SearchQuery ?? "";
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        var q = db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).AsQueryable();
+        if (Enum.TryParse<VerdictTier>(_tier, out var t)) q = q.Where(v => v.Tier == t);
+        if (Enum.TryParse<VerdictState>(_state, out var s)) q = q.Where(v => v.State == s);
+        if (Enum.TryParse<MatchConfidence>(_confidence, out var c)) q = q.Where(v => v.Confidence == c);
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var term = _search.Trim();
+            var norm = Normalizer.Norm(term);
+            q = q.Where(v => v.CveId.Contains(term.ToUpper()) || v.WatchlistEntry!.ProductNorm.Contains(norm) || v.WatchlistEntry.VendorNorm.Contains(norm) || (v.WatchlistEntry.AssetName != null && v.WatchlistEntry.AssetName.Contains(term)));
+        }
+        _total = await q.CountAsync();
+        _rows = await q.OrderByDescending(v => v.Tier).ThenBy(v => v.SlaDue).ThenByDescending(v => v.UpdatedAt).Take(PageSize).ToListAsync();
+    }
+}

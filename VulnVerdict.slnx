@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VulnVerdict.Core/VulnVerdict.Core.csproj" />
+    <Project Path="src/VulnVerdict.Web/VulnVerdict.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VulnVerdict.Tests/VulnVerdict.Tests.csproj" />
+  </Folder>
+</Solution>

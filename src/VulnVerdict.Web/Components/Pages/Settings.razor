@@ -1,0 +1,160 @@
+@page "/settings"
+@attribute [Authorize(Roles = "Administrator")]
+@inject SettingsService SettingsSvc
+@inject EmailService Email
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Settings - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Settings</h1>
+    <p class="lead">Opinionated defaults. The only things you must set are where the digest goes and how mail leaves the box.</p>
+
+    @if (First is not null)
+    {
+        <div class="alert alert-info"><b>Welcome.</b> Feeds are already loading in the background. Set the mail server and digest recipients below, then add what you run under <a href="/watchlist">Watchlist</a>. Your first digest arrives at the next scheduled time.</div>
+    }
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+    @if (_s is null) { <p class="muted">Loading...</p> }
+    else
+    {
+        <div class="card">
+            <h2>Digest</h2>
+            <div class="form">
+                <div class="row-3">
+                    <div><label>Send at (local time)</label><input type="text" @bind="_s.DigestTime" placeholder="07:30" /></div>
+                    <div><label>Time zone (IANA)</label><input type="text" @bind="_s.TimeZone" placeholder="Europe/London" /></div>
+                    <div><label>Organisation name (subject line)</label><input type="text" @bind="_s.OrganisationName" /></div>
+                </div>
+                <div><label>Recipients (comma separated)</label><input type="text" @bind="_s.DigestRecipients" placeholder="it@example.co.uk, msp-desk@example.com" /><div class="help">Reporters: people who get the email without a console login.</div></div>
+                <label class="check"><input type="checkbox" @bind="_s.DigestWeekdaysOnly" /> Weekdays only</label>
+                <div><label>Console address (used for links in emails)</label><input type="text" @bind="_s.BaseUrl" placeholder="https://vulnverdict.internal" /></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Mail</h2>
+            <div class="form">
+                <div class="row">
+                    <div><label>Send mail through</label>
+                        <select @bind="_s.MailTransport">
+                            <option value="smtp">SMTP server</option>
+                            <option value="sendgrid">SendGrid API</option>
+                            <option value="brevo">Brevo API</option>
+                        </select></div>
+                    <div><label>From address</label><input type="email" @bind="_s.SmtpFrom" placeholder="vulnverdict@example.co.uk" /><div class="help">Must be a verified sender on SendGrid or Brevo.</div></div>
+                </div>
+                @if (_s.MailTransport == "smtp")
+                {
+                    <div class="row-3">
+                        <div><label>SMTP host</label><input type="text" @bind="_s.SmtpHost" placeholder="smtp.office365.com" /></div>
+                        <div><label>Port</label><input type="number" @bind="_s.SmtpPort" /></div>
+                        <div><label>Security</label><select @bind="_s.SmtpSecurity"><option value="auto">Auto</option><option value="starttls">STARTTLS</option><option value="ssl">SSL on connect</option><option value="none">None</option></select></div>
+                    </div>
+                    <div class="row">
+                        <div><label>Username</label><input type="text" @bind="_s.SmtpUsername" /></div>
+                        <div><label>Password</label><input type="password" @bind="_s.SmtpPassword" autocomplete="new-password" /><div class="help">Stored encrypted.</div></div>
+                    </div>
+                }
+                else
+                {
+                    <div><label>@(_s.MailTransport == "sendgrid" ? "SendGrid API key (Mail Send permission)" : "Brevo API key (v3, transactional email)")</label><input type="password" @bind="_s.MailApiKey" autocomplete="new-password" /><div class="help">Stored encrypted. Outbound HTTPS to @(_s.MailTransport == "sendgrid" ? "api.sendgrid.com" : "api.brevo.com") is required.</div></div>
+                }
+                <div class="btn-row"><button class="btn btn-secondary" @onclick="TestMail" disabled="@_busy">Save and send a test email</button></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Tickets and alerts</h2>
+            <div class="form">
+                <div class="row">
+                    <div><label>Helpdesk intake address</label><input type="email" @bind="_s.HelpdeskIntakeAddress" placeholder="support@example.co.uk" /><div class="help">One email per Fix today and Fix this week verdict, with a correlation key in the subject. Leave blank to disable.</div></div>
+                    <div><label>Administrator alert address</label><input type="email" @bind="_s.AdminAlertAddress" /><div class="help">Stale feeds, a stopped worker, a digest that could not be sent.</div></div>
+                </div>
+                <label class="check"><input type="checkbox" @bind="_s.TicketsEnabled" /> Raise tickets by email</label>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>SLA (days)</h2>
+            <div class="form"><div class="row-3">
+                <div><label>Fix today</label><input type="number" @bind="_s.SlaFixTodayDays" /></div>
+                <div><label>Fix this week</label><input type="number" @bind="_s.SlaFixThisWeekDays" /></div>
+                <div><label>Next patch cycle</label><input type="number" @bind="_s.SlaNextPatchCycleDays" /></div>
+            </div></div>
+        </div>
+
+        <div class="card">
+            <h2>Single sign-on (OpenID Connect)</h2>
+            <p class="muted" style="margin-top:0">Microsoft Entra, Google Workspace or any OIDC provider. Redirect URI: <code>@(_s.BaseUrl.TrimEnd('/'))/signin-oidc</code>. Roles come from a group claim; everyone else is a Viewer.</p>
+            <div class="form">
+                <label class="check"><input type="checkbox" @bind="_s.OidcEnabled" /> Enabled</label>
+                <div class="row-3">
+                    <div><label>Button label</label><input type="text" @bind="_s.OidcDisplayName" /></div>
+                    <div><label>Authority</label><input type="text" @bind="_s.OidcAuthority" placeholder="https://login.microsoftonline.com/TENANT-ID/v2.0" /></div>
+                    <div><label>Client id</label><input type="text" @bind="_s.OidcClientId" /></div>
+                </div>
+                <div class="row-3">
+                    <div><label>Client secret</label><input type="password" @bind="_s.OidcClientSecret" autocomplete="new-password" /></div>
+                    <div><label>Group claim name</label><input type="text" @bind="_s.OidcGroupClaim" placeholder="groups" /></div>
+                    <div></div>
+                </div>
+                <div class="row">
+                    <div><label>Administrator group (id or name)</label><input type="text" @bind="_s.OidcAdminGroup" /></div>
+                    <div><label>Operator group (id or name)</label><input type="text" @bind="_s.OidcOperatorGroup" /></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>API</h2>
+            <p class="muted" style="margin-top:0">Read verdicts, the watchlist and the digest, or import a watchlist, with <code>Authorization: Bearer TOKEN</code> against <code>/api/verdicts</code>, <code>/api/watchlist</code> and <code>/api/digest</code>.</p>
+            <div class="form"><div class="row"><div><label>API token</label><input type="text" @bind="_s.ApiToken" /></div><div style="align-self:end"><button class="btn btn-secondary" @onclick="() => _s.ApiToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24)).ToLowerInvariant()">Generate</button></div></div></div>
+        </div>
+
+        <div class="btn-row" style="margin-bottom:30px"><button class="btn" @onclick="Save" disabled="@_busy">Save settings</button></div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "first")] public string? First { get; set; }
+    private AppSettings? _s;
+    private bool _busy;
+    private string? _notice, _error;
+
+    protected override async Task OnInitializedAsync() => _s = await SettingsSvc.LoadAsync();
+
+    private async Task Save()
+    {
+        if (_s is null) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            await SettingsSvc.SaveAsync(_s, Ui.Actor((await AuthState).User));
+            Auth.ReloadOidc();
+            _notice = "Settings saved.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task TestMail()
+    {
+        await Save();
+        if (_error is not null) return;
+        _busy = true;
+        try
+        {
+            var to = _s!.Recipients.FirstOrDefault() ?? _s.AdminAlertAddress;
+            if (string.IsNullOrWhiteSpace(to)) throw new InvalidOperationException("Add a digest recipient or an administrator alert address first.");
+            await Email.SendAsync(new[] { to }, "VulnVerdict test email", "<p>Mail from VulnVerdict works.</p>", "Mail from VulnVerdict works.");
+            _notice = "Settings saved and a test email was sent to " + to + ".";
+        }
+        catch (Exception ex) { _error = "Test email failed: " + ex.Message; }
+        _busy = false;
+    }
+}

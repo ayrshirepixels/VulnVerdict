@@ -1,0 +1,224 @@
+@page "/watchlist"
+@inject IDbContextFactory<VvDbContext> Db
+@inject WatchlistService WatchlistSvc
+@inject SettingsService Settings
+
+<PageTitle>Watchlist - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Watchlist</h1>
+    <p class="lead">The products you run. Each entry is matched against every CVE and gets its own verdicts. Add the installed version to get exact matches; without it, matches are "check this".</p>
+
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+    @if (_catalogueEmpty) { <div class="alert alert-info">The CVE list has not finished loading, so product name suggestions are not available yet. You can still add entries; they are evaluated once the feed is in.</div> }
+
+    <AuthorizeView Roles="Administrator,Operator">
+        <div class="btn-row" style="margin-bottom:16px">
+            <button class="btn" @onclick="() => Begin(null)">Add product</button>
+            <button class="btn btn-secondary" @onclick="() => _showImport = !_showImport">Import JSON</button>
+            <button class="btn btn-secondary" @onclick="ExportAsync">Export JSON</button>
+            <button class="btn btn-secondary" @onclick="ReEvaluate" disabled="@_busy">Re-evaluate everything</button>
+        </div>
+    </AuthorizeView>
+
+    @if (_showImport)
+    {
+        <div class="card">
+            <h2>Import</h2>
+            <p class="muted" style="margin-top:0">A JSON array of objects with vendor, product, version, assetName, exposure (Internet, Internal, Isolated) and criticality (Critical, Standard, Low). See watchlist.example.json in the repository.</p>
+            <div class="form">
+                <textarea @bind="_importJson" rows="10" placeholder='[{"vendor":"Fortinet","product":"FortiOS","version":"7.2.5","assetName":"FW-EDGE-01","exposure":"Internet","criticality":"Critical"}]'></textarea>
+                <div class="btn-row"><button class="btn" @onclick="ImportAsync" disabled="@_busy">Import</button><button class="btn btn-secondary" @onclick="() => _showImport = false">Close</button></div>
+            </div>
+        </div>
+    }
+    @if (_export is not null)
+    {
+        <div class="card"><h2>Export</h2><pre>@_export</pre><button class="btn btn-secondary btn-sm" @onclick="() => _export = null">Close</button></div>
+    }
+
+    @if (_edit is not null)
+    {
+        <div class="card">
+            <h2>@(_edit.Id == Guid.Empty ? "Add product" : "Edit " + _edit.DisplayName)</h2>
+            <div class="form">
+                <div class="row">
+                    <div class="suggest">
+                        <label>Product</label>
+                        <input type="text" @bind="_edit.Product" @bind:event="oninput" @bind:after="SuggestAsync" placeholder="FortiOS, Windows Server 2022, vCenter Server" autocomplete="off" />
+                        @if (_suggestions.Count > 0)
+                        {
+                            <ul>
+                                @foreach (var s in _suggestions)
+                                {
+                                    <li @onclick="() => Pick(s)">@s.Vendor / @s.Product <small>@s.CveCount CVEs</small></li>
+                                }
+                            </ul>
+                        }
+                        <div class="help">Suggestions come from how vendors name products in their CVE records. Pick one for an exact product match.</div>
+                    </div>
+                    <div>
+                        <label>Vendor</label>
+                        <input type="text" @bind="_edit.Vendor" placeholder="Fortinet" />
+                    </div>
+                </div>
+                <div class="row-3">
+                    <div><label>Installed version</label><input type="text" @bind="_edit.Version" placeholder="7.2.5" /><div class="help">Leave blank if unknown; matches then show as "check this".</div></div>
+                    <div><label>Asset name (optional)</label><input type="text" @bind="_edit.AssetName" placeholder="FW-EDGE-01" /></div>
+                    <div><label>CPE (optional)</label><input type="text" @bind="_edit.Cpe" placeholder="cpe:2.3:o:fortinet:fortios:7.2.5:*:*:*:*:*:*:*" /></div>
+                </div>
+                <div class="row">
+                    <div>
+                        <label>Exposure</label>
+                        <select @bind="_edit.Exposure">
+                            <option value="@Exposure.Internet">Internet-facing (anyone on the internet can reach a service on it)</option>
+                            <option value="@Exposure.Internal">Internal network only</option>
+                            <option value="@Exposure.Isolated">Isolated or management network only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Criticality</label>
+                        <select @bind="_edit.Criticality">
+                            <option value="@Criticality.Critical">Critical (domain controllers, identity, firewalls, hypervisors, crown jewels)</option>
+                            <option value="@Criticality.Standard">Standard</option>
+                            <option value="@Criticality.Low">Low (lab, dev, disposable)</option>
+                        </select>
+                    </div>
+                </div>
+                <div><label>Note</label><input type="text" @bind="_edit.Note" /></div>
+                <label class="check"><input type="checkbox" @bind="_edit.Enabled" /> Enabled</label>
+                <div class="btn-row">
+                    <button class="btn" @onclick="SaveAsync" disabled="@_busy">@(_busy ? "Saving and evaluating..." : "Save")</button>
+                    <button class="btn btn-secondary" @onclick="() => _edit = null">Cancel</button>
+                    @if (_edit.Id != Guid.Empty) { <button class="btn btn-danger" @onclick="DeleteAsync">Delete</button> }
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_rows is null) { <p class="muted">Loading...</p> }
+    else
+    {
+        <table class="table">
+            <thead><tr><th>Asset</th><th>Product</th><th>Version</th><th>Exposure</th><th>Criticality</th><th class="num">Fix today</th><th class="num">This week</th><th class="num">Next cycle</th><th class="num">Dismissed</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="@(r.Entry.Enabled ? "" : "opacity:.55")">
+                        <td>@r.Entry.DisplayName@(r.Entry.Enabled ? "" : " (disabled)")</td>
+                        <td>@r.Entry.Vendor @r.Entry.Product</td>
+                        <td>@(r.Entry.Version ?? "-")</td>
+                        <td>@r.Entry.Exposure.Plain()</td>
+                        <td>@r.Entry.Criticality</td>
+                        <td class="num">@(r.Today > 0 ? r.Today.ToString() : "")</td>
+                        <td class="num">@(r.Week > 0 ? r.Week.ToString() : "")</td>
+                        <td class="num">@(r.Cycle > 0 ? r.Cycle.ToString() : "")</td>
+                        <td class="num muted">@r.Dismissed</td>
+                        <td>
+                            <a href="/verdicts?q=@Uri.EscapeDataString(r.Entry.AssetName ?? r.Entry.Product)&state=">verdicts</a>
+                            <AuthorizeView Roles="Administrator,Operator" Context="auth"> &middot; <a href="" @onclick="() => Begin(r.Entry)" @onclick:preventDefault="true">edit</a></AuthorizeView>
+                        </td>
+                    </tr>
+                }
+                @if (_rows.Count == 0) { <tr><td colspan="10" class="muted">Nothing on the watchlist yet.</td></tr> }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private sealed record Row(WatchlistEntry Entry, int Today, int Week, int Cycle, int Dismissed);
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "edit")] public Guid? EditId { get; set; }
+    private List<Row>? _rows;
+    private WatchlistEntry? _edit;
+    private List<CnaProduct> _suggestions = new();
+    private bool _showImport, _busy, _catalogueEmpty;
+    private string _importJson = "";
+    private string? _export, _notice, _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        if (EditId is not null) Begin(_rows?.FirstOrDefault(r => r.Entry.Id == EditId)?.Entry);
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        var entries = await db.Watchlist.AsNoTracking().OrderBy(w => w.AssetName ?? w.Product).ToListAsync();
+        var counts = await db.Verdicts.AsNoTracking().GroupBy(v => new { v.WatchlistEntryId, v.Tier, Dismissed = v.Tier <= VerdictTier.IgnoreTracked || v.State != VerdictState.Open })
+            .Select(g => new { g.Key.WatchlistEntryId, g.Key.Tier, g.Key.Dismissed, Count = g.Count() }).ToListAsync();
+        _rows = entries.Select(e => new Row(e,
+            counts.Where(c => c.WatchlistEntryId == e.Id && !c.Dismissed && c.Tier == VerdictTier.FixToday).Sum(c => c.Count),
+            counts.Where(c => c.WatchlistEntryId == e.Id && !c.Dismissed && c.Tier == VerdictTier.FixThisWeek).Sum(c => c.Count),
+            counts.Where(c => c.WatchlistEntryId == e.Id && !c.Dismissed && c.Tier == VerdictTier.NextPatchCycle).Sum(c => c.Count),
+            counts.Where(c => c.WatchlistEntryId == e.Id && c.Dismissed).Sum(c => c.Count))).ToList();
+        _catalogueEmpty = !await db.CnaProducts.AnyAsync();
+    }
+
+    private void Begin(WatchlistEntry? e)
+    {
+        _suggestions.Clear();
+        _edit = e is null ? new WatchlistEntry { Exposure = Exposure.Internal, Criticality = Criticality.Standard, Enabled = true }
+            : new WatchlistEntry { Id = e.Id, Vendor = e.Vendor, Product = e.Product, Version = e.Version, Cpe = e.Cpe, AssetName = e.AssetName, Exposure = e.Exposure, Criticality = e.Criticality, Note = e.Note, Enabled = e.Enabled };
+        _notice = null; _error = null;
+    }
+
+    private async Task SuggestAsync()
+    {
+        if (_edit is null || string.IsNullOrWhiteSpace(_edit.Product) || _edit.Product.Length < 2) { _suggestions.Clear(); return; }
+        _suggestions = await WatchlistSvc.SearchProductsAsync(_edit.Product);
+    }
+
+    private void Pick(CnaProduct p)
+    {
+        if (_edit is null) return;
+        _edit.Vendor = p.Vendor; _edit.Product = p.Product;
+        _suggestions.Clear();
+    }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task SaveAsync()
+    {
+        if (_edit is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            var saved = await WatchlistSvc.UpsertAsync(_edit, await ActorAsync());
+            _notice = saved.DisplayName + " saved and evaluated.";
+            _edit = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_edit is null || _edit.Id == Guid.Empty) return;
+        await WatchlistSvc.DeleteAsync(_edit.Id, await ActorAsync());
+        _notice = "Deleted."; _edit = null;
+        await LoadAsync();
+    }
+
+    private async Task ImportAsync()
+    {
+        _busy = true; _error = null;
+        try { var n = await WatchlistSvc.ImportJsonAsync(_importJson, await ActorAsync()); _notice = n + " entries imported and evaluated."; _showImport = false; _importJson = ""; await LoadAsync(); }
+        catch (Exception ex) { _error = "Import failed: " + ex.Message; }
+        _busy = false;
+    }
+
+    private async Task ExportAsync() => _export = await WatchlistSvc.ExportJsonAsync();
+
+    private async Task ReEvaluate()
+    {
+        _busy = true;
+        await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+        _notice = "Re-evaluation requested; the worker runs it within a minute.";
+        _busy = false;
+    }
+}
