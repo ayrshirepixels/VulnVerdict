@@ -1,6 +1,7 @@
 bin/
 obj/
-data/
+src/VulnVerdict.Web/data/
+src/VulnVerdict.Central/data/
 *.user
 .vs/
 .claude/worktrees/
