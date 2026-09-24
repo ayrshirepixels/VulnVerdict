@@ -29,9 +29,17 @@ docker run -d --name vulnverdict --restart unless-stopped \
 
 Build it with `docker build -f Dockerfile.allinone -t vulnverdict:allinone .`. Options: `VV_TLS=public` for Let's Encrypt on a public name, `VV_TLS=off` to expose plain HTTP on 8080 behind your own proxy, `VV_DB=sqlite` to skip Postgres for small estates, `VV_DB=external` with `Database__ConnectionString` to use your own Postgres. Back up the `vulnverdict` volume; it holds the database, the keys and the CA. The trade-off against Option A is that the database lifecycle (major-version upgrades, separate backups) is tied to the application container; the Compose stack is the better fit when someone already runs Postgres.
 
-## Option B: the appliance (OVA)
+## Option B: the appliance (a VM)
 
-Import `vulnverdict-<version>.ova` into VMware, Hyper-V (convert with `qemu-img`) or VirtualBox, start it, and answer three questions on the console: hostname, password, done. The stack starts and prints the URL. Build the OVA yourself with Packer from `deploy/ova/`.
+A ready-built Ubuntu 24.04 LTS VM with Docker and the stack inside. 2 vCPU, 4 GB RAM, 40 GB disk, BIOS boot, DHCP on its first network card.
+
+- **VMware (ESXi, Workstation) or VirtualBox:** import `vulnverdict-<version>.ova`.
+- **Proxmox:** `qm importovf <vmid> vulnverdict-<version>.ovf <storage>` after unpacking the OVA with `tar -xf`.
+- **Hyper-V:** use `vulnverdict-<version>-hyperv.vhdx` with a **generation 1** VM (2 vCPU, 4096 MB static memory, one network adapter). To make it yourself from the OVA: `tar -xf vulnverdict-<version>.ova`, then `qemu-img convert -O vhdx -o subformat=dynamic vulnverdict-<version>-disk1.vmdk vulnverdict.vhdx`.
+
+Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL. SSH is off until the wizard has run, so the build's default password is never reachable over the network.
+
+To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: Packer on a Hyper-V host (then `make-ova.sh`) or on a VirtualBox host.
 
 ## First ten minutes in the console
 

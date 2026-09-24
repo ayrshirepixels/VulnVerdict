@@ -1,0 +1,6 @@
+# Build outputs and inputs that are never committed
+output/
+packer_cache/
+seed/seed.iso
+images/*
+!images/.gitkeep

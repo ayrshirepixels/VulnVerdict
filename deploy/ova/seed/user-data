@@ -1,0 +1,27 @@
+#cloud-config
+# Ubuntu autoinstall for the VulnVerdict appliance image (build.pkr.hcl). Hyper-V builds read it from the
+# CIDATA seed ISO (make-seed.sh); VirtualBox builds fetch it from Packer's HTTP server.
+autoinstall:
+  version: 1
+  locale: en_GB.UTF-8
+  keyboard: { layout: gb }
+  identity:
+    hostname: vulnverdict
+    username: vulnverdict
+    # "vulnverdict", replaced by the first-boot wizard
+    password: "$6$vvsalt$cT19l1mBXxLTzhGEH1idDeDNRqzaBv5cY86WKdJhCVoKqL/jMGa0LkUrfwTB5oeu3zSE4RmeteoBhCMuweqXO/"
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout: { name: lvm, sizing-policy: all }
+  kernel:
+    package: linux-generic
+  # Guest agents for every hypervisor the OVA targets: Hyper-V (KVP reports the IP, which Packer needs
+  # to connect), VMware and QEMU/Proxmox.
+  packages: [linux-cloud-tools-generic, open-vm-tools, qemu-guest-agent]
+  updates: security
+  late-commands:
+    # Passwordless sudo for the build only; the first-boot wizard removes it.
+    - echo 'vulnverdict ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/vulnverdict
+    - chmod 440 /target/etc/sudoers.d/vulnverdict
