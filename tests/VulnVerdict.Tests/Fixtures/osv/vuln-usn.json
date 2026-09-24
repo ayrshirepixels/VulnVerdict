@@ -1,0 +1,14 @@
+{
+  "id": "USN-6450-1",
+  "summary": "openssl vulnerabilities",
+  "aliases": ["CVE-2023-2975", "CVE-2023-3446", "CVE-2023-3817"],
+  "modified": "2023-10-24T15:00:00Z",
+  "published": "2023-10-24T15:00:00Z",
+  "affected": [
+    {
+      "package": { "ecosystem": "Ubuntu:22.04:LTS", "name": "openssl", "purl": "pkg:deb/ubuntu/openssl?arch=source&distro=jammy" },
+      "ranges": [{ "type": "ECOSYSTEM", "events": [{ "introduced": "0" }, { "fixed": "3.0.2-0ubuntu1.12" }] }]
+    }
+  ],
+  "schema_version": "1.6.0"
+}

@@ -1,0 +1,9 @@
+{
+  "version": "8.0.2.00100",
+  "build": "22617221",
+  "product": "VMware vCenter Server",
+  "summary": "Patch for VMware vCenter Server 8.0 Update 2a",
+  "type": "vCenter Server with an embedded Platform Services Controller",
+  "releasedate": "October 31, 2023",
+  "install_time": "2024-01-15T10:00:00.000Z"
+}

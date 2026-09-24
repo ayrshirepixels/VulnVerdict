@@ -1,0 +1,7 @@
+{
+  "family": "LINUX",
+  "full_name": { "default_message": "Ubuntu Linux (64-bit)", "id": "vmsg.guestos.ubuntu64Guest.label", "args": [] },
+  "host_name": "web01.example.com",
+  "ip_address": "10.20.0.11",
+  "name": "UBUNTU_64"
+}

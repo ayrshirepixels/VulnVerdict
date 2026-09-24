@@ -1,0 +1,18 @@
+{
+  "id": "ALSA-2023:0946",
+  "summary": "Important: openssl security update",
+  "modified": "2024-09-30T10:11:12Z",
+  "published": "2023-02-28T00:00:00Z",
+  "related": ["CVE-2022-4203", "CVE-2022-4304", "CVE-2023-0286"],
+  "affected": [
+    {
+      "package": { "ecosystem": "AlmaLinux:9", "name": "openssl", "purl": "pkg:rpm/almalinux/openssl" },
+      "ranges": [{ "type": "ECOSYSTEM", "events": [{ "introduced": "0" }, { "fixed": "1:3.0.1-47.el9_1" }] }]
+    },
+    {
+      "package": { "ecosystem": "AlmaLinux:9", "name": "openssl-libs", "purl": "pkg:rpm/almalinux/openssl-libs" },
+      "ranges": [{ "type": "ECOSYSTEM", "events": [{ "introduced": "0" }, { "fixed": "1:3.0.1-47.el9_1" }] }]
+    }
+  ],
+  "schema_version": "1.6.0"
+}

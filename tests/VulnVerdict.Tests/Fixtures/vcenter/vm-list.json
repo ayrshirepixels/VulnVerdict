@@ -1,0 +1,5 @@
+[
+  { "vm": "vm-101", "name": "web01", "power_state": "POWERED_ON", "cpu_count": 2, "memory_size_MiB": 4096 },
+  { "vm": "vm-102", "name": "db01", "power_state": "POWERED_ON", "cpu_count": 4, "memory_size_MiB": 16384 },
+  { "vm": "vm-103", "name": "legacy-off", "power_state": "POWERED_OFF", "cpu_count": 1, "memory_size_MiB": 1024 }
+]

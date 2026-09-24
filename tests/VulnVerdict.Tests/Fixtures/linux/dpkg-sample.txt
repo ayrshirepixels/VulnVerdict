@@ -1,0 +1,13 @@
+adduser	3.118ubuntu5	all		installed
+base-files	12ubuntu4.6	amd64		installed
+bash	5.1-6ubuntu1.1	amd64		installed
+curl	7.81.0-1ubuntu1.16	amd64		installed
+libcurl4	7.81.0-1ubuntu1.16	amd64	curl	installed
+libssl3	3.0.2-0ubuntu1.10	amd64	openssl	installed
+openssl	3.0.2-0ubuntu1.10	amd64		installed
+openssh-server	1:8.9p1-3ubuntu0.6	amd64	openssh	installed
+openssh-client	1:8.9p1-3ubuntu0.6	amd64	openssh	installed
+python3-six	1.16.0-3ubuntu1	all	six	installed
+libc6	2.35-0ubuntu3.6	amd64	glibc	installed
+libc-bin	2.35-0ubuntu3.6	amd64	glibc (2.35-0ubuntu3.6)	installed
+removed-tool	1.0-1	amd64		config-files
