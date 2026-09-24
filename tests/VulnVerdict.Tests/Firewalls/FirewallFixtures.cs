@@ -19,6 +19,13 @@ internal static class FirewallFixtures
         new(status) { Content = new StringContent(xml, Encoding.UTF8, "application/xml") };
 
     public static string Query(HttpRequestMessage r) => Uri.UnescapeDataString(r.RequestUri?.Query ?? "");
+
+    /// <summary>A fixture file holding several API responses keyed by path (the "_comment" key is skipped).</summary>
+    public static Dictionary<string, string> Responses(string vendor, string file = "responses.json")
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Read(vendor, file));
+        return doc.RootElement.EnumerateObject().Where(p => p.Name != "_comment").ToDictionary(p => p.Name, p => p.Value.GetRawText(), StringComparer.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>An SSH session that answers commands from rules (substring of the command to output), recording what was sent.</summary>
