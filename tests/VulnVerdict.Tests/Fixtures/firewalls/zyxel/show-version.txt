@@ -1,0 +1,5 @@
+Zyxel Communications Corp.
+model                     : USG FLEX 100W
+firmware version          : V5.38(ABWV.1)
+BM version                : V1.17
+build date                : 2024-11-05 10:12:31

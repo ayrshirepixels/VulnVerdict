@@ -138,7 +138,9 @@ public static partial class ApplianceSsh
         var echo = lines.FindIndex(l => l.TrimEnd().EndsWith(command, StringComparison.Ordinal));
         if (echo >= 0 && echo < 3) lines.RemoveRange(0, echo + 1);
         if (lines.Count > 0 && PromptRx().IsMatch("\n" + lines[^1])) lines.RemoveAt(lines.Count - 1);
-        return string.Join("\n", lines.Select(l => MoreRx().Replace(l, "").TrimEnd())).Trim('\n');
+        // a pager prompt ("--More--") that sat on a line of its own leaves nothing behind
+        var kept = lines.Where(l => !(MoreRx().IsMatch(l) && MoreRx().Replace(l, "").Trim().Length == 0)).Select(l => MoreRx().Replace(l, "").TrimEnd());
+        return string.Join("\n", kept).Trim('\n');
     }
 
     private sealed class ShellSession : ISshSession
