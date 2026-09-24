@@ -25,6 +25,8 @@ public static class AdapterRegistry
         services.AddSingleton<IInventoryAdapter, Firewalls.MerakiMxAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.SophosFirewallAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.WatchGuardFireboxAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.CheckPointSparkAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.ZyxelFirewallAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.UniFiGatewayAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.PfSenseAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.OpnSenseAdapter>();
