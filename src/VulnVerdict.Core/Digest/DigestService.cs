@@ -33,7 +33,10 @@ public sealed class DigestContent
 
 public sealed class DigestService
 {
-    public const string EpssAttribution = "Exploit probability scores are EPSS, provided by FIRST (https://www.first.org/epss). Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program (CVE is a registered trademark of The MITRE Corporation).";
+    /// <summary>Shown wherever a verdict is acted on. Verdicts are computed from public data and what the connectors report; they are advice, not a guarantee.</summary>
+    public const string Disclaimer = "Verdicts are advisory. They are worked out from public vulnerability data and what your connectors and watchlist report, and no automated assessment can fully account for your environment, configuration or compensating controls. Check the evidence before you act. Decisions about patching, and their consequences, remain yours. VulnVerdict is provided without warranty and its authors accept no liability for loss arising from its use.";
+
+    public const string EpssAttribution ="Exploit probability scores are EPSS, provided by FIRST (https://www.first.org/epss). Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program (CVE is a registered trademark of The MITRE Corporation).";
 
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
@@ -183,7 +186,7 @@ public sealed class DigestService
         sb.Append("<div style=\"font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;color:#1c1c1c;max-width:720px\">");
         sb.Append("<p style=\"font-size:17px;font-weight:600\">" + pending.Count + " new item" + (pending.Count == 1 ? "" : "s") + " to fix today</p>");
         AppendItems(sb, items, s.BaseUrl, "#b3261e");
-        sb.Append("<p style=\"color:#666;font-size:12px\">" + WebUtility.HtmlEncode(EpssAttribution) + "</p></div>");
+        sb.Append("<p style=\"color:#666;font-size:12px\">" + WebUtility.HtmlEncode(Disclaimer) + "</p><p style=\"color:#666;font-size:12px\">" + WebUtility.HtmlEncode(EpssAttribution) + "</p></div>");
         var text = new StringBuilder("FIX TODAY\n\n");
         foreach (var i in items) text.AppendLine("- " + i.Sentence + "\n  " + Link(s.BaseUrl, i.VerdictId) + "\n");
         try
@@ -283,6 +286,7 @@ public sealed class DigestService
         sb.Append("<p style=\"color:#444;font-size:13px\">" + WebUtility.HtmlEncode(c.CoverageLine) + " " + c.DismissedTotal + " CVEs dismissed in total as not affected or not worth your time.</p>");
         if (c.FeedWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.FeedWarning) + "</p>");
         sb.Append("<p style=\"color:#5c6470;font-size:12px;margin-top:14px\"><b style=\"color:#1E222A\"><span style=\"color:#FF9F0A\">VULN</span>VERDICT</b> &middot; Cut the noise. Know your risk.</p>");
+        sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(Disclaimer) + "</p>");
         sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(EpssAttribution) + "</p>");
         sb.Append("</div></body></html>");
         return sb.ToString();
@@ -315,6 +319,8 @@ public sealed class DigestService
         sb.AppendLine();
         sb.AppendLine(c.CoverageLine + " " + c.DismissedTotal + " CVEs dismissed in total.");
         if (c.FeedWarning is not null) sb.AppendLine(c.FeedWarning);
+        sb.AppendLine();
+        sb.AppendLine(Disclaimer);
         sb.AppendLine();
         sb.AppendLine(EpssAttribution);
         return sb.ToString();

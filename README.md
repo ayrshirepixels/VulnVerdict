@@ -2,7 +2,7 @@
 
 Cut the noise. Know your risk.
 
-Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. Support plans add a curated signed feed, a tested update channel and email support; see the website or `docs/`. The VulnVerdict name and logo are trademarks (`TRADEMARK.md`).
+Verdicts are advisory: read the [advisory notice](docs/disclaimer.md). Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. Support plans add a curated signed feed, a tested update channel and email support; see the website or `docs/`. The VulnVerdict name and logo are trademarks (`TRADEMARK.md`).
 
 An on-premises vulnerability triage console for organisations with one IT person and no security team. It pulls the public vulnerability feeds, matches them against what you actually run, works out how an attacker would have to reach each one in your estate, and emails a short verdict in plain words: **Fix today**, **Fix this week**, **Next patch cycle**, or ignore. It is a prioritisation layer, not a scanner and not a patch tool.
 

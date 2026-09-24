@@ -32,6 +32,7 @@
 
         @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
         @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+        <p class="muted" style="font-size:12px;margin:0 0 14px">This verdict is advisory: it is worked out from public data and what your sources report, and cannot fully account for your environment. Check the evidence below before you act; the decision is yours. <a href="/docs/disclaimer" target="_blank">Full note</a>.</p>
 
         <AuthorizeView Roles="Administrator,Operator">
             <div class="btn-row" style="margin-bottom:18px">

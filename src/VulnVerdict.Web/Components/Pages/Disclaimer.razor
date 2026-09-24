@@ -1,0 +1,17 @@
+@page "/docs/disclaimer"
+@attribute [AllowAnonymous]
+
+<PageTitle>Advisory notice - VulnVerdict</PageTitle>
+
+<div class="page" style="max-width:760px">
+    <h1>Advisory notice</h1>
+    <p class="lead">What a verdict is, and what it is not.</p>
+    <div class="card">
+        <p><b>Verdicts are advice, not a guarantee.</b> VulnVerdict works each verdict out from public vulnerability data (the CVE Program, CISA, EPSS, exploit indexes, vendor advisories) and from what your connectors and watchlist report about your estate. Both can be incomplete, late or wrong: a vendor's affected-version list can be inaccurate, a connector can miss a host, a version string can be ambiguous, and a compensating control you rely on may be one the console has no way to see.</p>
+        <p><b>No automated assessment can fully account for your environment.</b> Whether a vulnerability matters to you depends on configuration, network layout, who can reach what, and what you have already done about it. VulnVerdict makes its reasoning visible so a person can check it; it does not replace that person.</p>
+        <p><b>Check the evidence before you act, and treat "not affected" with the same care as "fix today".</b> A missed match looks like silence. The evidence chain on every verdict, including the dismissed ones, exists so a bad match can be found.</p>
+        <p><b>Decisions about patching, and their consequences, remain yours.</b> Applying, delaying or declining a fix is an operational decision for the people who run the systems.</p>
+        <p><b>No warranty, no liability.</b> VulnVerdict is provided "as is", without warranty of any kind, and its authors and distributors accept no liability for any loss arising from its use or from reliance on its output, to the fullest extent permitted by law. The software licence (GNU AGPL-3.0, sections 15 and 16) says the same in longer words. Support subscriptions cover the services described in the subscription agreement and nothing else.</p>
+    </div>
+    <p class="muted">@DigestService.Disclaimer</p>
+</div>

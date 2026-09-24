@@ -136,7 +136,7 @@ public sealed class ReportService
         Table("Open: fix today and fix this week", r.OpenRows, false);
         Table("Done this week", r.ActionedRows, true);
         Table("New this week that needed action", r.NewActionableRows, false);
-        sb.Append("<p class=\"muted\" style=\"font-size:11px;margin-top:24px\">" + WebUtility.HtmlEncode(DigestService.EpssAttribution) + "</p></body></html>");
+        sb.Append("<p class=\"muted\" style=\"font-size:11px;margin-top:24px\">" + WebUtility.HtmlEncode(DigestService.Disclaimer) + "</p><p class=\"muted\" style=\"font-size:11px\">" + WebUtility.HtmlEncode(DigestService.EpssAttribution) + "</p></body></html>");
         return sb.ToString();
     }
 
@@ -148,6 +148,8 @@ public sealed class ReportService
         foreach (var x in r.OverdueRows) sb.AppendLine("OVERDUE " + x.CveId + " " + x.Sentence);
         foreach (var x in r.OpenRows) sb.AppendLine("OPEN " + x.Verdict + " " + x.CveId + " " + x.Sentence);
         foreach (var x in r.ActionedRows) sb.AppendLine("DONE " + x.CveId + " " + x.Sentence);
+        sb.AppendLine();
+        sb.AppendLine(DigestService.Disclaimer);
         return sb.ToString();
     }
 
