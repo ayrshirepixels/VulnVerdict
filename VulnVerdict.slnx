@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/VulnVerdict.Central/VulnVerdict.Central.csproj" />
     <Project Path="src/VulnVerdict.Core/VulnVerdict.Core.csproj" />
     <Project Path="src/VulnVerdict.Web/VulnVerdict.Web.csproj" />
   </Folder>

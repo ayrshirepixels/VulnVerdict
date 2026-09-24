@@ -1,0 +1,239 @@
+@page "/licence"
+@attribute [Authorize(Roles = "Administrator")]
+@implements IDisposable
+@inject SettingsService SettingsSvc
+@inject LicenseService Licences
+@inject BundleService Bundles
+@inject TelemetryService Telemetry
+@inject MspReportService MspReports
+
+<PageTitle>Licence and updates - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Licence and updates</h1>
+    <p class="lead">The console works on its own by pulling the public feeds. A licence key adds the signed feed bundle from the central service, or lets an air-gapped site carry the bundle in as a file. Your inventory never leaves this network either way.</p>
+
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+
+    @if (_s is null) { <p class="muted">Loading...</p> }
+    else
+    {
+        <div class="card">
+            <h2>Licence</h2>
+            @if (_licence is not null)
+            {
+                @if (!_licence.Present)
+                {
+                    <div class="alert alert-info"><b>Internal build (unlicensed).</b> No asset cap and no central service: the worker pulls CVE List, KEV, EPSS, Exploit-DB, Metasploit and Nuclei directly. Nothing about this installation is sent anywhere.</div>
+                }
+                else if (!_licence.Valid)
+                {
+                    <div class="alert alert-error">@_licence.Reason</div>
+                }
+                else
+                {
+                    <div class="alert alert-ok">@_licence.Reason</div>
+                }
+                <dl class="kv">
+                    <dt>Tier</dt><dd>@_licence.TierName</dd>
+                    <dt>Customer</dt><dd>@(_licence.Customer ?? "-")</dd>
+                    <dt>Asset cap</dt><dd>@(_licence.EnforcedCap is { } cap ? cap + " assets (" + _assets + " in inventory" + (_assets > cap ? ", over the cap" : "") + ")" : "none (" + _assets + " assets in inventory)")</dd>
+                    <dt>Expires</dt><dd>@(_licence.Expires?.ToString("d MMM yyyy") ?? "-")</dd>
+                </dl>
+            }
+            <div class="form">
+                <div><label>Licence key</label><textarea @bind="_s.LicenceKey" rows="3" placeholder="Paste the key from your vendor. Leave blank for the internal build." spellcheck="false"></textarea><div class="help">Starter: up to 50 assets. Business: up to 250. MSP: one key per client. The key is verified against the vendor's public key built into this console; nothing is contacted to check it.</div></div>
+                <div class="btn-row"><button class="btn" @onclick="SaveLicence" disabled="@_busy">Save key</button></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Central service and feed bundle</h2>
+            <p class="muted" style="margin-top:0">The central service runs the public feeds once for every customer and publishes a signed, versioned bundle every hour. This console verifies the signature, refuses anything unsigned or older than what it already has, checks every file's hash, then applies the bundle locally. While a bundle URL is set, the public feeds do not run here.</p>
+            <dl class="kv">
+                <dt>Mode</dt><dd>@(_bundleMode ? "bundle (public feeds paused)" : "direct public feeds")</dd>
+                <dt>Applied bundle</dt><dd>@(_bundle?.Version ?? "none")</dd>
+                <dt>Built at</dt><dd>@(_bundle is null ? "-" : _bundle.BuiltAt.ToString("u") + " (" + Ui.Ago(_bundle.BuiltAt) + ")")</dd>
+                <dt>Applied at</dt><dd>@(_bundle is null ? "-" : _bundle.AppliedAt.ToString("u"))</dd>
+                <dt>Source</dt><dd>@(_bundle?.Source ?? "-")</dd>
+                <dt>Signer</dt><dd>@(_bundle?.Signer ?? "-")</dd>
+                <dt>Last check</dt><dd>@(Bundles.LastCheck is { } lc ? lc.Outcome + " (" + Ui.Ago(lc.At) + "): " + lc.Reason : "not yet checked since start")</dd>
+            </dl>
+            <div class="form">
+                <div><label>Bundle URL</label><input type="text" @bind="_s.BundleUrl" placeholder="https://central.vulnverdict.example" /><div class="help">Blank means no central service. The console needs outbound HTTPS to this host only.</div></div>
+                <div class="btn-row">
+                    <button class="btn btn-secondary" @onclick="SaveSettings" disabled="@_busy">Save</button>
+                    <button class="btn btn-secondary" @onclick="CheckNow" disabled="@(_busy || string.IsNullOrWhiteSpace(_s.BundleUrl))">Save and check now</button>
+                    @if (Bundles.Busy) { <span class="progress">@Bundles.Progress</span> }
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Air-gap bundle</h2>
+            <p class="muted" style="margin-top:0">No route to the central service? Download the bundle zip on a connected machine (from <code>/bundle/latest</code> and <code>/bundle/&lt;version&gt;.zip</code> on the central service) and upload it here. The same checks apply: signature, version, file hashes. An uploaded bundle keeps the public feeds paused for seven days; upload the next one before then.</p>
+            <div class="form">
+                <div><label>Bundle file (.zip)</label><InputFile OnChange="OnFileSelected" accept=".zip" /></div>
+                <div class="btn-row">
+                    <button class="btn" @onclick="Upload" disabled="@(_busy || _file is null)">Verify and apply</button>
+                    @if (_file is not null) { <span class="muted">@_file.Name (@((_file.Size >> 20)) MB)</span> }
+                    @if (_uploading) { <span class="progress">@(Bundles.Progress ?? "Working")</span> }
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Telemetry and MSP reporting</h2>
+            <div class="form">
+                <label class="check"><input type="checkbox" @bind="_s.TelemetryOptIn" /> Send anonymous usage counts to the central service once a day</label>
+                <div class="help" style="margin-top:-6px">What leaves the box: console version, a random install id, the number of assets, watchlist entries and connectors, open verdicts per tier, and how old each feed is. No hostnames, no CVE lists, no organisation name. Requires the bundle URL above.</div>
+                <label class="check"><input type="checkbox" @bind="_s.MspReportOptIn" /> Send a daily verdict summary to my MSP's portal</label>
+                <div class="help" style="margin-top:-6px">What leaves the box: your organisation name, the counts of Fix today / Fix this week / Next patch cycle / dismissed / overdue verdicts, the feed date, and the top ten Fix today and Fix this week items as product and CVE only. Asset names are stripped before sending; the inventory itself never leaves.</div>
+                <div class="row">
+                    <div><label>MSP portal URL</label><input type="text" @bind="_s.MspPortalUrl" placeholder="https://central.vulnverdict.example" /></div>
+                    <div><label>Tenant token</label><input type="password" @bind="_s.MspTenantToken" autocomplete="new-password" placeholder="@(_licence?.TenantToken is { Length: > 0 } ? "from your MSP licence key" : "")" /><div class="help">Stored encrypted. An MSP licence key carries it; the button below fills it in.</div></div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-secondary" @onclick="SaveSettings" disabled="@_busy">Save</button>
+                    @if (_licence?.TenantToken is { Length: > 0 })
+                    {
+                        <button class="btn btn-secondary" @onclick="UseLicenceToken" disabled="@_busy">Use the token from the licence key</button>
+                    }
+                    <button class="btn btn-secondary" @onclick="SendTestReport" disabled="@(_busy || string.IsNullOrWhiteSpace(_s.MspPortalUrl))">Save and send a report now</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Updates</h2>
+            <dl class="kv">
+                <dt>Console version</dt><dd>@AppVersion.Current</dd>
+            </dl>
+            <p style="margin:6px 0">Updates are opt-in and never automatic. A new console image is announced in the daily digest's footer when the central service publishes one; nothing changes on this box until an administrator runs the update.</p>
+            <ul style="margin:0 0 6px 18px;color:var(--ink)">
+                <li><code>deploy/update.sh</code>: pulls the image tag you name, takes a database backup into the data volume, restarts the stack with the new image and waits for <code>/healthz</code>. It refuses to run if the backup fails.</li>
+                <li><code>deploy/rollback.sh</code>: restarts the stack on the previous image tag recorded by the last update and, if you ask it to, restores the backup taken at that time.</li>
+            </ul>
+            <p class="muted" style="margin:0">Both scripts live next to <code>deploy/docker-compose.yml</code> and print what they are about to do before doing it. For the OVA install the same two commands are on the console VM's menu.</p>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private AppSettings? _s;
+    private LicenseInfo? _licence;
+    private BundleState? _bundle;
+    private bool _bundleMode;
+    private int _assets;
+    private bool _busy, _uploading;
+    private string? _notice, _error;
+    private IBrowserFile? _file;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _timer = new System.Threading.Timer(async _ => { if (_uploading || Bundles.Busy) { try { await InvokeAsync(StateHasChanged); } catch { } } }, null, 2000, 2000);
+    }
+
+    private async Task LoadAsync()
+    {
+        _s = await SettingsSvc.LoadAsync();
+        _licence = LicenseService.Parse(_s.LicenceKey);
+        _assets = await Licences.AssetCountAsync();
+        _bundle = await Bundles.CurrentAsync();
+        _bundleMode = await Bundles.IsBundleModeAsync();
+    }
+
+    private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
+
+    private async Task SaveSettings()
+    {
+        if (_s is null) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            await SettingsSvc.SaveAsync(_s, await ActorAsync());
+            await LoadAsync();
+            _notice = "Settings saved.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task SaveLicence()
+    {
+        if (_s is null) return;
+        var check = LicenseService.Parse(_s.LicenceKey);
+        if (check.Present && !check.Valid && check.Customer is null)
+        {
+            _error = "That key was not saved: " + check.Reason;
+            return;
+        }
+        await SaveSettings();
+        if (_error is null) _notice = check.Present ? (check.Valid ? "Licence saved: " + check.Reason : "Licence saved, but " + check.Reason) : "Licence key removed: this is now the internal build.";
+    }
+
+    private async Task UseLicenceToken()
+    {
+        if (_s is null || _licence?.TenantToken is not { Length: > 0 } t) return;
+        _s.MspTenantToken = t;
+        if (string.IsNullOrWhiteSpace(_s.MspPortalUrl)) _s.MspPortalUrl = _s.BundleUrl;
+        await SaveSettings();
+    }
+
+    private async Task CheckNow()
+    {
+        await SaveSettings();
+        if (_error is not null) return;
+        _busy = true; _notice = null;
+        try
+        {
+            var r = await Bundles.CheckAndApplyAsync(true, CancellationToken.None);
+            await LoadAsync();
+            if (r.Outcome is BundleOutcome.Applied or BundleOutcome.UpToDate) _notice = r.Reason;
+            else _error = r.Outcome + ": " + r.Reason;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e) => _file = e.File;
+
+    private async Task Upload()
+    {
+        if (_file is null) return;
+        _busy = true; _uploading = true; _error = null; _notice = null;
+        try
+        {
+            await using var stream = _file.OpenReadStream(maxAllowedSize: 4L << 30);
+            var r = await Bundles.ApplyUploadedAsync(stream, await ActorAsync(), CancellationToken.None);
+            await LoadAsync();
+            if (r.Outcome == BundleOutcome.Applied) _notice = r.Reason;
+            else _error = r.Outcome + ": " + r.Reason;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _file = null;
+        _busy = false; _uploading = false;
+    }
+
+    private async Task SendTestReport()
+    {
+        await SaveSettings();
+        if (_error is not null) return;
+        _busy = true; _notice = null;
+        try
+        {
+            if (!MspReportService.Configured(_s!)) throw new InvalidOperationException("Turn on MSP reporting and set the portal URL and tenant token first.");
+            var ok = await MspReports.SendNowAsync(_s);
+            if (ok) _notice = "Report sent to " + _s!.MspPortalUrl + ".";
+            else _error = "The report could not be sent: " + (MspReports.LastError ?? "unknown error");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
