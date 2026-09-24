@@ -17,6 +17,7 @@ chown -R vulnverdict:vulnverdict "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
 case "${VV_DB:-embedded}" in
   embedded)
     mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA" && chmod 700 "$PGDATA"
+    touch "$DATA/postgres.log" && chown postgres:postgres "$DATA/postgres.log"
     if [ ! -s "$PGDATA/PG_VERSION" ]; then
       log "Initialising embedded PostgreSQL ${PG_MAJOR} in $PGDATA"
       gosu postgres "$PG_BIN/initdb" -D "$PGDATA" --auth=trust --encoding=UTF8 --locale=C.UTF-8 >/dev/null
