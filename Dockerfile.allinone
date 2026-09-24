@@ -1,0 +1,54 @@
+# VulnVerdict all-in-one image: PostgreSQL 16, the console and worker, and Caddy for TLS, in one container.
+# One volume (/data) holds the database, the data-protection keys, the CA and certificates, and feed downloads.
+#
+#   docker run -d --name vulnverdict --restart unless-stopped \
+#     -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \
+#     ghcr.io/ayrshirepixels/vulnverdict:allinone
+#
+# Environment:
+#   VV_HOSTNAME   hostname for the certificate (default: localhost). A public name gets Let's Encrypt when VV_TLS=public.
+#   VV_TLS        internal (default, Caddy's own CA) | public (Let's Encrypt) | off (plain HTTP on 8080 only)
+#   VV_DB         embedded (default, Postgres inside the container) | sqlite | external (set Database__ConnectionString)
+#   CVE_MIN_YEAR  first-baseline year filter (0 = everything)
+# Use the Compose stack (deploy/docker-compose.yml) when you want Postgres managed separately.
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY VulnVerdict.slnx ./
+COPY src/VulnVerdict.Core/VulnVerdict.Core.csproj src/VulnVerdict.Core/
+COPY src/VulnVerdict.Web/VulnVerdict.Web.csproj src/VulnVerdict.Web/
+RUN dotnet restore src/VulnVerdict.Web/VulnVerdict.Web.csproj
+COPY src/ src/
+RUN dotnet publish src/VulnVerdict.Web/VulnVerdict.Web.csproj -c Release -o /app --no-restore
+
+FROM caddy:2-alpine AS caddy
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+ARG PG_MAJOR=16
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata gosu \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-${PG_MAJOR} \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home vulnverdict \
+    && mkdir -p /data && chown vulnverdict /data
+COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
+COPY --from=build /app /app
+COPY deploy/allinone/entrypoint.sh /usr/local/bin/vulnverdict-entrypoint
+COPY deploy/allinone/Caddyfile /etc/caddy/Caddyfile.template
+RUN chmod +x /usr/local/bin/vulnverdict-entrypoint
+ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}" \
+    PG_MAJOR=${PG_MAJOR} \
+    ASPNETCORE_URLS=http://127.0.0.1:8080 \
+    ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
+    Role=all \
+    Worker__DataDir=/data \
+    VV_DB=embedded \
+    VV_TLS=internal \
+    VV_HOSTNAME=localhost
+VOLUME ["/data"]
+EXPOSE 443 80 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/vulnverdict-entrypoint"]

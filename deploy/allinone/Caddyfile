@@ -1,0 +1,6 @@
+# Rendered by the all-in-one entrypoint: __HOST__ and __TLS__ are substituted at start.
+__HOST__ {
+	__TLS__
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}
