@@ -141,7 +141,12 @@ public sealed class VerdictEvaluator
                 var rows = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == al.VendorNorm && a.ProductNorm == al.ProductNorm).ToListAsync(ct);
                 result.AddRange(rows.Select(a => new ProductMatch(a, a.CveId, MatchConfidence.Exact, "alias '" + s.Product + "' maps to " + a.Vendor + " / " + a.Product)));
             }
-            if (!string.IsNullOrEmpty(vn) && pn.Length >= 5)
+            // "Contains" is a fallback for entries whose name matches nothing exactly (a CNA that writes
+            // "Microsoft Exchange Server 2019 Cumulative Update 14" for what you call "Exchange Server 2019").
+            // Once the product is found by its exact name or an alias, longer names are other products from
+            // the same vendor: "Jenkins" must not pick up every "Jenkins ... Plugin", nor "GitLab" the
+            // "GitLab Runner".
+            if (result.Count == 0 && !string.IsNullOrEmpty(vn) && pn.Length >= 5)
             {
                 var contains = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == vn && a.ProductNorm != pn && a.ProductNorm.Contains(pn)).ToListAsync(ct);
                 result.AddRange(contains.Select(a => new ProductMatch(a, a.CveId, MatchConfidence.Likely, "CNA product '" + a.Product + "' contains '" + s.Product + "'")));
