@@ -3,6 +3,7 @@
 @inject SettingsService SettingsSvc
 @inject EmailService Email
 @inject LlmService Llm
+@inject ConnectorService ConnectorSvc
 @inject AuthService Auth
 @inject NavigationManager Nav
 
@@ -75,7 +76,29 @@
                     <div><label>Helpdesk intake address</label><input type="email" @bind="_s.HelpdeskIntakeAddress" placeholder="support@example.co.uk" /><div class="help">One email per Fix today and Fix this week verdict, with a correlation key in the subject. Leave blank to disable.</div></div>
                     <div><label>Administrator alert address</label><input type="email" @bind="_s.AdminAlertAddress" /><div class="help">Stale feeds, a stopped worker, a digest that could not be sent.</div></div>
                 </div>
-                <label class="check"><input type="checkbox" @bind="_s.TicketsEnabled" /> Raise tickets by email</label>
+                <div class="row">
+                    <div><label>Ticket channel</label>
+                        <select @bind="_s.TicketChannel">
+                            <option value="email">Email to the helpdesk intake address</option>
+                            @foreach (var c in _ticketConnectors) { <option value="@c.Id">@c.DisplayName</option> }
+                        </select>
+                        <div class="help">Native helpdesk adapters are added under Connectors and appear here.</div></div>
+                    <div style="align-self:end"><label class="check"><input type="checkbox" @bind="_s.TicketsEnabled" /> Raise tickets for Fix today and Fix this week</label></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Weekly report and webhooks</h2>
+            <div class="form">
+                <div class="row">
+                    <div><label>Weekly report recipients</label><input type="text" @bind="_s.ReportRecipients" placeholder="md@example.co.uk" /><div class="help">The management summary: new, affecting us, actioned, overdue, dismissed. Leave blank to skip the email; the report is always available under Reports.</div></div>
+                    <div><label>Send on</label><select @bind="_s.ReportDay">@foreach (var d in Enum.GetNames<DayOfWeek>()) { <option value="@d">@d</option> }</select></div>
+                </div>
+                <div class="row">
+                    <div><label>Webhook URL</label><input type="text" @bind="_s.WebhookUrl" placeholder="https://hooks.example.com/vulnverdict" /><div class="help">Receives verdict created, promoted and closed events as JSON, signed with HMAC-SHA256 (see docs/api.md).</div></div>
+                    <div><label>Webhook secret</label><input type="password" @bind="_s.WebhookSecret" autocomplete="new-password" /></div>
+                </div>
             </div>
         </div>
 
@@ -150,7 +173,13 @@
     private bool _busy;
     private string? _notice, _error;
 
-    protected override async Task OnInitializedAsync() => _s = await SettingsSvc.LoadAsync();
+    private List<Connector> _ticketConnectors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _s = await SettingsSvc.LoadAsync();
+        _ticketConnectors = (await ConnectorSvc.ListAsync()).Where(c => ConnectorSvc.IsTicketAdapter(c.AdapterId)).ToList();
+    }
 
     private async Task Save()
     {
