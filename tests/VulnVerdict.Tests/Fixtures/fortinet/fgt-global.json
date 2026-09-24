@@ -1,0 +1,7 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": { "hostname": "FGT-EDGE-01", "admin-sport": 8443, "admin-port": 80, "admin-ssh-port": 22, "admin-telnet-port": 23, "admin-https-redirect": "enable" },
+  "vdom": "root", "path": "system", "name": "global", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

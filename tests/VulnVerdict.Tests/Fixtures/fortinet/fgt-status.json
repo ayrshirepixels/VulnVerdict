@@ -1,0 +1,11 @@
+{
+  "http_method": "GET",
+  "results": { "model_name": "FortiGate", "model_number": "100F", "model": "FG100F", "hostname": "FGT-EDGE-01", "log_disk_status": "available" },
+  "vdom": "root",
+  "path": "system",
+  "name": "status",
+  "status": "success",
+  "serial": "FG100FTK20012345",
+  "version": "v7.2.5",
+  "build": 1517
+}

@@ -1,0 +1,10 @@
+{
+  "result": { "retval": 1, "message": "Success" },
+  "data": {
+    "software": [
+      { "id": 601, "name": "Veeam Backup & Replication", "vendor": "Veeam Software Group GmbH", "version": "12.1.2.172", "install_date": "2026-03-20" },
+      { "id": 602, "name": "Microsoft SQL Server 2019 (64-bit)", "vendor": "Microsoft Corporation", "version": "15.0.4382.1", "install_date": "2025-11-08" }
+    ],
+    "total": 2
+  }
+}

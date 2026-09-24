@@ -1,0 +1,11 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": [
+    { "name": "web-vip", "type": "static-nat", "extip": "203.0.113.11", "extintf": "wan1", "mappedip": [ { "range": "10.0.10.5", "q_origin_key": "10.0.10.5" } ], "portforward": "enable", "protocol": "tcp", "extport": "443", "mappedport": "443", "comment": "Public web server" },
+    { "name": "lan-vip", "type": "static-nat", "extip": "10.0.10.250", "extintf": "internal", "mappedip": [ { "range": "10.0.20.7", "q_origin_key": "10.0.20.7" } ], "portforward": "disable", "protocol": "tcp", "extport": "0-65535", "mappedport": "0-65535", "comment": "Internal only" },
+    { "name": "rdp-vip", "type": "static-nat", "extip": "203.0.113.12", "extintf": "any", "mappedip": [ { "range": "10.0.10.9", "q_origin_key": "10.0.10.9" } ], "portforward": "enable", "protocol": "tcp", "extport": "3389", "mappedport": "3389", "comment": "Blocked by policy" }
+  ],
+  "vdom": "root", "path": "firewall", "name": "vip", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

@@ -1,0 +1,9 @@
+{
+  "http_method": "GET",
+  "results": [
+    { "name": "AP-1F-EAST", "is_local": false, "vdom": "root", "serial": "FP231FTF21001234", "ap_profile": "FAP231F-default", "state": "authorized", "connecting_from": "10.0.40.21", "connecting_interface": "fortilink", "status": "connected", "wtp_id": "FP231FTF21001234", "clients": 12, "os_version": "FP231F-v7.4.4-build0768", "local_ipv4_addr": "0.0.0.0", "board_mac": "70:4c:a5:11:22:33", "connection_state": "Connected", "radio": [], "wired": [], "wan_status": [] },
+    { "name": "AP-2F-WEST", "is_local": false, "vdom": "root", "serial": "FP221ETF19005678", "ap_profile": "FAP221E-default", "state": "authorized", "connecting_from": "10.0.40.22", "connecting_interface": "fortilink", "status": "connected", "wtp_id": "FP221ETF19005678", "clients": 4, "os_version": "FP221E-v6.4-build0460", "local_ipv4_addr": "0.0.0.0", "board_mac": "70:4c:a5:44:55:66", "connection_state": "Connected", "radio": [], "wired": [], "wan_status": [] }
+  ],
+  "vdom": "root", "path": "wifi", "name": "managed_ap", "status": "success",
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

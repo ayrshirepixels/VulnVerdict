@@ -1,0 +1,13 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": [
+    { "name": "wan1", "vdom": "root", "mode": "static", "ip": "203.0.113.10 255.255.255.248", "allowaccess": "ping https ssh", "status": "up", "type": "physical", "role": "wan", "alias": "ISP-A", "macaddr": "e8:1c:ba:12:34:56" },
+    { "name": "wan2", "vdom": "root", "mode": "dhcp", "ip": "0.0.0.0 0.0.0.0", "allowaccess": "ping", "status": "down", "type": "physical", "role": "wan", "alias": "", "macaddr": "e8:1c:ba:12:34:57" },
+    { "name": "internal", "vdom": "root", "mode": "static", "ip": "10.0.10.1 255.255.255.0", "allowaccess": "ping https ssh http fgfm", "status": "up", "type": "hard-switch", "role": "lan", "alias": "LAN", "macaddr": "e8:1c:ba:12:34:60" },
+    { "name": "dmz", "vdom": "root", "mode": "static", "ip": "10.0.20.1 255.255.255.0", "allowaccess": "ping https", "status": "up", "type": "physical", "role": "dmz", "alias": "DMZ", "macaddr": "e8:1c:ba:12:34:61" },
+    { "name": "fortilink", "vdom": "root", "mode": "static", "ip": "10.255.1.1 255.255.255.0", "allowaccess": "ping fabric", "status": "up", "type": "aggregate", "role": "lan", "alias": "", "macaddr": "e8:1c:ba:12:34:62" }
+  ],
+  "vdom": "root", "path": "system", "name": "interface", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

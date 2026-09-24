@@ -1,0 +1,12 @@
+{
+  "result": { "retval": 1, "message": "Success" },
+  "data": {
+    "software": [
+      { "id": 501, "name": "Google Chrome 128.0.6613.84", "vendor": "Google LLC", "version": "128.0.6613.84", "install_date": "2026-09-10" },
+      { "id": 502, "name": "7-Zip 23.01 (x64)", "vendor": "Igor Pavlov", "version": "23.01", "install_date": "2024-01-12" },
+      { "id": 503, "name": "Microsoft Edge", "vendor": "Microsoft Corporation", "version": "128.0.2739.42", "install_date": "2026-09-11" },
+      { "id": 504, "name": "FortiClient", "vendor": "Fortinet Inc", "version": "7.2.4.0933", "install_date": "2026-05-02" }
+    ],
+    "total": 4
+  }
+}
