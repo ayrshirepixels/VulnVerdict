@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How VulnVerdict decides</title>
+  <meta name="description" content="Four computed inputs, a published decision table, and an evidence chain on every verdict. No scores, no tuning, no AI deciding.">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+    <nav class="nav">
+      <a href="how-it-works.html">How it works</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="index.html#install">Install</a>
+      <a class="cta" href="mailto:hello@vulnverdict.com?subject=VulnVerdict%20trial">Get a trial</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h1>From 500 alerts to one clear verdict.</h1>
+    <p class="lead">No score. Four facts about the bug and your estate, a decision table you can read in a minute, and a sentence you can repeat to your boss. The AI, if you turn it on, explains the verdict. It never decides it.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Step one</div>
+    <h2>Know what you run.</h2>
+    <p class="narrow" style="margin-left:0">Connectors read your estate with read-only accounts and merge what they see into one asset list. Anything they cannot tie to a vendor's own vulnerability naming lands in a queue for a one-click decision, and that decision is remembered.</p>
+    <div class="grid g3" style="margin-top:24px">
+      <div class="card"><h3>Servers and endpoints</h3><p>Windows over WinRM or OpenSSH: build and hotfixes, installed software, roles and features, listening ports and which process owns them, IIS, SQL Server, .NET. Linux over SSH: packages and sockets. FortiClient EMS for the endpoints.</p></div>
+      <div class="card"><h3>The network edge</h3><p>FortiGate: firmware, switch and access-point firmware, and exposure for free. Which VIPs sit behind an internet-facing policy, whether the VPN or admin page listens on the WAN side.</p></div>
+      <div class="card"><h3>Everything else</h3><p>vCenter and Hyper-V for the VM list, SNMP for printers, NAS, UPS and out-of-band controllers, SBOMs from your build pipeline, a discovery sweep for the hosts nobody claims, and an external cross-check of your public names.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Step two</div>
+    <h2>Four inputs, all computed, none tuned.</h2>
+    <div class="grid g4" style="margin-top:24px">
+      <div class="card"><h3>Is it being exploited?</h3><p>CISA's Known Exploited Vulnerabilities list, the vendor's own advisory, public exploit code in Exploit-DB, Metasploit or Nuclei, and the EPSS probability. Active, proof-of-concept, or none.</p></div>
+      <div class="card"><h3>Can it be done at scale?</h3><p>Not the CVSS score: the vector behind it. Over the network, no special conditions, no login, no user to trick. If all four hold, a bot can do it to everyone.</p></div>
+      <div class="card"><h3>Where does it sit?</h3><p>Internet-facing, internal only, isolated, or not installed at all. A local or physical attack path on an internet-facing box is treated as internal, because network exposure does not help that attacker.</p></div>
+      <div class="card"><h3>How much does it matter?</h3><p>Domain controllers, identity, firewalls and hypervisors are critical on sight. Lab and disposable kit is low. Everything else is standard.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="dark">
+  <div class="wrap">
+    <div class="eyebrow">Step three</div>
+    <h2>A decision table, not a formula.</h2>
+    <p class="muted narrow" style="margin-left:0">Sixteen rules, evaluated top to bottom, first match wins. Derived from the SSVC method published by CISA and Carnegie Mellon, simplified to what a one-person team needs. Every rule has a test. A few examples:</p>
+    <table class="compare" style="margin-top:22px;background:var(--charcoal-2);color:#fff">
+      <thead><tr><th style="background:#2A2F39;color:#9aa3b2">Exploited</th><th style="background:#2A2F39;color:#9aa3b2">At scale</th><th style="background:#2A2F39;color:#9aa3b2">Sits</th><th style="background:#2A2F39;color:#9aa3b2">Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>in the wild</td><td>any</td><td>internet-facing</td><td><span class="pill">Fix today</span></td></tr>
+        <tr><td>in the wild</td><td>yes</td><td>internal, standard or critical asset</td><td><span class="pill">Fix today</span></td></tr>
+        <tr><td>public exploit</td><td>yes</td><td>internet-facing</td><td><span class="pill">Fix today</span></td></tr>
+        <tr><td>public exploit</td><td>no</td><td>internet-facing, critical asset</td><td><span class="pill" style="background:#ffd08a">Fix this week</span></td></tr>
+        <tr><td>none yet</td><td>yes</td><td>internet-facing</td><td><span class="pill" style="background:#ffd08a">Fix this week</span></td></tr>
+        <tr><td>none yet</td><td>no</td><td>internal</td><td><span class="pill grey">Ignore, tracked</span></td></tr>
+        <tr><td>any</td><td>any</td><td>not installed at that version</td><td><span class="pill green">Not affected</span></td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:16px">"Ignore, tracked" is re-evaluated every hour. When a public exploit appears or CISA adds it to the exploited list, it is promoted and the digest says so: "This one changed."</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Step four</div>
+    <h2>A sentence, and the evidence behind it.</h2>
+    <div class="sentence">FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8.</div>
+    <p class="muted" style="margin-top:18px">Behind that sentence sits the chain that produced it, stored with every verdict, including the ones dismissed:</p>
+    <ol class="steps" style="margin-top:16px">
+      <li>Affected product Fortinet / FortiOS: vendor and product match exactly. <span class="muted">CVE List V5, Fortinet's own record, retrieved 06:14.</span></li>
+      <li>Version check: 7.2.5 is inside the affected range 7.2.0 to 7.2.7. <span class="muted">Same record.</span></li>
+      <li>FW-EDGE-01 runs FortiOS 7.2.5. <span class="muted">FortiGate connector, seen 05:30.</span></li>
+      <li>Listed in CISA Known Exploited Vulnerabilities since 9 February 2024, known ransomware use. <span class="muted">CISA KEV, retrieved 06:11.</span></li>
+      <li>CVSS 3.1 vector: network, low complexity, no privileges, no user interaction. <span class="muted">Automatable.</span></li>
+      <li>Reachable from the internet: SSL-VPN on wan1 port 443. <span class="muted">FortiGate connector.</span></li>
+      <li>Decision table rule 2: exploited in the wild and reachable from the internet, so Fix today.</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap grid g2">
+    <div>
+      <div class="eyebrow">Then it gets out of your way</div>
+      <ul class="ticks">
+        <li><strong>Done, snooze, accept risk, suppress.</strong> With an owner and an expiry, so nothing is quietly forgotten.</li>
+        <li><strong>Compensating controls.</strong> A WAF in front, MFA on the service, a feature switched off: one step down, named in the sentence. Never for "exploited and internet-facing".</li>
+        <li><strong>Auto-close.</strong> When a connector sees the fixed version, the verdict closes itself and the digest says "patched, closed".</li>
+        <li><strong>Tickets and webhooks.</strong> One ticket per Fix today or Fix this week, with a correlation key, into your helpdesk. Signed webhooks for anything else.</li>
+        <li><strong>A weekly report.</strong> New, affecting us, actioned, overdue, dismissed. For the person who asks about the thing on the news.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="eyebrow">And keeps your estate to itself</div>
+      <ul class="ticks">
+        <li>Runs on a VM in your network. Feeds come in; inventory never leaves.</li>
+        <li>Credentials encrypted at rest, read-only everywhere, never logged.</li>
+        <li>Only port 443 exposed. Content security policy, rate-limited login, audit log, single sign-on with your directory.</li>
+        <li>Signed feed bundles for air-gapped sites; the console refuses anything unsigned or older than what it has.</li>
+        <li>AI explanations are optional, use your own key, and never see a hostname or an address.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="dark center">
+  <div class="wrap">
+    <h2>Stop chasing ghosts. Fix what matters.</h2>
+    <p class="muted narrow">Install it this afternoon and read your first digest tomorrow morning.</p>
+    <div class="btns" style="justify-content:center"><a class="btn btn-amber" href="mailto:hello@vulnverdict.com?subject=VulnVerdict%20trial">Ask for a trial</a><a class="btn btn-ghost" href="pricing.html">Pricing</a></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>An Ayrshire Pixels product. <a href="mailto:hello@vulnverdict.com">hello@vulnverdict.com</a></p>
+    </div>
+    <p class="attr">Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation. SSVC is published by CISA and the Carnegie Mellon Software Engineering Institute.</p>
+  </div>
+</footer>
+</body>
+</html>

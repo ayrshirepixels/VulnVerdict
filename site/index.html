@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VulnVerdict: cut the noise, know your risk</title>
+  <meta name="description" content="VulnVerdict tells the one-person IT team which vulnerabilities actually reach their estate, in plain words: fix today, fix this week, next patch cycle, or ignore. On-premises, installed in fifteen minutes, delivered as a short daily email.">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+    <nav class="nav">
+      <a href="how-it-works.html">How it works</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="#install">Install</a>
+      <a class="cta" href="mailto:hello@vulnverdict.com?subject=VulnVerdict%20trial">Get a trial</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Vulnerability triage for teams of one</div>
+      <h1>Cut the noise.<br><span class="tag">Know your risk.</span></h1>
+      <p class="lead">Forty-eight thousand vulnerabilities were published last year. Perhaps three of them can actually reach your estate this week. VulnVerdict works out which, and emails you the answer in plain words.</p>
+      <div class="btns">
+        <a class="btn btn-amber" href="#install">Install in fifteen minutes</a>
+        <a class="btn btn-ghost" href="how-it-works.html">See how it decides</a>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><p class="big amber">3</p><span>to fix today</span></div>
+        <div class="stat"><p class="big">5</p><span>this week</span></div>
+        <div class="stat"><p class="big green">412</p><span>you did not need to read</span></div>
+      </div>
+    </div>
+    <div class="digest" aria-label="Sample digest email">
+      <div class="from"><em>VULN</em>VERDICT &middot; Thursday 07:30</div>
+      <div class="subject">3 to fix today, 5 this week. 412 CVEs since Monday you did not need to read.</div>
+      <h4 class="today">Fix today</h4>
+      <ul>
+        <li>FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8. <a href="#">Details</a> &middot; <a href="#">Done</a></li>
+        <li>Ivanti Connect Secure 22.7R2.4 on VPN-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 22.7R2.5. <a href="#">Details</a> &middot; <a href="#">Done</a></li>
+        <li>ScreenConnect 23.9.7 on REMOTE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 25.2.3. <a href="#">Details</a> &middot; <a href="#">Done</a></li>
+      </ul>
+      <h4 class="week">Fix this week</h4>
+      <ul>
+        <li>Windows Server 2022 on DC-01: public exploit code exists, works over the network with no login, internal network only. Fixed in build 20348.5256. <a href="#">Details</a></li>
+        <li>Telerik UI for ASP.NET AJAX 2023.1.117 on WEB-01: public exploit code exists, works over the network with no login, reachable from the internet. Fixed in 2025.1.416. <a href="#">Details</a></li>
+      </ul>
+      <h4>Changed since last digest</h4>
+      <ul><li>CVE-2026-21513 on DC-01: promoted from Next patch cycle to Fix this week: now in CISA KEV.</li></ul>
+      <div class="foot">Seeing 212 assets from 4 sources. Feeds current as of 06:00. <span class="saved">412 CVEs dismissed since Monday, with the reason kept.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="grid g2" style="align-items:center">
+      <div>
+        <div class="eyebrow">The problem</div>
+        <h2>Everything arrives labelled "critical". You have forty other jobs.</h2>
+        <p>A 9.9 that needs someone at the keyboard with a USB stick is not a priority. A 9.1 that anyone on the internet can trigger against your VPN is. Scanners, vendor mails and the news score both the same way, because a score describes the bug, not your estate.</p>
+        <p>VulnVerdict is the layer above your scanner and your patch tool. It matches every public vulnerability against what you actually run, works out how an attacker would have to get at it from where it sits, and gives you a verdict you can repeat to your boss.</p>
+      </div>
+      <div class="grid" style="gap:14px">
+        <div class="card verdict today"><span class="pill">Fix today</span><h3>Exploited in the wild and reachable</h3><p class="when">48-hour window. Emailed the moment it appears.</p></div>
+        <div class="card verdict week"><span class="pill" style="background:#ffd08a">Fix this week</span><h3>Serious, not yet that</h3><p class="when">Seven days. Ticket raised automatically if you want one.</p></div>
+        <div class="card verdict"><span class="pill grey">Next patch cycle</span><h3>Real, not urgent</h3><p class="when">Thirty days. A count and a link, not a list.</p></div>
+        <div class="card verdict ignore"><span class="pill green">Not affected</span><h3>Wrong version, wrong exposure, or not installed</h3><p class="when">Never emailed. Kept, with its evidence, in case a match was wrong.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">What you get</div>
+    <h2>One short email. That is the product.</h2>
+    <p class="narrow" style="margin-left:0">What to fix today, what to fix this week, what changed since last time, and nothing else. If the email is good enough you never open the console. We count that as success.</p>
+    <div class="grid g3" style="margin-top:28px">
+      <div class="card"><h3>A reason with every verdict</h3><p>"FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8." One sentence a non-specialist can repeat.</p></div>
+      <div class="card"><h3>Evidence you can check</h3><p>Every verdict keeps its chain: which feed said what, when it was retrieved, which rule fired. Including the ones dismissed as not affected, because a false negative is the dangerous direction.</p></div>
+      <div class="card"><h3>Nothing to tune</h3><p>Scoring, thresholds, digest timing and suppression rules ship configured. The only setup questions are what you run and what faces the internet, and the connectors answer most of that themselves.</p></div>
+      <div class="card"><h3>Your estate stays yours</h3><p>Installed on a VM in your network. Feeds come in; your inventory never goes out. AI explanations are optional and use your own key, with hostnames and addresses stripped first.</p></div>
+      <div class="card"><h3>Works with what you have</h3><p>Fortinet, Microsoft, VMware, Linux, printers, switches, out-of-band controllers, SBOMs from your build pipeline. Tickets into Jira, ServiceNow, Freshservice, Zendesk, Azure DevOps, HaloPSA, Autotask, or plain email.</p></div>
+      <div class="card"><h3>Nothing to babysit</h3><p>Feeds update themselves, connectors report when they lose access, and the console emails you if it stops working. Silence means nothing to do, never that the box died.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="dark">
+  <div class="wrap">
+    <div class="grid g2" style="align-items:center">
+      <div>
+        <div class="eyebrow">Not affected is a feature</div>
+        <h2>The alerts you never had to read are worth as much as the ones you did.</h2>
+        <p class="muted">Every digest tells you how many vulnerabilities matched something you run and were set aside, with the reason kept: wrong version, no route in, feature switched off, isolated network. Show the count to whoever asks whether you are on top of it.</p>
+      </div>
+      <div class="card">
+        <p class="big green" style="font-size:72px">98%</p>
+        <p class="muted" style="margin:6px 0 0">of matched CVEs dismissed in a typical estate, each with a stored reason you can open and dispute.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Sources</div>
+    <h2>Every source is one credential form.</h2>
+    <p class="narrow" style="margin-left:0">A hostname and a read-only account. The form tells you the minimum permission and links to the vendor's instructions. Adapters never write to anything.</p>
+    <div class="logos" style="margin-top:18px">
+      <span>FortiClient EMS</span><span>FortiGate</span><span>Windows Server (WinRM)</span><span>VMware vCenter</span><span>Hyper-V</span><span>Linux (SSH)</span><span>CycloneDX / SPDX SBOM</span><span>SNMP</span><span>Discovery sweep</span><span>External cross-check</span><span>Shodan</span>
+    </div>
+    <p class="muted" style="margin-top:22px">Feeds: CVE List V5 with CISA Vulnrichment, CISA KEV, EPSS, Exploit-DB, Metasploit, Nuclei, OSV, and vendor advisories from Fortinet, Microsoft, Cisco, Broadcom/VMware, Ubuntu, Debian and Red Hat.</p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="eyebrow">Install</div>
+    <h2>Fifteen minutes, three ways.</h2>
+    <div class="grid g3" style="margin-top:24px">
+      <div class="card"><h3>One container</h3><p>Database, console and TLS inside a single image. One <code>docker run</code>, one volume.</p></div>
+      <div class="card"><h3>Docker Compose</h3><p>Postgres, worker, console and Caddy as separate services for people who already run Docker.</p></div>
+      <div class="card"><h3>Appliance (OVA)</h3><p>Import the VM, answer three questions on the console, open the URL. No Docker knowledge needed.</p></div>
+    </div>
+    <ol class="steps" style="margin-top:28px">
+      <li><strong>Start it.</strong> Run the container or import the OVA. Create the administrator account on the first page.</li>
+      <li><strong>Say where mail goes.</strong> SMTP, SendGrid or Brevo, and who receives the digest.</li>
+      <li><strong>Add what you run.</strong> Paste read-only credentials for the connectors you have, or type the products into the watchlist. The first digest arrives the next morning.</li>
+    </ol>
+    <div class="btns"><a class="btn btn-dark" href="mailto:hello@vulnverdict.com?subject=VulnVerdict%20trial">Ask for a trial</a><a class="btn btn-outline" href="pricing.html">See pricing</a></div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap grid g2">
+    <div>
+      <div class="eyebrow">What it is not</div>
+      <ul class="ticks crosses">
+        <li><strong>Not a scanner.</strong> It reads your scanner's output; it never probes for vulnerabilities itself.</li>
+        <li><strong>Not a patch tool.</strong> It says what to fix. Your RMM or your hands do the fixing.</li>
+        <li><strong>Not a SIEM or a helpdesk.</strong> It emits to those.</li>
+        <li><strong>Not scored by an AI.</strong> Deterministic rules decide the verdict. The AI, if you turn it on, explains it.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="eyebrow">Built for</div>
+      <ul class="ticks">
+        <li>The IT manager or sole sysadmin at a 50 to 500 seat organisation, with no security team.</li>
+        <li>Managed service providers who need every client's exposure in one view.</li>
+        <li>Cyber Essentials holders who must patch criticals and highs within 14 days and want to show they did.</li>
+        <li>Anyone whose boss asks "are we affected by the thing on the news".</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>An Ayrshire Pixels product. <a href="mailto:hello@vulnverdict.com">hello@vulnverdict.com</a></p>
+    </div>
+    <p class="attr">Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation. Exploit-DB, Metasploit and Nuclei data are referenced and linked, never redistributed.</p>
+  </div>
+</footer>
+</body>
+</html>
