@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VulnVerdict: open-source vulnerability triage for teams of one</title>
-  <meta name="description" content="VulnVerdict is open source (AGPL-3.0) and free to run on your own VM. It tells the one-person IT team which vulnerabilities actually reach their estate, in plain words: fix today, fix this week, next patch cycle, or ignore. Paid support and a curated feed for those who want them.">
+  <meta name="description" content="VulnVerdict is open source (AGPL-3.0) and free to run in a container or on a VM in your network, with BYOM (bring your own model) AI explanations. It tells the one-person IT team which vulnerabilities actually reach their estate, in plain words: fix today, fix this week, next patch cycle, or ignore. Paid support and a curated feed for those who want them.">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="site.css">
 </head>
@@ -25,7 +25,7 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">Open source &middot; AGPL-3.0 &middot; self-hosted</div>
+      <div class="eyebrow">Open source &middot; AGPL-3.0 &middot; container or VM &middot; BYOM</div>
       <h1>Cut the noise.<br><span class="tag">Know your risk.</span></h1>
       <p class="lead">Forty-eight thousand vulnerabilities were published last year. Perhaps three of them can actually reach your estate this week. VulnVerdict works out which, and emails you the answer in plain words. Free to run, open to read, yours to keep.</p>
       <div class="btns">
@@ -84,7 +84,7 @@
       <div>
         <div class="eyebrow">Why open source</div>
         <h2>It holds a map of your weakest points. You should be able to read it.</h2>
-        <p class="muted">Every line of the console, the connectors and the decision table is public under the AGPL-3.0. Run it for free on a VM in your network, forever, with no asset cap and no registration. Audit what leaves the box (nothing about your estate does). Fix the adapter for the odd switch nobody else has and send it back.</p>
+        <p class="muted">Every line of the console, the connectors and the decision table is public under the AGPL-3.0. Run it for free in a container or on a VM in your network, forever, with no asset cap and no registration. Audit what leaves the box (nothing about your estate does). Fix the adapter for the odd switch nobody else has and send it back.</p>
         <p class="muted">We make our living from support subscriptions and a curated feed, not from locking the door. That keeps us honest about the product, and it means the tool a fifty-person firm relies on cannot be pulled out from under them.</p>
       </div>
       <div class="card">
@@ -108,7 +108,7 @@
       <div class="card"><h3>A reason with every verdict</h3><p>"FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8." One sentence a non-specialist can repeat.</p></div>
       <div class="card"><h3>Evidence you can check</h3><p>Every verdict keeps its chain: which feed said what, when it was retrieved, which rule fired. Including the ones dismissed as not affected, because a false negative is the dangerous direction.</p></div>
       <div class="card"><h3>Nothing to tune</h3><p>Scoring, thresholds, digest timing and suppression rules ship configured. The only setup questions are what you run and what faces the internet, and the connectors answer most of that themselves.</p></div>
-      <div class="card"><h3>Your estate stays yours</h3><p>Installed on a VM in your network. Feeds come in; your inventory never goes out. AI explanations are optional and use your own key, with hostnames and addresses stripped first.</p></div>
+      <div class="card"><h3>Your estate stays yours</h3><p>Runs in a container or on a VM in your network. Feeds come in; your inventory never goes out. AI explanations are optional and <strong>BYOM, bring your own model</strong>: your Anthropic or OpenAI key, or a local model that never leaves the building. Hostnames and addresses are stripped first.</p></div>
       <div class="card"><h3>Works with what you have</h3><p>Fortinet, Microsoft, VMware, Linux, printers, switches, out-of-band controllers, SBOMs from your build pipeline. Tickets into Jira, ServiceNow, Freshservice, Zendesk, Azure DevOps, HaloPSA, Autotask, or plain email.</p></div>
       <div class="card"><h3>Nothing to babysit</h3><p>Feeds update themselves, connectors report when they lose access, and the console emails you if it stops working. Silence means nothing to do, never that the box died.</p></div>
     </div>
@@ -131,10 +131,11 @@
   <div class="wrap">
     <div class="eyebrow">Install</div>
     <h2>Fifteen minutes, three ways. All free.</h2>
+    <p class="narrow" style="margin-left:0">Containerised or a VM: whichever your estate already runs. The console, the verdicts and the updates are the same either way, and only HTTPS needs to be reachable.</p>
     <div class="grid g3" style="margin-top:24px">
-      <div class="card"><h3>One container</h3><p>Database, console and TLS inside a single image. One <code>docker run</code>, one volume.</p></div>
+      <div class="card"><h3>One container</h3><p>Database, console and TLS inside a single image. One <code>docker run</code>, one volume, on any Docker host you already have.</p></div>
       <div class="card"><h3>Docker Compose</h3><p>Postgres, worker, console and Caddy as separate services for people who already run Docker.</p></div>
-      <div class="card"><h3>Appliance (OVA)</h3><p>Import the VM, answer three questions on the console, open the URL. No Docker knowledge needed.</p></div>
+      <div class="card"><h3>Virtual machine (OVA)</h3><p>A ready-built appliance for VMware or VirtualBox, or Hyper-V after a one-line disk conversion. Import it, answer three questions on the console, open the URL. No Docker knowledge needed.</p></div>
     </div>
     <pre style="background:var(--charcoal);color:#e6e9ee;padding:16px 18px;border-radius:8px;overflow:auto;margin-top:22px;font-size:14px">docker run -d --name vulnverdict --restart unless-stopped \
   -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \

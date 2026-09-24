@@ -41,7 +41,8 @@
           <li>Every connector, feed and ticket adapter</li>
           <li>Daily digest, immediate Fix-today alerts, weekly report</li>
           <li>Public feeds pulled directly by your console</li>
-          <li>Optional AI explanations with your own key</li>
+          <li>Optional AI explanations, BYOM (bring your own model)</li>
+          <li>Runs in a container or on a VM</li>
           <li>Community support on GitHub, best effort</li>
         </ul>
         <div class="btns"><a class="btn btn-outline" href="https://github.com/ayrshirepixels/VulnVerdict">Install from GitHub</a></div>
@@ -117,7 +118,7 @@
       </details>
       <details class="qa">
         <summary>Does my inventory leave my network?</summary>
-        <p>No, on any plan. The console runs on your VM. It pulls feeds in; nothing about your assets goes out. MSP reporting, if a client turns it on, sends counts and verdict sentences with asset names stripped.</p>
+        <p>No, on any plan. The console runs in your network, in a container or on a VM. It pulls feeds in; nothing about your assets goes out. MSP reporting, if a client turns it on, sends counts and verdict sentences with asset names stripped.</p>
       </details>
       <details class="qa">
         <summary>Which licence?</summary>
@@ -136,8 +137,12 @@
         <p>Outbound HTTPS to the feeds, or only to our bundle service on a support plan. Fully air-gapped sites upload a signed bundle by hand; the console refuses anything unsigned or older than what it already has.</p>
       </details>
       <details class="qa">
-        <summary>What about the AI bit?</summary>
-        <p>Optional on every plan. Bring your own Anthropic or OpenAI key, or point it at a local model. It explains a verdict in plain English and describes how an attacker would go about it. It never decides a verdict, and it never sees a hostname or an address.</p>
+        <summary>What is BYOM?</summary>
+        <p>Bring your own model. The AI explanations are optional on every plan, and you choose the model: paste your own Anthropic or OpenAI key, or point the console at a local model such as one running in Ollama, so nothing leaves the building. We never resell AI usage or see your prompts. The model explains a verdict in plain English and describes how an attacker would go about it. It never decides a verdict, and it never sees a hostname or an address.</p>
+      </details>
+      <details class="qa">
+        <summary>Does it run in a container or on a VM?</summary>
+        <p>Either. Run the single container on any Docker host with one command and one volume, use Docker Compose if you already run Docker, or import the ready-built VM appliance (OVA) into VMware or VirtualBox, or into Hyper-V after a one-line disk conversion. Two virtual CPUs, 4 GB of memory and 40 GB of disk is plenty, and only HTTPS needs to be reachable (port 80 just redirects to it).</p>
       </details>
     </div>
   </div>
