@@ -1,0 +1,12 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": [
+    { "name": "all", "type": "ipmask", "subnet": "0.0.0.0 0.0.0.0" },
+    { "name": "dmz-mail", "type": "ipmask", "subnet": "10.0.20.25 255.255.255.255", "comment": "Mail relay" },
+    { "name": "dmz-net", "type": "ipmask", "subnet": "10.0.20.0 255.255.255.0" },
+    { "name": "SSLVPN_TUNNEL_ADDR1", "type": "iprange", "start-ip": "10.212.134.200", "end-ip": "10.212.134.210" }
+  ],
+  "vdom": "root", "path": "firewall", "name": "address", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

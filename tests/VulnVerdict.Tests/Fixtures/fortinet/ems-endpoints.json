@@ -1,0 +1,49 @@
+{
+  "result": { "retval": 1, "message": "Success" },
+  "data": {
+    "endpoints": [
+      {
+        "device_id": 1001,
+        "name": "LT-ACCOUNTS-07",
+        "ip_addr": "10.0.30.57, 192.168.56.1",
+        "mac_addr": "3C-52-82-1A-2B-3C",
+        "os_version": "Microsoft Windows 11 Professional Edition, 64-bit (build 22631)",
+        "os_type": "windows",
+        "fct_version": "7.2.4.0933",
+        "group_name": "All Groups/Laptops",
+        "is_quarantined": false,
+        "is_managed": true,
+        "fct_users": [
+          { "auth_user_name": "jmackay", "machine_user_name": "jmackay", "user_email": "jmackay@example.com", "last_seen": "2026-09-24T07:12:00Z" }
+        ]
+      },
+      {
+        "device_id": 1002,
+        "name": "SRV-FILE-01",
+        "ip_addr": "10.0.10.5",
+        "mac_addr": "00:50:56:9A:1B:2C",
+        "os_version": "Microsoft Windows Server 2022 Standard Edition, 64-bit (build 20348)",
+        "os_type": "windows",
+        "fct_version": "7.2.4.0933",
+        "group_name": "All Groups/Servers",
+        "is_quarantined": false,
+        "is_managed": true,
+        "fct_users": []
+      },
+      {
+        "device_id": 1003,
+        "name": "MBP-DESIGN-02",
+        "ip_addr": "10.0.30.88",
+        "mac_addr": "F0:18:98:AA:BB:CC",
+        "os_version": "macOS Sonoma 14.6.1",
+        "os_type": "mac",
+        "fct_version": "7.2.5.0834",
+        "group_name": "All Groups/Macs",
+        "is_quarantined": false,
+        "is_managed": true,
+        "fct_users": [ { "auth_user_name": "acampbell" } ]
+      }
+    ],
+    "total": 3
+  }
+}

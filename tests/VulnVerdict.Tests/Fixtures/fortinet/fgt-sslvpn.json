@@ -1,0 +1,15 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": {
+    "status": "enable",
+    "port": 443,
+    "servercert": "Fortinet_Factory",
+    "source-interface": [ { "name": "wan1", "q_origin_key": "wan1" } ],
+    "source-address": [ { "name": "all", "q_origin_key": "all" } ],
+    "tunnel-ip-pools": [ { "name": "SSLVPN_TUNNEL_ADDR1", "q_origin_key": "SSLVPN_TUNNEL_ADDR1" } ],
+    "default-portal": "web-access"
+  },
+  "vdom": "root", "path": "vpn.ssl", "name": "settings", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

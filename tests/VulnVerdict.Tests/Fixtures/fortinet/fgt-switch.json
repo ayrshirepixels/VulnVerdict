@@ -1,0 +1,9 @@
+{
+  "http_method": "GET",
+  "results": [
+    { "switch-id": "SW-CORE-01", "name": "SW-CORE-01", "serial": "S124EF5920010261", "state": "Authorized", "status": "Connected", "os_version": "S124EF-v7.4.11-build2878 (GA)", "connecting_from": "10.255.1.2", "type": "physical", "max_poe_budget": 370, "vdom": "root", "ports": [], "port_stats": {} },
+    { "switch-id": "SW-ACCESS-02", "serial": "S108EN5920123456", "state": "Authorized", "status": "Connected", "os_version": "S108EN-v7.2.8-build0776 (GA)", "connecting_from": "10.255.1.3", "type": "physical", "max_poe_budget": 65, "vdom": "root", "ports": [], "port_stats": {} }
+  ],
+  "vdom": "root", "path": "switch-controller", "name": "managed-switch", "status": "success",
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

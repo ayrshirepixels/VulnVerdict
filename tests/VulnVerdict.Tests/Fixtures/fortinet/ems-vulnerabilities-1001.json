@@ -1,0 +1,32 @@
+{
+  "result": { "retval": 1, "message": "Success" },
+  "data": {
+    "vulnerabilities": [
+      {
+        "vuln_id": 123456,
+        "name": "Google Chrome Multiple Vulnerabilities (CVE-2026-1234, CVE-2026-1235)",
+        "cve_id": "CVE-2026-1234,CVE-2026-1235",
+        "severity": "Critical",
+        "category": "Application",
+        "affected_software": "Google Chrome",
+        "detected_time": "2026-09-23T22:10:00Z"
+      },
+      {
+        "vuln_id": 123999,
+        "name": "7-Zip Heap Buffer Overflow",
+        "cve": [ { "cve_id": "CVE-2025-0411" } ],
+        "severity": 3,
+        "category": "Application",
+        "affected_software": "7-Zip"
+      },
+      {
+        "vuln_id": 124000,
+        "name": "Missing security update for Windows",
+        "cve_id": "",
+        "severity": "High",
+        "category": "OS"
+      }
+    ],
+    "total": 3
+  }
+}

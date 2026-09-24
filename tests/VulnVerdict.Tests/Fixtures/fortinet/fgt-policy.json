@@ -1,0 +1,13 @@
+{
+  "http_method": "GET",
+  "revision": "1.0.0",
+  "results": [
+    { "policyid": 5, "name": "inbound-web", "srcintf": [ { "name": "wan1" } ], "dstintf": [ { "name": "internal" } ], "srcaddr": [ { "name": "all" } ], "dstaddr": [ { "name": "web-vip" } ], "service": [ { "name": "HTTPS" } ], "action": "accept", "status": "enable", "nat": "disable" },
+    { "policyid": 7, "name": "lan-to-dmz-app", "srcintf": [ { "name": "internal" } ], "dstintf": [ { "name": "dmz" } ], "srcaddr": [ { "name": "all" } ], "dstaddr": [ { "name": "lan-vip" } ], "service": [ { "name": "ALL" } ], "action": "accept", "status": "enable", "nat": "disable" },
+    { "policyid": 9, "name": "inbound-rdp-blocked", "srcintf": [ { "name": "wan1" } ], "dstintf": [ { "name": "internal" } ], "srcaddr": [ { "name": "all" } ], "dstaddr": [ { "name": "rdp-vip" } ], "service": [ { "name": "RDP" } ], "action": "deny", "status": "enable", "nat": "disable" },
+    { "policyid": 11, "name": "inbound-smtp", "srcintf": [ { "name": "wan1" } ], "dstintf": [ { "name": "dmz" } ], "srcaddr": [ { "name": "all" } ], "dstaddr": [ { "name": "dmz-mail" } ], "service": [ { "name": "SMTP" } ], "action": "accept", "status": "enable", "nat": "disable" },
+    { "policyid": 12, "name": "outbound", "srcintf": [ { "name": "internal" } ], "dstintf": [ { "name": "wan1" } ], "srcaddr": [ { "name": "all" } ], "dstaddr": [ { "name": "all" } ], "service": [ { "name": "ALL" } ], "action": "accept", "status": "enable", "nat": "enable" }
+  ],
+  "vdom": "root", "path": "firewall", "name": "policy", "status": "success", "http_status": 200,
+  "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517
+}

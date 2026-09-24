@@ -1,0 +1,1 @@
+{ "http_method": "GET", "revision": "1.0.0", "results": [], "vdom": "root", "path": "firewall", "name": "vipgrp", "status": "success", "http_status": 200, "serial": "FG100FTK20012345", "version": "v7.2.5", "build": 1517 }
