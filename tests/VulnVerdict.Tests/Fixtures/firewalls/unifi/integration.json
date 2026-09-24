@@ -1,0 +1,15 @@
+{
+  "_comment": "Official UniFi Network API (integration v1) responses on a UniFi OS console. Hand-written from the published API reference; ids, MACs and addresses are made up.",
+  "info": { "applicationVersion": "9.4.19" },
+  "sites": { "offset": 0, "limit": 200, "count": 1, "totalCount": 1, "data": [ { "id": "88f7af54-98f8-306a-a1c7-000000000001", "internalReference": "default", "name": "Default" } ] },
+  "devices-page1": { "offset": 0, "limit": 200, "count": 2, "totalCount": 3, "data": [
+    { "id": "d0000000-0000-4000-8000-000000000001", "name": "Cloud Gateway", "model": "UCG Max", "macAddress": "9C:05:D6:00:00:01", "ipAddress": "10.170.0.1", "state": "ONLINE", "features": ["switching", "gateway"], "interfaces": ["ports"] },
+    { "id": "d0000000-0000-4000-8000-000000000002", "name": "Loft AP", "model": "U7 Pro", "macAddress": "9C:05:D6:00:00:02", "ipAddress": "10.170.0.20", "state": "ONLINE", "features": ["accessPoint"], "interfaces": ["radios"] }
+  ] },
+  "devices-page2": { "offset": 2, "limit": 200, "count": 1, "totalCount": 3, "data": [
+    { "id": "d0000000-0000-4000-8000-000000000003", "name": "Desk switch", "model": "USW Flex Mini", "macAddress": "9C:05:D6:00:00:03", "ipAddress": "10.170.0.10", "state": "ONLINE", "features": ["switching"], "interfaces": ["ports"] }
+  ] },
+  "detail-d0000000-0000-4000-8000-000000000001": { "id": "d0000000-0000-4000-8000-000000000001", "name": "Cloud Gateway", "model": "UCG Max", "supported": true, "macAddress": "9C:05:D6:00:00:01", "ipAddress": "10.170.0.1", "state": "ONLINE", "firmwareVersion": "5.0.16", "firmwareUpdatable": true, "features": { "switching": {}, "gateway": {} } },
+  "detail-d0000000-0000-4000-8000-000000000002": { "id": "d0000000-0000-4000-8000-000000000002", "name": "Loft AP", "model": "U7 Pro", "supported": true, "macAddress": "9C:05:D6:00:00:02", "ipAddress": "10.170.0.20", "state": "ONLINE", "firmwareVersion": "8.0.24", "firmwareUpdatable": false, "features": { "accessPoint": {} } },
+  "detail-d0000000-0000-4000-8000-000000000003": { "id": "d0000000-0000-4000-8000-000000000003", "name": "Desk switch", "model": "USW Flex Mini", "supported": true, "macAddress": "9C:05:D6:00:00:03", "ipAddress": "10.170.0.10", "state": "ONLINE", "firmwareVersion": "2.1.6", "firmwareUpdatable": false, "features": { "switching": {} } }
+}
