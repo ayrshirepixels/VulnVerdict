@@ -24,6 +24,7 @@ public static class AdapterRegistry
         services.AddSingleton<IInventoryAdapter, Firewalls.SonicWallAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.MerakiMxAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.SophosFirewallAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.WatchGuardFireboxAdapter>();
         services.AddSingleton<IInventoryAdapter, VMware.VCenterAdapter>();
         services.AddSingleton<IInventoryAdapter, Linux.SshLinuxAdapter>();
         services.AddSingleton<IInventoryAdapter, Sbom.SbomUrlAdapter>();
