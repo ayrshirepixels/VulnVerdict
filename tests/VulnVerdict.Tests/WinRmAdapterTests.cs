@@ -121,8 +121,8 @@ public class WinRmAdapterTests
         Assert.Contains(asset.OsProduct, CnaOsNames);
         Assert.Equal("10.0.26200.9457", asset.OsBuild);
         Assert.Equal(asset.OsBuild, asset.OsVersion);
-        Assert.Contains("192.168.1.184", asset.IpAddresses);
-        Assert.Contains("10:ff:e0:83:a1:d4", asset.MacAddresses);
+        Assert.Contains("192.0.2.10", asset.IpAddresses);
+        Assert.Contains("00:11:22:33:44:55", asset.MacAddresses);
         Assert.Equal(AssetKind.Endpoint, asset.Kind); // ProductType WinNT: a workstation, not a server
 
         var os = Assert.Single(result.Software, s => s.Kind == SoftwareKind.OperatingSystem);
@@ -168,7 +168,7 @@ public class WinRmAdapterTests
         };
         var creds = new Dictionary<string, string>
         {
-            ["hosts"] = "srv1.example.local\nbad:5985\n192.168.1.184",
+            ["hosts"] = "srv1.example.local\nbad:5985\n192.0.2.10",
             ["username"] = "EXAMPLE\\svc-vulnverdict", ["password"] = "not-logged", ["transport"] = "winrm-http", ["authentication"] = "negotiate",
         };
         var progress = new List<string>();
@@ -176,7 +176,7 @@ public class WinRmAdapterTests
 
         Assert.True(result.Assets.Count == 2, "assets: " + result.Assets.Count + "; warnings: " + string.Join(" | ", result.Warnings));
         Assert.Contains(result.Assets, a => a.ExternalId == "srv1.example.local");
-        Assert.Contains(result.Assets, a => a.ExternalId == "192.168.1.184");
+        Assert.Contains(result.Assets, a => a.ExternalId == "192.0.2.10");
         Assert.Contains(result.Warnings, w => w.StartsWith("bad:5985: "));
         Assert.True(result.FullSnapshot);
         Assert.Equal(2, scripts.Count); // the "bad" host failed before a script could run
