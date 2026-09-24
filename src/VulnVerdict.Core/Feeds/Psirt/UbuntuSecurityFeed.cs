@@ -21,7 +21,7 @@ public sealed class UbuntuSecurityFeed : IFeed
     public const string Url = "https://ubuntu.com/security/cves.json";
     private static readonly HashSet<string> SkipStatus = new(StringComparer.OrdinalIgnoreCase) { "not-affected", "DNE" };
 
-    public int PageSize { get; init; } = 50;
+    public int PageSize { get; init; } = 20; // the API rejects anything above 20
     public int MaxRecords { get; init; } = 2000;
     public string Priorities { get; init; } = "critical,high,medium";
 

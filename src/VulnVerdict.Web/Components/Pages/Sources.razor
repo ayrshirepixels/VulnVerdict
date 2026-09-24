@@ -9,7 +9,7 @@
 
 <div class="page">
     <h1>Sources</h1>
-    <p class="lead">Feed health is a first-class item. Silence means nothing to do, never that the box died. Inventory connectors (endpoint management, WinRM, firewall, hypervisor, SSH, SBOM, SNMP, discovery) arrive in phase 3 and appear here.</p>
+    <p class="lead">Feed health is a first-class item. Silence means nothing to do, never that the box died. Public feeds and vendor advisories are listed here; the inventory sources live under <a href="/connectors">Connectors</a>.</p>
 
     <div class="card">
         <h2>Worker</h2>
@@ -46,7 +46,7 @@
             }
         </tbody>
     </table>
-    <p class="muted">Feeds not yet wired: NVD CPE backfill, OSV and GitHub advisories (SBOM matching, phase 3), vendor PSIRTs and GitHub PoC search (phase 4).</p>
+    <p class="muted">OSV is queried on demand for packages and SBOM components. Not wired: NVD CPE backfill (never on the critical path) and the GitHub PoC search (rate limited, low confidence).</p>
 </div>
 
 @code {

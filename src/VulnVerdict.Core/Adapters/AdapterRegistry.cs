@@ -26,7 +26,7 @@ public static class AdapterRegistry
         services.AddSingleton<IInventoryAdapter, Discovery.DiscoverySweepAdapter>();
         services.AddSingleton<IInventoryAdapter, External.ExternalCrossCheckAdapter>();
         services.AddSingleton<Sbom.SbomImportService>();
-        services.AddSingleton<IPackageVulnSource, Packages.OsvPackageVulnSource>();
+        services.AddSingleton<IPackageVulnSource>(sp => new Packages.OsvPackageVulnSource(sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Packages.OsvPackageVulnSource>>()));
 
         // vendor PSIRT advisories, section 7
         services.AddSingleton<IFeed, FortinetPsirtFeed>();
