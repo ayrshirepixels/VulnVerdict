@@ -10,10 +10,11 @@ public sealed class VerdictWorkflow
 {
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
+    private readonly WebhookService _webhooks;
 
-    public VerdictWorkflow(IDbContextFactory<VvDbContext> factory, SettingsService settings)
+    public VerdictWorkflow(IDbContextFactory<VvDbContext> factory, SettingsService settings, WebhookService webhooks)
     {
-        _factory = factory; _settings = settings;
+        _factory = factory; _settings = settings; _webhooks = webhooks;
     }
 
     public Task CloseAsync(Guid id, string actor, string reason, CancellationToken ct = default) =>
@@ -37,8 +38,10 @@ public sealed class VerdictWorkflow
         v.State = to; v.StateReason = reason; v.StateChangedAt = now; v.UpdatedAt = now;
         mutate(v);
         db.VerdictHistory.Add(new VerdictHistory { VerdictId = v.Id, At = now, Actor = actor, Kind = "state", From = from.ToString(), To = to.ToString(), Reason = reason });
-        db.Audit.Add(new AuditEntry { At = now, Actor = actor, Action = "verdict." + to.ToString().ToLowerInvariant(), Target = v.CveId + " / " + v.WatchlistEntryId, Before = from.ToString(), After = to.ToString() + ": " + reason });
+        db.Audit.Add(new AuditEntry { At = now, Actor = actor, Action = "verdict." + to.ToString().ToLowerInvariant(), Target = v.CveId + " / " + (v.WatchlistEntryId ?? v.SoftwareInstanceId), Before = from.ToString(), After = to.ToString() + ": " + reason });
         await db.SaveChangesAsync(ct);
+        // the web process closes tickets directly; deliver the webhook now rather than through the worker queue
+        if (to == VerdictState.Closed) await _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct);
     }
 
     // ------------------------------------------------------------------ suppression rules

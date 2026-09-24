@@ -23,11 +23,12 @@ public sealed class VerdictEvaluator
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
     private readonly IServiceProvider _sp;
+    private readonly WebhookService _webhooks;
     private readonly ILogger<VerdictEvaluator> _log;
 
-    public VerdictEvaluator(IDbContextFactory<VvDbContext> factory, SettingsService settings, IServiceProvider sp, ILogger<VerdictEvaluator> log)
+    public VerdictEvaluator(IDbContextFactory<VvDbContext> factory, SettingsService settings, IServiceProvider sp, WebhookService webhooks, ILogger<VerdictEvaluator> log)
     {
-        _factory = factory; _settings = settings; _sp = sp; _log = log;
+        _factory = factory; _settings = settings; _sp = sp; _webhooks = webhooks; _log = log;
     }
 
     public async Task<EvaluationSummary> EvaluateAllAsync(CancellationToken ct = default)
@@ -211,6 +212,7 @@ public sealed class VerdictEvaluator
             .ToListAsync(ct);
         controls = controls.Where(c => c.ProductNorm == null || c.ProductNorm == s.ProductNorm).ToList();
         var seen = new HashSet<string>();
+        var events = new List<(string Event, Guid VerdictId)>();
 
         foreach (var (cveId, productMatches) in byCve)
         {
@@ -223,12 +225,12 @@ public sealed class VerdictEvaluator
 
             if (existing.TryGetValue(cveId, out var v))
             {
-                if (Apply(v, computed, s, now, rules, settings)) changed++;
+                if (Apply(v, computed, s, now, rules, settings, events)) changed++;
             }
             else
             {
                 v = new Verdict { Id = Guid.NewGuid(), CveId = cveId, WatchlistEntryId = s.WatchlistEntryId, SoftwareInstanceId = s.SoftwareInstanceId, AssetId = s.AssetId, CreatedAt = now, State = VerdictState.Open };
-                Apply(v, computed, s, now, rules, settings, isNew: true);
+                Apply(v, computed, s, now, rules, settings, events, isNew: true);
                 if (cve is null) { db.Cves.Add(new Cve { Id = cveId, State = "PACKAGE", RetrievedAt = now, SourceRef = "osv", Title = cveId + " (from package advisory data)" }); cves[cveId] = new Cve { Id = cveId }; }
                 db.Verdicts.Add(v);
                 existing[cveId] = v;
@@ -241,6 +243,7 @@ public sealed class VerdictEvaluator
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
+        foreach (var (evt, id) in events) _webhooks.Enqueue(evt, id);
         return new EvaluationSummary(1, byCve.Count, created, changed, removed, TimeSpan.Zero);
     }
 
@@ -415,9 +418,10 @@ public sealed class VerdictEvaluator
     };
 
     /// <summary>Copy a computed result onto a verdict row. Returns true if the tier changed.</summary>
-    private static bool Apply(Verdict v, Computed c, Subject s, DateTime now, List<SuppressionRule> rules, AppSettings settings, bool isNew = false)
+    private static bool Apply(Verdict v, Computed c, Subject s, DateTime now, List<SuppressionRule> rules, AppSettings settings, List<(string Event, Guid VerdictId)> events, bool isNew = false)
     {
         var tierChanged = !isNew && v.Tier != c.Decision.Tier;
+        if (isNew && c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventCreated, v.Id));
         if (tierChanged)
         {
             var reason = c.InKev && !v.InKev ? "now in CISA KEV"
@@ -437,6 +441,7 @@ public sealed class VerdictEvaluator
             var promoted = c.Decision.Tier > v.Tier;
             if (promoted)
             {
+                if (c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventPromoted, v.Id));
                 if (c.Decision.Tier == VerdictTier.FixToday) v.ImmediateEmailSentAt = null;
                 if (c.Decision.Tier >= VerdictTier.FixThisWeek) v.TicketSentAt = null;
                 if (v.State is VerdictState.Snoozed or VerdictState.AcceptedRisk)
@@ -450,6 +455,7 @@ public sealed class VerdictEvaluator
             {
                 v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Open", To = "Closed", Reason = "patched, closed: fixed version observed (" + (s.Version ?? "?") + ")" });
                 v.State = VerdictState.Closed; v.StateReason = "fixed version observed: " + (s.Version ?? "?"); v.StateOwner = "system"; v.StateChangedAt = now;
+                events.Add((WebhookService.EventClosed, v.Id));
             }
         }
 

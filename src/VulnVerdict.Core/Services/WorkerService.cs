@@ -201,7 +201,8 @@ public sealed class WorkerService : BackgroundService
         var n = await digest.SendImmediateAsync(ct);
         if (n > 0) _log.LogInformation("Sent immediate Fix-today email for {Count} verdict(s)", n);
         var t = await digest.SendTicketsAsync(ct);
-        if (t > 0) _log.LogInformation("Raised {Count} ticket email(s)", t);
+        if (t > 0) _log.LogInformation("Raised {Count} ticket(s)", t);
+        await scope.ServiceProvider.GetRequiredService<WebhookService>().FlushPendingAsync(ct);
     }
 
     private async Task DailyDigestIfDueAsync(CancellationToken ct)

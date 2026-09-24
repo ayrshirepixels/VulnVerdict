@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VulnVerdict.Core.Data;
+using VulnVerdict.Core.Adapters;
 using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Core.Digest;
@@ -37,11 +38,12 @@ public sealed class DigestService
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
     private readonly EmailService _email;
+    private readonly ConnectorService _connectors;
     private readonly ILogger<DigestService> _log;
 
-    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ILogger<DigestService> log)
+    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ConnectorService connectors, ILogger<DigestService> log)
     {
-        _factory = factory; _settings = settings; _email = email; _log = log;
+        _factory = factory; _settings = settings; _email = email; _connectors = connectors; _log = log;
     }
 
     // ------------------------------------------------------------------ build
@@ -199,7 +201,9 @@ public sealed class DigestService
     public async Task<int> SendTicketsAsync(CancellationToken ct = default)
     {
         var s = await _settings.LoadAsync(ct);
-        if (!s.TicketsEnabled || !s.SmtpConfigured || string.IsNullOrWhiteSpace(s.HelpdeskIntakeAddress)) return 0;
+        if (!s.TicketsEnabled) return 0;
+        var useAdapter = Guid.TryParse(s.TicketChannel, out var connectorId);
+        if (!useAdapter && (!s.MailConfigured || string.IsNullOrWhiteSpace(s.HelpdeskIntakeAddress))) return 0;
         await using var db = await _factory.CreateDbContextAsync(ct);
         var pending = await db.Verdicts.Include(v => v.WatchlistEntry)
             .Where(v => v.State == VerdictState.Open && v.Tier >= VerdictTier.FixThisWeek && v.Confidence != MatchConfidence.Possible && v.TicketSentAt == null)
@@ -214,13 +218,24 @@ public sealed class DigestService
                        + "<p><a href=\"" + Link(s.BaseUrl, v.Id) + "\">Details and evidence</a></p>"
                        + "<p style=\"color:#666;font-size:12px\">Correlation key " + key + ". Raised automatically by VulnVerdict.</p></div>";
             var text = v.Sentence + "\n\nVerdict: " + v.Tier.Plain() + (v.SlaDue.HasValue ? ", due " + v.SlaDue.Value.ToString("d MMM yyyy") : "") + "\n" + Link(s.BaseUrl, v.Id) + "\n\nCorrelation key " + key;
+            string channel; string? externalRef;
             try
             {
-                await _email.SendAsync(new[] { s.HelpdeskIntakeAddress }, subject, html, text, ct, new[] { ("X-VulnVerdict-Key", key) });
+                if (useAdapter)
+                {
+                    var priority = v.Tier == VerdictTier.FixToday ? "highest" : "high";
+                    var result = await _connectors.CreateTicketAsync(connectorId, new TicketRequest(key, v.Tier.Plain() + ": " + v.CveId + " on " + (v.Subject.Length > 0 ? v.Subject : v.CveId), text, priority, Link(s.BaseUrl, v.Id), v.Tier, v.CveId), ct);
+                    channel = s.TicketChannel; externalRef = result.Url ?? result.ExternalRef;
+                }
+                else
+                {
+                    await _email.SendAsync(new[] { s.HelpdeskIntakeAddress }, subject, html, text, ct, new[] { ("X-VulnVerdict-Key", key) });
+                    channel = "email"; externalRef = s.HelpdeskIntakeAddress;
+                }
             }
-            catch (Exception ex) { _log.LogWarning(ex, "Ticket email not sent for {Cve}", v.CveId); break; }
+            catch (Exception ex) { _log.LogWarning(ex, "Ticket not raised for {Cve}", v.CveId); break; }
             v.TicketSentAt = DateTime.UtcNow;
-            db.Tickets.Add(new Ticket { Id = Guid.NewGuid(), VerdictId = v.Id, Channel = "email", CorrelationKey = key, ExternalRef = s.HelpdeskIntakeAddress, SentAt = DateTime.UtcNow, LastStatus = "sent" });
+            db.Tickets.Add(new Ticket { Id = Guid.NewGuid(), VerdictId = v.Id, Channel = channel, CorrelationKey = key, ExternalRef = externalRef is { Length: > 256 } ? externalRef[..256] : externalRef, SentAt = DateTime.UtcNow, LastStatus = "sent" });
             sent++;
         }
         await db.SaveChangesAsync(ct);

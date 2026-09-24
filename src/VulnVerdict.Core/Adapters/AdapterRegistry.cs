@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using VulnVerdict.Core.Adapters.Tickets;
+using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Core.Adapters;
 
@@ -10,7 +12,16 @@ public static class AdapterRegistry
 {
     public static void Register(IServiceCollection services)
     {
-        // inventory adapters (section 9.2 order) are registered by the phase 3 packages below
-        // ticket adapters (section 11.3) and package sources (section 9.2 step 6/7) likewise
+        // ticket channels (section 11.3)
+        services.AddSingleton<ITicketAdapter, JiraCloudAdapter>();
+        services.AddSingleton<ITicketAdapter, ServiceNowAdapter>();
+        services.AddSingleton<ITicketAdapter, FreshserviceAdapter>();
+        services.AddSingleton<ITicketAdapter, ZendeskAdapter>();
+        services.AddSingleton<ITicketAdapter, AzureDevOpsAdapter>();
+        services.AddSingleton<ITicketAdapter, HaloPsaAdapter>();
+        services.AddSingleton<ITicketAdapter, AutotaskAdapter>();
+
+        // webhooks (section 11.4)
+        services.AddSingleton<WebhookService>();
     }
 }
