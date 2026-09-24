@@ -22,6 +22,7 @@ public static class AdapterRegistry
         // other firewall families, same exposure model as the FortiGate
         services.AddSingleton<IInventoryAdapter, Firewalls.PanOsAdapter>();
         services.AddSingleton<IInventoryAdapter, Firewalls.SonicWallAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.MerakiMxAdapter>();
         services.AddSingleton<IInventoryAdapter, VMware.VCenterAdapter>();
         services.AddSingleton<IInventoryAdapter, Linux.SshLinuxAdapter>();
         services.AddSingleton<IInventoryAdapter, Sbom.SbomUrlAdapter>();

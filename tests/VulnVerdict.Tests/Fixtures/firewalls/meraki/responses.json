@@ -1,0 +1,55 @@
+{
+  "_comment": "Meraki Dashboard API v1 responses, hand-written from the published OpenAPI examples. Organisation, network ids and serials are made up; addresses are RFC 5737 / RFC 1918.",
+  "organizations": [
+    { "id": "500000", "name": "Example Estates Ltd", "url": "https://n1.meraki.com/o/xxxx/manage/organization/overview", "api": { "enabled": true } }
+  ],
+  "devices-page1": [
+    { "name": "HQ-MX", "serial": "Q2XX-AAAA-0001", "mac": "e0:55:3d:00:00:01", "networkId": "N_100", "model": "MX85", "productType": "appliance",
+      "lanIp": null, "firmware": "wired-18-211-2", "address": "", "tags": [], "notes": "" }
+  ],
+  "devices-page2": [
+    { "name": "Branch-Z", "serial": "Q2XX-BBBB-0002", "mac": "e0:55:3d:00:00:02", "networkId": "N_200", "model": "Z4", "productType": "appliance",
+      "lanIp": null, "firmware": "wired-19-1-4", "tags": [], "notes": "" },
+    { "name": null, "serial": "Q2XX-CCCC-0003", "mac": "e0:55:3d:00:00:03", "networkId": "N_100", "model": "MX85", "productType": "appliance",
+      "lanIp": null, "firmware": "Not running configured version", "tags": ["spare"], "notes": "warm spare" }
+  ],
+  "statuses": [
+    { "name": "HQ-MX", "serial": "Q2XX-AAAA-0001", "mac": "e0:55:3d:00:00:01", "publicIp": "203.0.113.30", "networkId": "N_100", "status": "online",
+      "lastReportedAt": "2026-09-22T09:00:00.000000Z", "productType": "appliance", "model": "MX85", "tags": [],
+      "usingCellularFailover": false, "wan1Ip": "203.0.113.30", "wan1Gateway": "203.0.113.29", "wan1IpType": "static", "wan2Ip": null, "lanIp": "10.60.0.1" },
+    { "name": "Branch-Z", "serial": "Q2XX-BBBB-0002", "mac": "e0:55:3d:00:00:02", "publicIp": "198.51.100.40", "networkId": "N_200", "status": "online",
+      "productType": "appliance", "model": "Z4", "wan1Ip": "192.168.1.20", "lanIp": "10.70.0.1" }
+  ],
+  "firewalledServices-N_100": [
+    { "service": "ICMP", "access": "unrestricted", "allowedIps": [] },
+    { "service": "web", "access": "unrestricted", "allowedIps": [] },
+    { "service": "SNMP", "access": "blocked", "allowedIps": [] }
+  ],
+  "firewalledServices-N_200": [
+    { "service": "ICMP", "access": "restricted", "allowedIps": ["198.51.100.0/24"] },
+    { "service": "web", "access": "restricted", "allowedIps": ["198.51.100.7"] },
+    { "service": "SNMP", "access": "blocked", "allowedIps": [] }
+  ],
+  "portForwardingRules-N_100": {
+    "rules": [
+      { "lanIp": "10.60.0.20", "allowedIps": ["any"], "name": "Web server", "protocol": "tcp", "publicPort": "443", "localPort": "443", "uplink": "internet1" },
+      { "lanIp": "10.60.0.21", "allowedIps": ["198.51.100.0/24"], "name": "RDP for supplier", "protocol": "tcp", "publicPort": "3390", "localPort": "3389", "uplink": "both" }
+    ]
+  },
+  "oneToOneNatRules-N_100": {
+    "rules": [
+      { "name": "Mail", "publicIp": "203.0.113.31", "lanIp": "10.60.0.25", "uplink": "internet1",
+        "allowedInbound": [ { "protocol": "tcp", "destinationPorts": ["25"], "allowedIps": ["any"] } ] },
+      { "name": "Outbound only", "publicIp": "203.0.113.32", "lanIp": "10.60.0.26", "uplink": "internet1", "allowedInbound": [] }
+    ]
+  },
+  "oneToManyNatRules-N_100": {
+    "rules": [
+      { "publicIp": "203.0.113.33", "uplink": "internet1",
+        "portRules": [ { "name": "VoIP", "protocol": "udp", "publicPort": "5060", "localIp": "10.60.0.40", "localPort": "5060", "allowedIps": ["any"] } ] }
+    ]
+  },
+  "portForwardingRules-N_200": { "rules": [] },
+  "oneToOneNatRules-N_200": { "rules": [] },
+  "oneToManyNatRules-N_200": { "rules": [] }
+}
