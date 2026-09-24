@@ -41,7 +41,14 @@ public sealed class WorkerService : BackgroundService
             try
             {
                 await HeartbeatAsync(ct);
-                var feedsRan = await RunDueFeedsAsync(ct);
+                // section 10.2: with a central bundle configured, the bundle replaces the public feeds
+                bool feedsRan;
+                using (var bundleScope = _sp.CreateScope())
+                {
+                    var bundles = bundleScope.ServiceProvider.GetRequiredService<BundleService>();
+                    var check = await bundles.CheckAndApplyAsync(ct);
+                    feedsRan = check.Outcome == BundleOutcome.Applied || (!bundles.BundleModeEnabled && await RunDueFeedsAsync(ct));
+                }
                 var connectorsRan = await RunDueConnectorsAsync(ct);
                 var evaluateRequested = await EvaluateRequestedAsync(ct);
                 if (feedsRan || connectorsRan || evaluateRequested || await EvaluationDueAsync(ct))
@@ -54,6 +61,11 @@ public sealed class WorkerService : BackgroundService
                 await DailyDigestIfDueAsync(ct);
                 await WeeklyReportIfDueAsync(ct);
                 await FeedHealthAlertAsync(ct);
+                using (var scope = _sp.CreateScope())
+                {
+                    await scope.ServiceProvider.GetRequiredService<TelemetryService>().SendIfDueAsync(ct);
+                    await scope.ServiceProvider.GetRequiredService<MspReportService>().SendIfDueAsync(ct);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
             catch (Exception ex)
@@ -156,8 +168,16 @@ public sealed class WorkerService : BackgroundService
         using var scope = _sp.CreateScope();
         var connectors = scope.ServiceProvider.GetRequiredService<ConnectorService>();
         var inventory = scope.ServiceProvider.GetRequiredService<InventoryService>();
+        var licence = scope.ServiceProvider.GetRequiredService<LicenseService>();
         var now = DateTime.UtcNow;
         var any = false;
+        // phase 5: a licensed console stops collecting new assets beyond its tier's cap (the banner explains; nothing is deleted)
+        if (!await licence.WithinAssetCapAsync(ct))
+        {
+            _log.LogWarning("Asset cap reached for this licence tier; connector runs paused");
+            await AdminAlertAsync(scope.ServiceProvider, "Asset cap reached", "The licence tier's asset cap has been reached. Connector collection is paused until assets are archived or the licence is upgraded.", ct);
+            return false;
+        }
         foreach (var c in await connectors.ListAsync(ct))
         {
             ct.ThrowIfCancellationRequested();

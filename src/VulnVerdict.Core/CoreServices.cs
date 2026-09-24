@@ -69,6 +69,11 @@ public static class CoreServices
         services.AddSingleton<LlmService>();
         services.AddSingleton<InventoryService>();
         services.AddSingleton<ConnectorService>();
+        // phase 5: signed bundles, licence, telemetry, MSP reporting
+        services.AddSingleton<BundleService>();
+        services.AddSingleton<LicenseService>();
+        services.AddSingleton<TelemetryService>();
+        services.AddSingleton<MspReportService>();
 
         services.AddSingleton<IFeed, KevFeed>();
         services.AddSingleton<IFeed, EpssFeed>();

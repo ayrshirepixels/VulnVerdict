@@ -3,6 +3,7 @@
 @inject VerdictWorkflow Workflow
 @inject SettingsService Settings
 @inject IDbContextFactory<VvDbContext> Db
+@inject LicenseService Licence
 
 <PageTitle>Today - VulnVerdict</PageTitle>
 
@@ -10,6 +11,10 @@
     <h1>Today</h1>
     <p class="lead">The digest, live. What to fix today, what to fix this week, what changed.</p>
 
+    @if (_licenceWarning is not null)
+    {
+        <div class="alert alert-warn">@_licenceWarning <a href="/licence">Licence and updates</a>.</div>
+    }
     @if (_workerDead)
     {
         <div class="alert alert-error"><b>The worker is not running.</b> Last heartbeat @Ui.Ago(_workerBeat). Feeds, verdicts and digests are not being updated.</div>
@@ -101,7 +106,7 @@
     private DigestContent? _d;
     private bool _workerDead, _feedsNeverRun, _watchlistEmpty, _busy;
     private DateTime? _workerBeat, _lastDigest;
-    private string? _notice, _error;
+    private string? _notice, _error, _licenceWarning;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -113,7 +118,16 @@
         var last = await Settings.GetStateAsync(SettingsService.Keys.LastDailyDigest);
         _lastDigest = last is not null && DateTime.TryParse(last, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : null;
         await using var db = await Db.CreateDbContextAsync();
-        _feedsNeverRun = !await db.FeedStatuses.AnyAsync(f => f.Name == "cvelist" && f.LastSuccess != null);
+        _feedsNeverRun = !await db.FeedStatuses.AnyAsync(f => f.Name == "cvelist" && f.LastSuccess != null) && !await db.Bundles.AnyAsync();
+        try
+        {
+            var lic = await Licence.GetAsync();
+            _licenceWarning = lic.Present && !lic.Valid ? "The licence key is not valid: " + lic.Reason + "."
+                : lic.Present && lic.Expires is { } exp && exp < DateTime.UtcNow.AddDays(14) ? "The licence expires on " + exp.ToString("d MMM yyyy") + "."
+                : lic.Present && lic.EnforcedCap && !await Licence.WithinAssetCapAsync() ? "The asset cap for the " + lic.Tier + " tier has been reached; connector collection is paused."
+                : null;
+        }
+        catch { _licenceWarning = null; }
         _watchlistEmpty = !await db.Watchlist.AnyAsync(w => w.Enabled);
     }
 
