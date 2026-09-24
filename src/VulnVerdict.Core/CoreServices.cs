@@ -112,9 +112,14 @@ public static class CoreServices
             }
         }
         if (db.Database.IsSqlite()) await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct);
-        if (!await db.Aliases.AnyAsync(ct))
+        // seed aliases added in a later release reach existing installs too; an alias already present (seeded, or
+        // decided in the needs-mapping queue) is never overwritten
+        var present = (await db.Aliases.AsNoTracking().Select(a => a.AliasNorm).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+        var missing = SeedAliases.Select(a => new ProductAlias { AliasNorm = Normalizer.Norm(a.Alias), VendorNorm = Normalizer.Norm(a.Vendor), ProductNorm = Normalizer.Norm(a.Product) })
+            .Where(a => a.AliasNorm.Length > 0 && present.Add(a.AliasNorm)).ToList();
+        if (missing.Count > 0)
         {
-            db.Aliases.AddRange(SeedAliases.Select(a => new ProductAlias { AliasNorm = Normalizer.Norm(a.Alias), VendorNorm = Normalizer.Norm(a.Vendor), ProductNorm = Normalizer.Norm(a.Product) }));
+            db.Aliases.AddRange(missing);
             await db.SaveChangesAsync(ct);
         }
     }
@@ -146,6 +151,26 @@ public static class CoreServices
         ("Cisco IOS XE", "Cisco", "Cisco IOS XE Software"),
         ("Palo Alto PAN-OS", "Palo Alto Networks", "PAN-OS"),
         ("SonicOS", "SonicWall", "SonicOS"),
+        // firewall families: the names people type on the watchlist, to the CNA spelling the adapters report
+        ("PAN-OS", "Palo Alto Networks", "PAN-OS"),
+        ("Palo Alto firewall", "Palo Alto Networks", "PAN-OS"),
+        ("SonicWall", "SonicWall", "SonicOS"),
+        ("SonicWall TZ", "SonicWall", "SonicOS"),
+        ("SonicWall NSa", "SonicWall", "SonicOS"),
+        ("Sophos XGS", "Sophos", "Sophos Firewall"),
+        ("Sophos XG Firewall", "Sophos", "Sophos Firewall"),
+        ("SFOS", "Sophos", "Sophos Firewall"),
+        ("WatchGuard Firebox", "WatchGuard", "Fireware OS"),
+        ("Fireware", "WatchGuard", "Fireware OS"),
+        ("Meraki MX", "Cisco", "Cisco Meraki MX Firmware"),
+        ("Cisco Meraki MX", "Cisco", "Cisco Meraki MX Firmware"),
+        ("Quantum Spark", "checkpoint", "Spark Firewalls"),
+        ("Check Point Spark", "checkpoint", "Spark Firewalls"),
+        ("Zyxel USG FLEX", "Zyxel", "USG FLEX series firmware"),
+        ("Zyxel ATP", "Zyxel", "ATP series firmware"),
+        ("UniFi OS", "Ubiquiti Inc", "UniFi OS"),
+        ("UniFi Dream Machine Pro", "Ubiquiti Inc", "UDM-Pro"),
+        ("UDM Pro", "Ubiquiti Inc", "UDM-Pro"),
         ("GlobalProtect", "Palo Alto Networks", "GlobalProtect App"),
         ("Ivanti Connect Secure", "Ivanti", "Connect Secure"),
         ("Citrix NetScaler", "Citrix", "NetScaler ADC"),
