@@ -124,7 +124,7 @@
             var lic = await Licence.GetAsync();
             _licenceWarning = lic.Present && !lic.Valid ? "The licence key is not valid: " + lic.Reason + "."
                 : lic.Present && lic.Expires is { } exp && exp < DateTime.UtcNow.AddDays(14) ? "The licence expires on " + exp.ToString("d MMM yyyy") + "."
-                : lic.Present && lic.EnforcedCap && !await Licence.WithinAssetCapAsync() ? "The asset cap for the " + lic.Tier + " tier has been reached; connector collection is paused."
+                : lic.Present && lic.EnforcedCap is not null && !await Licence.WithinAssetCapAsync() ? "The asset cap for the " + lic.Tier + " tier has been reached; connector collection is paused."
                 : null;
         }
         catch { _licenceWarning = null; }
