@@ -1,0 +1,51 @@
+{
+  "advisories": [
+    {
+      "advisoryId": "cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN",
+      "advisoryTitle": "Cisco Adaptive Security Appliance and Firepower Threat Defense Software Remote Access SSL VPN Denial of Service Vulnerability",
+      "bugIDs": ["CSCwh12345"],
+      "ipsSignatures": ["NA"],
+      "cves": ["CVE-2024-20353"],
+      "cvrfUrl": "https://sec.cloudapps.cisco.com/security/center/contentxml/CiscoSecurityAdvisory/cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN/cvrf/cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN_cvrf.xml",
+      "csafUrl": "https://sec.cloudapps.cisco.com/security/center/contentjson/CiscoSecurityAdvisory/cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN/csaf/cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN.json",
+      "cvssBaseScore": "8.6",
+      "cwe": ["CWE-835"],
+      "firstPublished": "2024-04-24T16:00:00.000+0000",
+      "lastUpdated": "2024-05-01T15:33:21.000+0000",
+      "productNames": ["Cisco Adaptive Security Appliance (ASA) Software", "Cisco Firepower Threat Defense (FTD) Software"],
+      "publicationUrl": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-asaftd-ssl-vpn-dos-qY7BHpjN",
+      "sir": "High",
+      "status": "Final",
+      "summary": "<p>A vulnerability in the management and VPN web servers for Cisco ASA Software and Cisco FTD Software could allow an unauthenticated, remote attacker to cause the device to reload unexpectedly. Cisco Talos is aware of attempted exploitation of this vulnerability in the wild.</p>",
+      "version": "1.1"
+    },
+    {
+      "advisoryId": "cisco-sa-iosxe-webui-privesc-j22SaA4z",
+      "advisoryTitle": "Multiple Vulnerabilities in Cisco IOS XE Software Web UI Feature",
+      "bugIDs": ["CSCwh87343"],
+      "cves": ["CVE-2023-20198", "CVE-2023-20273"],
+      "cvssBaseScore": "10.0",
+      "cwe": ["CWE-420"],
+      "firstPublished": "2023-10-16T16:00:00.000+0000",
+      "lastUpdated": "2023-11-01T15:00:00.000+0000",
+      "productNames": ["Cisco IOS XE Software"],
+      "publicationUrl": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-iosxe-webui-privesc-j22SaA4z",
+      "sir": "Critical",
+      "status": "Final",
+      "summary": "<p>Cisco is aware of active exploitation of a previously unknown vulnerability in the web UI feature of Cisco IOS XE Software.</p>",
+      "fixedSoftware": "17.9.4a, 17.6.6a, 17.3.8a, 16.12.10a",
+      "version": "1.5"
+    },
+    {
+      "advisoryId": "cisco-sa-example-nofix",
+      "advisoryTitle": "Example advisory without exploitation statement",
+      "cves": [],
+      "firstPublished": "2024-01-10T16:00:00.000+0000",
+      "lastUpdated": "2024-01-10T16:00:00.000+0000",
+      "productNames": ["Cisco Example Product"],
+      "publicationUrl": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-example-nofix",
+      "sir": "Medium",
+      "summary": "<p>No CVE assigned; kept for shape only.</p>"
+    }
+  ]
+}
