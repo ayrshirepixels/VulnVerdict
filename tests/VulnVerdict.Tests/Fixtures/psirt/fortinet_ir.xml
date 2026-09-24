@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>FortiGuard Labs | FortiGuard Center - IR Advisories</title><link>https://fortiguard.fortinet.com/rss/ir.xml</link><description>The following is a list of advisories for issues resolved in Fortinet products. The resolution of such issues is coordinated by the Fortinet Product Security Incident Response Team (PSIRT), a dedicated, global team that manages the receipt, investigation, and public reporting of information about security vulnerabilities and issues related to Fortinet products and services.</description><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><lastBuildDate>Thu, 24 Sep 2026 00:00:08 +0000</lastBuildDate><pubDate>Thu, 24 Sep 2026 00:00:08 -0700</pubDate><item><title>Arbitrary process termination from exposed minifilter communication port</title><link>https://fortiguard.fortinet.com/psirt/FG-IR-26-165</link><description><![CDATA[<p>
+ <strong>
+  CVSSv3 Score:
+ </strong>
+ 4.7
+</p>
+<p>
+ An Unverified Ownership Vulnerability [CWE-283] in FortiClient Windows fortimon3 driver may allow an authenticated attacker to terminate arbitrary processes via an exposed minifilter communication port.
+</p>
+<p>
+ <em>
+  Revised on 2026-09-08 00:00:00
+ </em>
+</p>
+]]></description><guid isPermaLink="true">https://fortiguard.fortinet.com/psirt/FG-IR-26-165</guid><pubDate>Tue, 08 Sep 2026 00:00:00 -0700</pubDate></item><item><title>Broken Access control on Websocket streams</title><link>https://fortiguard.fortinet.com/psirt/FG-IR-26-164</link><description><![CDATA[<p>
+ <strong>
+  CVSSv3 Score:
+ </strong>
+ 4.9
+</p>
+<p>
+ An Improper Access control vulnerability [CWE-284] in FortiSOAR may allow an authenticated attacker with zero permissions to subscribe to websocket streams and topics and to inject broadcast messages to the stream via crafted websocket requests
+</p>
+<p>
+ <em>
+  Revised on 2026-09-08 00:00:00
+ </em>
+</p>
+]]></description><guid isPermaLink="true">https://fortiguard.fortinet.com/psirt/FG-IR-26-164</guid><pubDate>Tue, 08 Sep 2026 00:00:00 -0700</pubDate></item><item><title>Cron Job Injection in Remote Backup</title><link>https://fortiguard.fortinet.com/psirt/FG-IR-26-167</link><description><![CDATA[<p>
+ <strong>
+  CVSSv3 Score:
+ </strong>
+ 6.7
+</p>
+<p>
+ An Improper Neutralization of Special Elements used in a Command ('Command Injection') vulnerability [CWE-77] in FortiSandbox may allow a privileged attacker to execute unauthorized code or commands via crafted HTTP requests.
+</p>
+<p>
+ <em>
+  Revised on 2026-09-08 00:00:00
+ </em>
+</p>
+]]></description><guid isPermaLink="true">https://fortiguard.fortinet.com/psirt/FG-IR-26-167</guid><pubDate>Tue, 08 Sep 2026 00:00:00 -0700</pubDate></item></channel></rss>

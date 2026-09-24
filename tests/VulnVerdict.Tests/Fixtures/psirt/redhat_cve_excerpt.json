@@ -1,0 +1,61 @@
+[
+  {
+    "CVE": "CVE-2026-84679",
+    "severity": "important",
+    "public_date": "2026-09-23T18:44:27Z",
+    "advisories": [
+      "RHSA-2026:71113"
+    ],
+    "bugzilla": "2527123",
+    "bugzilla_description": "automation-controller: automation-controller-container: automation-controller: the AWX_TASK_ENV setting applies arbitrary environment variables to the control-plane web and task processes, enabling TLS interception of external credentials and code execution",
+    "cvss_score": null,
+    "cvss_scoring_vector": null,
+    "CWE": "CWE-15",
+    "affected_packages": [
+      "automation-controller-0:4.7.17-1.el9ap"
+    ],
+    "package_state": null,
+    "resource_url": "https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2026-84679.json",
+    "cvss3_scoring_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:N",
+    "cvss3_score": "8.7"
+  },
+  {
+    "CVE": "CVE-2026-75884",
+    "severity": "critical",
+    "public_date": "2026-09-23T00:00:00Z",
+    "advisories": [
+      "RHSA-2026:71113",
+      "RHSA-2026:71115"
+    ],
+    "bugzilla": "2517893",
+    "bugzilla_description": "awx: awx: Privilege escalation to OpenShift namespace via pod_spec_override injection in container groups",
+    "cvss_score": null,
+    "cvss_scoring_vector": null,
+    "CWE": "CWE-184",
+    "affected_packages": [
+      "automation-controller-0:4.5.36-1.el8ap",
+      "automation-controller-0:4.5.36-1.el9ap",
+      "automation-controller-0:4.7.17-1.el9ap"
+    ],
+    "package_state": null,
+    "resource_url": "https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2026-75884.json",
+    "cvss3_scoring_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H",
+    "cvss3_score": "9.1"
+  },
+  {
+    "CVE": "CVE-2026-59980",
+    "severity": "important",
+    "public_date": "2026-09-23T22:07:35Z",
+    "advisories": [],
+    "bugzilla": "2539827",
+    "bugzilla_description": "hpack: golang.org/x/net/http2/hpack: hpack: Denial of Service via malformed HTTP/2 header encoding",
+    "cvss_score": null,
+    "cvss_scoring_vector": null,
+    "CWE": "CWE-770",
+    "affected_packages": [],
+    "package_state": null,
+    "resource_url": "https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2026-59980.json",
+    "cvss3_scoring_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+    "cvss3_score": "7.5"
+  }
+]

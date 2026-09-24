@@ -1,0 +1,37 @@
+{
+  "success": true,
+  "data": {
+    "list": [
+      {
+        "affectedCve": "CVE-2026-59346, CVE-2026-59347",
+        "alertType": "S",
+        "documentId": "VCDSA38288",
+        "notificationId": 38288,
+        "notificationUrl": "https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/38288",
+        "published": "03 September 2026",
+        "severity": "CRITICAL",
+        "status": "OPEN",
+        "supportProducts": "VMware Fusion,VMware Work...",
+        "title": "VMSA-2026-0007: VMware Workstation and Fusion updates address integer-overflow and buffer overflow vulnerabilities (CVE-2026-59346, CVE-2026-59347)",
+        "totalRecords": null,
+        "updated": "2026-09-03T08:58:26.960422",
+        "workAround": "None"
+      },
+      {
+        "affectedCve": "CVE-2026-59309, CVE-2026-59310, CVE-2026-47876, CVE-2026-41703, CVE-2026-41709",
+        "alertType": "S",
+        "documentId": "VCDSA38017",
+        "notificationId": 38017,
+        "notificationUrl": "https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/38017",
+        "published": "29 July 2026",
+        "severity": "CRITICAL",
+        "status": "OPEN",
+        "supportProducts": "VMware Cloud Foundation,V...",
+        "title": "VMSA-2026-0006.1: VMware ESX, vCenter, Workstation, and Fusion updates address multiple vulnerabilities (CVE-2026-59309, CVE-2026-59310, CVE-2026-47876, CVE-2026-41703, CVE-2026-41709)",
+        "totalRecords": null,
+        "updated": "2026-08-19T09:26:23.635729",
+        "workAround": "None"
+      }
+    ]
+  }
+}

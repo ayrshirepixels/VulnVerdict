@@ -1,0 +1,127 @@
+{
+  "cves": [
+    {
+      "id": "CVE-2026-64123",
+      "published": "2026-07-20T00:00:00",
+      "updated_at": "2026-09-24T01:07:06.265583+01:00",
+      "description": "\nIn the Linux kernel, the following vulnerability has been resolved:\nnet: hsr: defer node table free until after RCU readers\nHSR node-list and node-status generic-netlink operations run under\nrcu_read",
+      "priority": "high",
+      "status": "active",
+      "cvss3": 7.8,
+      "notices_ids": [
+        "USN-8593-1",
+        "USN-8603-1",
+        "USN-8618-1",
+        "USN-8663-1",
+        "USN-8664-1",
+        "USN-8728-1",
+        "USN-8728-2"
+      ],
+      "packages": [
+        {
+          "name": "linux",
+          "source": "https://ubuntu.com/security/cve?package=linux",
+          "ubuntu": "https://packages.ubuntu.com/search?suite=all&section=all&arch=any&searchon=sourcenames&keywords=linux",
+          "debian": "https://tracker.debian.org/pkg/linux",
+          "statuses": [
+            {
+              "release_codename": "bionic",
+              "status": "not-affected",
+              "description": "4.13.0-16.19",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "focal",
+              "status": "needed",
+              "description": "",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "resolute",
+              "status": "released",
+              "description": "7.0.0-28.28",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "trusty",
+              "status": "not-affected",
+              "description": "3.11.0-12.19",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "upstream",
+              "status": "released",
+              "description": "7.1~rc5, 6.8.y, 6.17.y, 7.0.11",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "xenial",
+              "status": "not-affected",
+              "description": "4.4.0-2.16",
+              "component": null,
+              "pocket": "security"
+            }
+          ]
+        },
+        {
+          "name": "linux-hwe",
+          "source": "https://ubuntu.com/security/cve?package=linux-hwe",
+          "ubuntu": "https://packages.ubuntu.com/search?suite=all&section=all&arch=any&searchon=sourcenames&keywords=linux-hwe",
+          "debian": "https://tracker.debian.org/pkg/linux-hwe",
+          "statuses": [
+            {
+              "release_codename": "jammy",
+              "status": "DNE",
+              "description": "",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "noble",
+              "status": "DNE",
+              "description": "",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "resolute",
+              "status": "DNE",
+              "description": "",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "bionic",
+              "status": "ignored",
+              "description": "end of standard support",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "upstream",
+              "status": "released",
+              "description": "7.1~rc5, 6.8.y, 6.17.y, 7.0.11",
+              "component": null,
+              "pocket": "security"
+            },
+            {
+              "release_codename": "xenial",
+              "status": "not-affected",
+              "description": "4.8.0-39.42~16.04.1",
+              "component": null,
+              "pocket": "security"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "offset": 0,
+  "total_results": 1914
+}
