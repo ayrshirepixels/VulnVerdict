@@ -19,6 +19,17 @@ public static class AdapterRegistry
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiClientEmsAdapter>();
         services.AddSingleton<IInventoryAdapter, Windows.WinRmAdapter>();
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiGateAdapter>();
+        // other firewall families, same exposure model as the FortiGate
+        services.AddSingleton<IInventoryAdapter, Firewalls.PanOsAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.SonicWallAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.MerakiMxAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.SophosFirewallAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.WatchGuardFireboxAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.CheckPointSparkAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.ZyxelFirewallAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.UniFiGatewayAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.PfSenseAdapter>();
+        services.AddSingleton<IInventoryAdapter, Firewalls.OpnSenseAdapter>();
         services.AddSingleton<IInventoryAdapter, VMware.VCenterAdapter>();
         services.AddSingleton<IInventoryAdapter, Linux.SshLinuxAdapter>();
         services.AddSingleton<IInventoryAdapter, Sbom.SbomUrlAdapter>();

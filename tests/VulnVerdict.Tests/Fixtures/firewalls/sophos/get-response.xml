@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sophos Firewall XML API answer to a Get of Zone, Interface, NATRule, IPHost and AdminSettings. Hand-written from
+     the SFOS 21.0 API reference; addresses are RFC 5737 / RFC 1918. -->
+<Response APIVersion="2100.1" IPS_CAT_VER="1">
+  <Login>
+    <status>Authentication Successful</status>
+  </Login>
+  <Zone transactionid="">
+    <Name>LAN</Name>
+    <Type>LAN</Type>
+    <ApplianceAccess>
+      <AdminServices><HTTPS>Enable</HTTPS><SSH>Enable</SSH></AdminServices>
+      <AuthenticationServices><ClientAuthentication>Enable</ClientAuthentication><CaptivePortal>Enable</CaptivePortal></AuthenticationServices>
+      <NetworkServices><DNS>Enable</DNS><Ping>Enable</Ping></NetworkServices>
+      <VPNServices><SSLVPN>Enable</SSLVPN></VPNServices>
+      <OtherServices><UserPortal>Enable</UserPortal></OtherServices>
+    </ApplianceAccess>
+  </Zone>
+  <Zone transactionid="">
+    <Name>WAN</Name>
+    <Type>WAN</Type>
+    <ApplianceAccess>
+      <AdminServices><HTTPS>Enable</HTTPS><SSH>Disable</SSH></AdminServices>
+      <NetworkServices><Ping>Enable</Ping></NetworkServices>
+      <VPNServices><IPsec>Enable</IPsec><SSLVPN>Enable</SSLVPN><VPNPortal>Enable</VPNPortal></VPNServices>
+      <OtherServices><UserPortal>Disable</UserPortal></OtherServices>
+    </ApplianceAccess>
+  </Zone>
+  <Zone transactionid="">
+    <Name>DMZ</Name>
+    <Type>DMZ</Type>
+    <ApplianceAccess>
+      <NetworkServices><Ping>Enable</Ping></NetworkServices>
+    </ApplianceAccess>
+  </Zone>
+  <Interface transactionid="">
+    <IPv4Configuration>Enable</IPv4Configuration>
+    <Hardware>Port1</Hardware>
+    <Name>Port1</Name>
+    <NetworkZone>LAN</NetworkZone>
+    <IPv4Assignment>Static</IPv4Assignment>
+    <IPAddress>10.80.0.1</IPAddress>
+    <Netmask>255.255.255.0</Netmask>
+    <MACAddress>7c:5a:1c:00:00:01</MACAddress>
+  </Interface>
+  <Interface transactionid="">
+    <IPv4Configuration>Enable</IPv4Configuration>
+    <Hardware>Port2</Hardware>
+    <Name>Port2</Name>
+    <NetworkZone>WAN</NetworkZone>
+    <IPv4Assignment>Static</IPv4Assignment>
+    <IPAddress>203.0.113.50</IPAddress>
+    <Netmask>255.255.255.240</Netmask>
+    <MACAddress>7c:5a:1c:00:00:02</MACAddress>
+  </Interface>
+  <Interface transactionid="">
+    <Hardware>Port3</Hardware>
+    <Name>Port3</Name>
+    <NetworkZone>DMZ</NetworkZone>
+    <IPAddress>10.90.0.1</IPAddress>
+    <Netmask>255.255.255.0</Netmask>
+  </Interface>
+  <NATRule transactionid="">
+    <Name>DNAT web to webserver</Name>
+    <Description>Created by the server access assistant</Description>
+    <IPFamily>IPv4</IPFamily>
+    <Status>Enable</Status>
+    <OriginalSourceNetworks />
+    <TranslatedSource>Original</TranslatedSource>
+    <OriginalDestinationNetworks><Network>#Port2</Network></OriginalDestinationNetworks>
+    <TranslatedDestination>web01</TranslatedDestination>
+    <OriginalServices><Service>HTTPS</Service></OriginalServices>
+    <TranslatedService>Original</TranslatedService>
+    <InboundInterfaces><Interface>Any</Interface></InboundInterfaces>
+    <OutboundInterfaces />
+  </NATRule>
+  <NATRule transactionid="">
+    <Name>DNAT mail</Name>
+    <IPFamily>IPv4</IPFamily>
+    <Status>Enable</Status>
+    <OriginalDestinationNetworks><Network>mail-public</Network></OriginalDestinationNetworks>
+    <TranslatedDestination>10.90.0.25</TranslatedDestination>
+    <OriginalServices><Service>SMTP</Service></OriginalServices>
+    <TranslatedService>Original</TranslatedService>
+    <InboundInterfaces><Interface>Port2</Interface></InboundInterfaces>
+  </NATRule>
+  <NATRule transactionid="">
+    <Name>DNAT rdp (retired)</Name>
+    <IPFamily>IPv4</IPFamily>
+    <Status>Disable</Status>
+    <OriginalDestinationNetworks><Network>#Port2</Network></OriginalDestinationNetworks>
+    <TranslatedDestination>rdp01</TranslatedDestination>
+    <OriginalServices><Service>RDP</Service></OriginalServices>
+    <InboundInterfaces><Interface>Any</Interface></InboundInterfaces>
+  </NATRule>
+  <NATRule transactionid="">
+    <Name>LAN to internal app</Name>
+    <IPFamily>IPv4</IPFamily>
+    <Status>Enable</Status>
+    <OriginalDestinationNetworks><Network>app-vip</Network></OriginalDestinationNetworks>
+    <TranslatedDestination>10.90.0.30</TranslatedDestination>
+    <InboundInterfaces><Interface>Port1</Interface></InboundInterfaces>
+  </NATRule>
+  <NATRule transactionid="">
+    <Name>Default SNAT IPv4</Name>
+    <IPFamily>IPv4</IPFamily>
+    <Status>Enable</Status>
+    <TranslatedSource>MASQ</TranslatedSource>
+    <TranslatedDestination>Original</TranslatedDestination>
+    <InboundInterfaces />
+  </NATRule>
+  <IPHost transactionid="">
+    <Name>web01</Name><IPFamily>IPv4</IPFamily><HostType>IP</HostType><IPAddress>10.90.0.20</IPAddress>
+  </IPHost>
+  <IPHost transactionid="">
+    <Name>rdp01</Name><IPFamily>IPv4</IPFamily><HostType>IP</HostType><IPAddress>10.90.0.21</IPAddress>
+  </IPHost>
+  <IPHost transactionid="">
+    <Name>mail-public</Name><IPFamily>IPv4</IPFamily><HostType>IP</HostType><IPAddress>203.0.113.51</IPAddress>
+  </IPHost>
+  <IPHost transactionid="">
+    <Name>app-vip</Name><IPFamily>IPv4</IPFamily><HostType>IP</HostType><IPAddress>10.80.0.200</IPAddress>
+  </IPHost>
+  <AdminSettings transactionid="">
+    <HostnameSettings>
+      <HostName>xgs-edge-01.example.test</HostName>
+      <HostNameDesc>Head office</HostNameDesc>
+    </HostnameSettings>
+    <WebAdminSettings>
+      <Certificate>ApplianceCertificate</Certificate>
+      <HTTPSport>4444</HTTPSport>
+      <UserPortalHTTPSPort>443</UserPortalHTTPSPort>
+      <VPNPortalHTTPSPort>443</VPNPortalHTTPSPort>
+      <PortalRedirectMode>ip</PortalRedirectMode>
+    </WebAdminSettings>
+  </AdminSettings>
+</Response>

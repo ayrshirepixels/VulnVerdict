@@ -1,0 +1,23 @@
+Current system info
+-----------------------------------
+Current image name: R81_996002945_10_17
+Current image version: 996002945
+Previous image name: R81_996002860_10_15
+Previous image version: 996002860
+Default image name: R80_992002641_20_35
+Default image version: 992002641
+Bootloader version: 5.3.1
+HW version : 1.0
+Serial number : 0000EXAMPLE01
+HW MAC Address: 00:1C:7F:00:00:01
+LAN MAC Address: 00:1C:7F:00:00:02
+Unit version: 1
+Unit model: V0
+Marketing capabilities: 0
+Hardware capabilities: 2 - Wireless
+RTC status: OK
+Voltage 3V3: 3.3484V - OK (valid: 3.1500V ~ 3.4500V)
+CPU Temperature: 47.0000C - OK (valid: 0.0000C ~ 82.0000C)
+Branding file: N/A
+Preset File installed: no
+-----------------------------------

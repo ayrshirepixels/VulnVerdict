@@ -16,6 +16,16 @@ public class VersionTests
     [InlineData("2.1.0-rc1", "2.1.0-beta2", 1)]
     [InlineData("16.0.1", "16.0.1 (build 1234)", 0)]
     [InlineData("1.2.3", "1.2.3.1", -1)]
+    // hotfix, maintenance-release and patch tags come after the bare version, unlike pre-release tags
+    [InlineData("11.1.5", "11.1.5-h1", -1)]        // PAN-OS (CVE-2024-0012 fixed in 11.1.5-h1)
+    [InlineData("11.1.5-h1", "11.1.5-h10", -1)]
+    [InlineData("11.1.5-h1", "11.1.5", 1)]
+    [InlineData("21.0", "21.0 MR1 (21.0.1)", -1)]  // Sophos
+    [InlineData("21.0 GA", "21.0 MR1", -1)]
+    [InlineData("5.21", "5.21-patch1", -1)]        // Zyxel
+    [InlineData("5.21 Patch 1", "5.21-patch1", 0)]
+    [InlineData("8.9p1", "8.9", 1)]                // OpenSSH
+    [InlineData("7.1.1-7058", "7.1.2-7019", -1)]   // SonicOS
     public void Compares_dotted_versions(string a, string b, int expectedSign)
     {
         var c = VersionCompare.Compare(a, b);
@@ -98,11 +108,34 @@ public class VersionTests
     [InlineData("< 7.2.8", "7.2.8", VersionMatch.NotAffected)]
     [InlineData("7.2.7 and earlier", "7.2.7", VersionMatch.Affected)]
     [InlineData("prior to 2.0", "1.9", VersionMatch.Affected)]
+    // SonicWall: CVE-2024-40766, CVE-2024-53704
+    [InlineData("7.1.1-7058 and older versions", "7.1.1-7058", VersionMatch.Affected)]
+    [InlineData("7.1.1-7058 and older versions", "7.1.1-7040", VersionMatch.Affected)]
+    [InlineData("7.1.1-7058 and older versions", "7.1.2-7019", VersionMatch.NotAffected)]
+    [InlineData("6.5.4.14-109n and older versions", "6.5.4.4-44v", VersionMatch.Affected)]
+    // Zyxel: CVE-2024-11667, CVE-2025-9133, CVE-2022-30525, CVE-2025-1732
+    [InlineData("versions V5.00 through V5.38", "5.38", VersionMatch.Affected)]
+    [InlineData("versions V5.00 through V5.38", "5.39", VersionMatch.NotAffected)]
+    [InlineData("versions from V4.32 through V5.40", "4.60", VersionMatch.Affected)]
+    [InlineData("5.00 through 5.21 Patch 1", "5.21 Patch 1", VersionMatch.Affected)]
+    [InlineData("5.00 through 5.21 Patch 1", "5.21", VersionMatch.Affected)]
+    [InlineData("5.00 through 5.21 Patch 1", "5.21 Patch 2", VersionMatch.NotAffected)]
+    [InlineData("<= V1.31", "1.31", VersionMatch.Affected)]
     public void Lenient_text_ranges_are_likely_matches(string text, string installed, VersionMatch expected)
     {
         var r = VersionMatcher.Evaluate(installed, V((text, "affected", null, null)), null);
         Assert.Equal(expected, r.Match);
         if (expected == VersionMatch.Affected) Assert.Equal(MatchConfidence.Likely, r.Confidence);
+    }
+
+    [Fact]
+    public void Pan_os_hotfix_ranges_catch_the_unpatched_release()
+    {
+        // CVE-2024-0012: 11.1.0 < 11.1.5-h1 is affected; 11.1.5 without the hotfix must be caught
+        var versions = V(("11.1.0", "affected", "11.1.5-h1", null));
+        Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate("11.1.5", versions, "unaffected").Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("11.1.5-h1", versions, "unaffected").Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("11.1.6", versions, "unaffected").Match);
     }
 
     [Fact]

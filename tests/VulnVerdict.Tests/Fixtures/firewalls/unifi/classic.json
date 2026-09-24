@@ -1,0 +1,38 @@
+{
+  "_comment": "UniFi Network application responses on a UniFi OS console (paths under /proxy/network/), as the web interface's own API returns them. Hand-written; MACs, serials and addresses are made up (RFC 5737 / RFC 1918).",
+  "api/self/sites": {
+    "meta": { "rc": "ok" },
+    "data": [ { "_id": "5f0000000000000000000001", "name": "default", "desc": "Default", "role": "readonly" } ]
+  },
+  "api/s/default/stat/sysinfo": {
+    "meta": { "rc": "ok" },
+    "data": [ { "timezone": "Europe/London", "version": "9.4.19", "build": "atag_9.4.19_12345", "hostname": "UDM-Pro-Office", "name": "UniFi Network" } ]
+  },
+  "api/s/default/stat/device": {
+    "meta": { "rc": "ok" },
+    "data": [
+      { "_id": "6a0000000000000000000001", "mac": "74:ac:b9:00:00:01", "ip": "203.0.113.90", "model": "UDMPRO", "type": "udm", "version": "4.3.6.28111",
+        "name": "UDM-Pro-Office", "serial": "74ACB9000001", "adopted": true, "state": 1,
+        "wan1": { "ip": "203.0.113.90", "name": "wan", "up": true }, "config_network": { "type": "dhcp", "ip": "" } },
+      { "_id": "6a0000000000000000000002", "mac": "74:ac:b9:00:00:02", "ip": "10.150.0.10", "model": "USL24P", "type": "usw", "version": "7.1.26.15869",
+        "name": "Switch 24 PoE", "adopted": true, "state": 1 },
+      { "_id": "6a0000000000000000000003", "mac": "74:ac:b9:00:00:03", "ip": "10.150.0.20", "model": "U6PRO", "type": "uap", "version": "6.7.31.15618",
+        "name": "AP Reception", "adopted": true, "state": 1 }
+    ]
+  },
+  "api/s/default/rest/portforward": {
+    "meta": { "rc": "ok" },
+    "data": [
+      { "_id": "6b0000000000000000000001", "name": "NAS web", "enabled": true, "src": "any", "dst_port": "5001", "fwd": "10.150.0.30", "fwd_port": "5001", "proto": "tcp", "pfwd_interface": "wan", "log": false },
+      { "_id": "6b0000000000000000000002", "name": "Old CCTV", "enabled": false, "src": "any", "dst_port": "8000", "fwd": "10.150.0.31", "fwd_port": "80", "proto": "tcp_udp", "pfwd_interface": "wan" }
+    ]
+  },
+  "api/s/default/rest/networkconf": {
+    "meta": { "rc": "ok" },
+    "data": [
+      { "_id": "6c0000000000000000000001", "name": "Default", "purpose": "corporate", "enabled": true, "ip_subnet": "10.150.0.1/24" },
+      { "_id": "6c0000000000000000000002", "name": "Staff VPN", "purpose": "remote-user-vpn", "vpn_type": "wireguard-server", "enabled": true, "wireguard_local_wan_port": 51820, "ip_subnet": "10.160.0.1/24" },
+      { "_id": "6c0000000000000000000003", "name": "Legacy L2TP", "purpose": "remote-user-vpn", "vpn_type": "l2tp-server", "enabled": false }
+    ]
+  }
+}

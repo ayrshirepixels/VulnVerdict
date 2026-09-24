@@ -1,0 +1,52 @@
+virtual server: Web_HTTPS
+   Index: 1
+   active: yes
+   interface: wan1
+   NAT-loopback active: yes
+   NAT 1-1: no
+   original IP: 203.0.113.100
+   mapped IP: 192.168.10.20
+   mapping type: port
+   protocol type: tcp
+   original service:
+   mapped service:
+   original start port: 443
+   original end port:
+   mapped start port: 443
+   mapped end port:
+virtual server: Old_RDP
+   Index: 2
+   active: no
+   interface: wan1
+   NAT-loopback active: no
+   NAT 1-1: no
+   original IP: 203.0.113.100
+   mapped IP: 192.168.10.21
+   mapping type: port
+   protocol type: tcp
+   original start port: 3389
+   mapped start port: 3389
+virtual server: Lab_Range
+   Index: 3
+   active: yes
+   interface: lan2
+   NAT-loopback active: no
+   NAT 1-1: no
+   original IP: 192.168.20.1
+   mapped IP: 192.168.10.30
+   mapping type: ports
+   protocol type: tcp
+   original start port: 8000
+   original end port: 8010
+   mapped start port: 8000
+   mapped end port: 8010
+virtual server: Mail_1to1
+   Index: 4
+   active: yes
+   interface: wan1_ppp
+   NAT-loopback active: yes
+   NAT 1-1: yes
+   original IP: 203.0.113.101
+   mapped IP: 192.168.10.25
+   mapping type: any
+   protocol type:

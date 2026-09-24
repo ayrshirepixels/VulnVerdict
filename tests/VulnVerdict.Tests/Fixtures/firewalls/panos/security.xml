@@ -1,0 +1,33 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <rules>
+      <entry name="allow-web-in">
+        <from><member>untrust</member></from>
+        <to><member>dmz</member></to>
+        <source><member>any</member></source>
+        <destination><member>web-public</member></destination>
+        <application><member>ssl</member><member>web-browsing</member></application>
+        <service><member>application-default</member></service>
+        <action>allow</action>
+      </entry>
+      <entry name="block-rdp-in">
+        <from><member>untrust</member></from>
+        <to><member>dmz</member></to>
+        <source><member>any</member></source>
+        <destination><member>rdp-public</member></destination>
+        <application><member>any</member></application>
+        <service><member>any</member></service>
+        <action>deny</action>
+      </entry>
+      <entry name="lan-out">
+        <from><member>trust</member></from>
+        <to><member>untrust</member></to>
+        <source><member>lan-net</member></source>
+        <destination><member>any</member></destination>
+        <application><member>any</member></application>
+        <service><member>application-default</member></service>
+        <action>allow</action>
+      </entry>
+    </rules>
+  </result>
+</response>

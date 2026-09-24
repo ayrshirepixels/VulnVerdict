@@ -1,0 +1,15 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <interface-management-profile>
+      <entry name="allow-https-ssh">
+        <https>yes</https>
+        <ssh>yes</ssh>
+        <ping>yes</ping>
+        <http>no</http>
+      </entry>
+      <entry name="ping-only">
+        <ping>yes</ping>
+      </entry>
+    </interface-management-profile>
+  </result>
+</response>

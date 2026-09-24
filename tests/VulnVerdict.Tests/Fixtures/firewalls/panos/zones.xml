@@ -1,0 +1,29 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <zone>
+      <entry name="untrust">
+        <network>
+          <layer3>
+            <member>ethernet1/1</member>
+            <member>loopback.1</member>
+          </layer3>
+        </network>
+      </entry>
+      <entry name="trust">
+        <network>
+          <layer3>
+            <member>ethernet1/2</member>
+            <member>ethernet1/2.20</member>
+          </layer3>
+        </network>
+      </entry>
+      <entry name="dmz">
+        <network>
+          <layer3>
+            <member>ethernet1/3</member>
+          </layer3>
+        </network>
+      </entry>
+    </zone>
+  </result>
+</response>

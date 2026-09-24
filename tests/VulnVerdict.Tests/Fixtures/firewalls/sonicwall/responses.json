@@ -1,0 +1,78 @@
+{
+  "_comment": "SonicOS 7 API responses keyed by path under /api/sonicos. Hand-written from the SonicOS 7.0.1 OpenAPI schema; addresses are RFC 5737 / RFC 1918 and the serial is made up.",
+  "version": {
+    "firmware_version": "SonicOS 7.1.1-7058",
+    "rom_version": "SonicROM 7.0.0.9",
+    "safemode_version": "SafeMode 7.0.0.2",
+    "serial_number": "2CB8ED0A0001",
+    "model": "TZ 370",
+    "system_time": "09/22/2026 09:14:03.000",
+    "system_uptime": "41 Days, 03:02:11",
+    "last_modified_by": "admin 192.0.2.50 GUI 09/01/2026 10:00:00.000"
+  },
+  "administration/global": {
+    "administration": {
+      "firewall_name": "SW-EDGE-01",
+      "auto_append_suffix": false,
+      "admin": { "name": "admin" },
+      "idle_logout_time": 5,
+      "ssh": { "port": 22 },
+      "http_port": 80,
+      "https_port": 8443
+    }
+  },
+  "interfaces/ipv4": {
+    "interfaces": [
+      { "ipv4": { "name": "X0", "ip_assignment": { "zone": "LAN", "mode": { "static": { "ip": "10.40.0.1", "netmask": "255.255.255.0" } } },
+        "management": { "http": false, "https": true, "ping": true, "snmp": false, "ssh": true }, "user_login": { "http": false, "https": false } } },
+      { "ipv4": { "name": "X1", "ip_assignment": { "zone": "WAN", "mode": { "static": { "ip": "198.51.100.2", "netmask": "255.255.255.248", "gateway": "198.51.100.1" } } },
+        "management": { "http": false, "https": true, "ping": true, "snmp": false, "ssh": false }, "user_login": { "http": false, "https": true } } },
+      { "ipv4": { "name": "X2", "ip_assignment": { "zone": "DMZ", "mode": { "static": { "ip": "10.50.0.1", "netmask": "255.255.255.0" } } },
+        "management": { "http": false, "https": false, "ping": true, "snmp": false, "ssh": false } } },
+      { "ipv4": { "name": "X3", "ip_assignment": { "zone": "WAN", "mode": { "dhcp": { "hostname": "" } } },
+        "management": { "http": false, "https": false, "ping": true, "snmp": false, "ssh": false } } }
+    ]
+  },
+  "zones": {
+    "zones": [
+      { "name": "LAN", "security_type": "trusted", "interface_trust": true },
+      { "name": "WAN", "security_type": "untrusted", "interface_trust": false },
+      { "name": "DMZ", "security_type": "public", "interface_trust": false },
+      { "name": "SSLVPN", "security_type": "sslvpn", "interface_trust": false }
+    ]
+  },
+  "ssl-vpn/server/base": {
+    "ssl_vpn": { "server": { "port": 4433, "user_domain": "LocalDomain", "management": { "web": false, "ssh": false }, "session_timeout": 10 } }
+  },
+  "ssl-vpn/server/accesses": {
+    "ssl_vpn": { "server": { "access": [ { "zone": "LAN", "enable": false }, { "zone": "WAN", "enable": true }, { "zone": "DMZ", "enable": false } ] } }
+  },
+  "address-objects/ipv4": {
+    "address_objects": [
+      { "ipv4": { "name": "web-server", "zone": "DMZ", "host": { "ip": "10.50.0.20" } } },
+      { "ipv4": { "name": "mail-server", "zone": "DMZ", "host": { "ip": "10.50.0.25" } } },
+      { "ipv4": { "name": "X1 IP", "zone": "WAN", "host": { "ip": "198.51.100.2" } } },
+      { "ipv4": { "name": "dmz-net", "zone": "DMZ", "network": { "subnet": "10.50.0.0", "mask": "255.255.255.0" } } }
+    ]
+  },
+  "nat-policies/ipv4": {
+    "nat_policies": [
+      { "ipv4": { "name": "web inbound", "enable": true, "inbound": "X1", "outbound": "any",
+        "source": { "any": true }, "translated_source": { "original": true },
+        "destination": { "name": "X1 IP" }, "translated_destination": { "name": "web-server" },
+        "service": { "name": "HTTPS" }, "translated_service": { "original": true } } },
+      { "ipv4": { "name": "mail inbound (old)", "enable": false, "inbound": "X1", "outbound": "any",
+        "source": { "any": true }, "translated_source": { "original": true },
+        "destination": { "name": "X1 IP" }, "translated_destination": { "name": "mail-server" },
+        "service": { "name": "SMTP" }, "translated_service": { "original": true } } },
+      { "ipv4": { "name": "web reflexive", "enable": true, "inbound": "X0", "outbound": "any",
+        "source": { "any": true }, "translated_source": { "original": true },
+        "destination": { "name": "X1 IP" }, "translated_destination": { "name": "web-server" },
+        "service": { "name": "HTTPS" }, "translated_service": { "original": true } } },
+      { "ipv4": { "name": "outbound masquerade", "enable": true, "inbound": "X0", "outbound": "X1",
+        "source": { "any": true }, "translated_source": { "name": "X1 IP" },
+        "destination": { "any": true }, "translated_destination": { "original": true },
+        "service": { "any": true }, "translated_service": { "original": true } } }
+    ]
+  }
+}

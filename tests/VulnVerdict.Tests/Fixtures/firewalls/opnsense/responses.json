@@ -1,0 +1,46 @@
+{
+  "_comment": "OPNsense REST API responses keyed by path, hand-written from the OPNsense core controllers and models (25.7 field names). Addresses are RFC 5737 / RFC 1918.",
+  "api/diagnostics/system/system_information": {
+    "name": "opn-edge-01.example.test",
+    "versions": ["OPNsense 25.7.3_1-amd64", "FreeBSD 14.3-RELEASE-p2", "OpenSSL 3.0.17 1 Jul 2025"],
+    "updates": "Click to check for updates."
+  },
+  "api/interfaces/overview/interfaces_info": {
+    "total": 3, "rowCount": 3, "current": 1,
+    "rows": [
+      { "identifier": "wan", "description": "WAN", "device": "igc0", "status": "up", "macaddr": "00:0d:b9:00:00:01", "addr4": "203.0.113.70/28", "gateway": ["203.0.113.65"] },
+      { "identifier": "lan", "description": "LAN", "device": "igc1", "status": "up", "macaddr": "00:0d:b9:00:00:02", "addr4": "10.100.0.1/24" },
+      { "identifier": "opt1", "description": "DMZ", "device": "igc2", "status": "up", "macaddr": "00:0d:b9:00:00:03", "addr4": "10.110.0.1/24" }
+    ]
+  },
+  "api/firewall/filter/search_rule": {
+    "total": 4, "rowCount": 4, "current": 1,
+    "rows": [
+      { "uuid": "0b6f5c1e-0000-4000-8000-000000000001", "enabled": "1", "action": "pass", "direction": "in", "interface": "wan", "protocol": "UDP",
+        "source_net": "any", "destination_net": "wanip", "destination_port": "51820", "description": "WireGuard" },
+      { "uuid": "0b6f5c1e-0000-4000-8000-000000000002", "enabled": "0", "action": "pass", "direction": "in", "interface": "wan", "protocol": "TCP",
+        "source_net": "any", "destination_net": "(self)", "destination_port": "443", "description": "GUI from anywhere (disabled)" },
+      { "uuid": "0b6f5c1e-0000-4000-8000-000000000003", "enabled": "1", "action": "pass", "direction": "in", "interface": "lan", "protocol": "TCP",
+        "source_net": "lan", "destination_net": "(self)", "destination_port": "443", "description": "GUI from LAN" },
+      { "uuid": "0b6f5c1e-0000-4000-8000-000000000004", "enabled": "1", "action": "pass", "direction": "in", "interface": "wan", "protocol": "TCP",
+        "source_net": "any", "destination_net": "10.110.0.20", "destination_port": "443", "description": "web server (rule for the port forward)" }
+    ]
+  },
+  "api/firewall/d_nat/search_rule": {
+    "total": 3, "rowCount": 3, "current": 1,
+    "rows": [
+      { "uuid": "5d1e0000-0000-4000-8000-000000000001", "disabled": "0", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "tcp",
+        "source.network": "any", "destination.network": "wanip", "destination.port": "443", "target": "10.110.0.20", "local-port": "443", "descr": "web server" },
+      { "uuid": "5d1e0000-0000-4000-8000-000000000002", "disabled": "1", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "tcp",
+        "source.network": "any", "destination.network": "wanip", "destination.port": "3389", "target": "10.110.0.21", "local-port": "3389", "descr": "old rdp" },
+      { "uuid": "5d1e0000-0000-4000-8000-000000000003", "disabled": "0", "nordr": "0", "interface": "lan", "ipprotocol": "inet", "protocol": "tcp",
+        "source.network": "lan", "destination.network": "10.100.0.53", "destination.port": "53", "target": "10.110.0.53", "local-port": "53", "descr": "dns redirect" }
+    ]
+  },
+  "api/firewall/one_to_one/search_rule": {
+    "total": 1, "rowCount": 1, "current": 1,
+    "rows": [
+      { "uuid": "1e1e0000-0000-4000-8000-000000000001", "enabled": "1", "interface": "wan", "type": "binat", "external": "203.0.113.71", "source_net": "10.110.0.25", "destination_net": "any", "description": "mail" }
+    ]
+  }
+}

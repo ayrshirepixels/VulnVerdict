@@ -46,6 +46,13 @@ public static partial class VersionCompare
         return list;
     }
 
+    /// <summary>
+    /// Tags that mark a release after the bare version: PAN-OS hotfixes ("11.1.5-h1"), Sophos maintenance releases
+    /// ("21.0 MR1"), Zyxel and OpenSSH patches ("5.21 Patch 1", "8.9p1"), service packs and updates.
+    /// "11.1.5" is older than "11.1.5-h1", where "2.1.0" is newer than "2.1.0-beta".
+    /// </summary>
+    private static bool IsPostRelease(string t) => t is "h" or "hf" or "hotfix" or "p" or "patch" or "mr" or "sp" or "u" or "update";
+
     private static int PreReleaseRank(string t) => t switch
     {
         "alpha" or "a" => 1,
@@ -68,12 +75,13 @@ public static partial class VersionCompare
             if (!ha && !hb) break;
             if (!ha)
             {
-                // a ended; b has more. "1.2" vs "1.2.0" equal, "1.2" vs "1.2-beta" a is greater, "1.2" vs "1.2.1" a is less
-                return sb[i].numeric ? (sb.Skip(i).All(s => s.numeric && s.num == 0) ? 0 : -1) : 1;
+                // a ended; b has more. "1.2" vs "1.2.0" equal, "1.2" vs "1.2-beta" a is greater, "1.2" vs "1.2.1" a is less,
+                // "1.2" vs "1.2-h1" (a hotfix or patch of it) a is less
+                return sb[i].numeric ? (sb.Skip(i).All(s => s.numeric && s.num == 0) ? 0 : -1) : IsPostRelease(sb[i].text) ? -1 : 1;
             }
             if (!hb)
             {
-                return sa[i].numeric ? (sa.Skip(i).All(s => s.numeric && s.num == 0) ? 0 : 1) : -1;
+                return sa[i].numeric ? (sa.Skip(i).All(s => s.numeric && s.num == 0) ? 0 : 1) : IsPostRelease(sa[i].text) ? 1 : -1;
             }
             var x = sa[i];
             var y = sb[i];
@@ -123,13 +131,24 @@ public static partial class VersionMatcher
     private static partial Regex RangeAtoB();
     [GeneratedRegex(@"^\s*(?:<|<=|prior to|before|earlier than|up to|through|below)\s*(?<b>[\w.\-]+)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex LessThanText();
-    [GeneratedRegex(@"^\s*(?<b>[\w.\-]+)\s*(?:and (?:earlier|prior|below)|or (?:earlier|prior|lower)|and before)\s*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^\s*(?<b>[\w.\-]+)\s*(?:and (?:earlier|prior|below|older)|or (?:earlier|prior|lower|older)|and before)(?:\s+versions?)?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex AndEarlierText();
+    [GeneratedRegex(@"^\s*(?:all\s+)?versions?\s+", RegexOptions.IgnoreCase)]
+    private static partial Regex LeadingVersionsWord();
+    [GeneratedRegex(@"\s+patch\s*(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex PatchSuffix();
+
+    /// <summary>
+    /// Wording some CNAs wrap around version text: "versions V5.00 through V5.38" (Zyxel), "5.21 Patch 1" (Zyxel),
+    /// "7.1.1-7058 and older versions" (SonicWall). The leading "versions" goes, "Patch 1" becomes "-patch1" so the
+    /// range forms below can read it, and the comparator treats "patch" as later than the bare version.
+    /// </summary>
+    public static string NormaliseText(string ver) => PatchSuffix().Replace(LeadingVersionsWord().Replace(ver, ""), "-patch$1").Trim();
     [GeneratedRegex(@"^\s*(?:>=|from)\s*(?<a>[\w.\-]+)\s*(?:,|and|to)?\s*(?:<|<=|to|through|before|up to)?\s*(?<b>[\w.\-]+)?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex GreaterEqText();
 
     private static bool IsWild(string? s) => s is null || Wildcards.Contains(s.Trim().ToLowerInvariant());
-    private static bool Inclusive(string s) => Regex.IsMatch(s, @"<=|through|thru|up to|and earlier|and prior|or earlier|or prior|or lower|and below", RegexOptions.IgnoreCase);
+    private static bool Inclusive(string s) => Regex.IsMatch(s, @"<=|through|thru|up to|and earlier|and prior|or earlier|or prior|or lower|and below|and older|or older", RegexOptions.IgnoreCase);
 
     private sealed record Range(string? From, string? To, bool ToInclusive, bool Affected, MatchConfidence Confidence, string Text);
 
@@ -177,6 +196,13 @@ public static partial class VersionMatcher
         }
 
         // lenient text forms produced by some CNAs
+        var original = ver;
+        ver = NormaliseText(ver);
+        if (ver != original && VersionCompare.IsParseable(ver) && !ver.Contains(' ') && !ver.Contains('<') && !ver.Contains('>'))
+        {
+            yield return new Range(ver, ver, true, affected, MatchConfidence.Likely, original);
+            yield break;
+        }
         Match m;
         if ((m = RangeAtoB().Match(ver)).Success && VersionCompare.IsParseable(m.Groups["a"].Value) && VersionCompare.IsParseable(m.Groups["b"].Value))
         { yield return new Range(m.Groups["a"].Value, m.Groups["b"].Value, true, affected, MatchConfidence.Likely, ver); yield break; }
