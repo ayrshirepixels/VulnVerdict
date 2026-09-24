@@ -65,6 +65,7 @@ public static class CoreServices
         services.AddSingleton<VerdictWorkflow>();
         services.AddSingleton<WatchlistService>();
         services.AddSingleton<DigestService>();
+        services.AddSingleton<ReportService>();
         services.AddSingleton<LlmService>();
         services.AddSingleton<InventoryService>();
         services.AddSingleton<ConnectorService>();

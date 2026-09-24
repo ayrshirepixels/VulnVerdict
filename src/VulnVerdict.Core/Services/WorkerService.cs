@@ -52,6 +52,7 @@ public sealed class WorkerService : BackgroundService
                 }
                 await NotifyAsync(ct);
                 await DailyDigestIfDueAsync(ct);
+                await WeeklyReportIfDueAsync(ct);
                 await FeedHealthAlertAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
@@ -230,6 +231,13 @@ public sealed class WorkerService : BackgroundService
             await settingsSvc.SetStateAsync(SettingsService.Keys.LastDailyDigest, DateTime.UtcNow.ToString("O"), ct);
             await AdminAlertAsync(scope.ServiceProvider, "Daily digest could not be sent", run.Error ?? "unknown error", ct);
         }
+    }
+
+    private async Task WeeklyReportIfDueAsync(CancellationToken ct)
+    {
+        using var scope = _sp.CreateScope();
+        var sent = await scope.ServiceProvider.GetRequiredService<Digest.ReportService>().SendIfDueAsync(ct);
+        if (sent) _log.LogInformation("Weekly management report sent");
     }
 
     /// <summary>Section 7: a feed more than 24 hours stale triggers the administrator alert (at most once a day).</summary>

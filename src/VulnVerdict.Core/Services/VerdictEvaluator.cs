@@ -182,6 +182,29 @@ public sealed class VerdictEvaluator
                 (signals.TryGetValue(sig.CveId, out var l) ? l : signals[sig.CveId] = new()).Add(sig);
         }
 
+        // vendor PSIRT advisories that mention any candidate CVE (section 7): evidence, and "exploited in the wild" = Active
+        var advisories = new Dictionary<string, List<Advisory>>(StringComparer.OrdinalIgnoreCase);
+        var vendorKey = AdvisoryVendor(s);
+        if (ids.Count > 0 && vendorKey is not null)
+        {
+            var rows = new List<Advisory>();
+            if (vendorKey is "microsoft" or "ubuntu" or "redhat")
+            {
+                foreach (var chunk in ids.Chunk(400))
+                    rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey && chunk.Contains(a.AdvisoryId)).ToListAsync(ct));
+            }
+            else if (vendorKey == "debian")
+            {
+                var suffix = ":" + s.Product;
+                rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == "debian" && a.AdvisoryId.EndsWith(suffix)).ToListAsync(ct));
+            }
+            else rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey).ToListAsync(ct));
+            var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+            foreach (var a in rows)
+                foreach (var id in Normalizer.ExtractCveIds(a.CveIdsJson).Distinct())
+                    if (idSet.Contains(id)) (advisories.TryGetValue(id, out var l) ? l : advisories[id] = new()).Add(a);
+        }
+
         var rules = await db.Suppressions.AsNoTracking().ToListAsync(ct);
         var controls = await db.Controls.AsNoTracking()
             .Where(c => (c.Expiry == null || c.Expiry > now) && ((s.AssetId != null && c.AssetId == s.AssetId) || (s.WatchlistEntryId != null && c.WatchlistEntryId == s.WatchlistEntryId)))
@@ -196,7 +219,7 @@ public sealed class VerdictEvaluator
             if (cve is null && productMatches.All(m => m.Package is null)) continue;
             seen.Add(cveId);
 
-            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, now);
+            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now);
 
             if (existing.TryGetValue(cveId, out var v))
             {
@@ -223,7 +246,21 @@ public sealed class VerdictEvaluator
 
     private sealed record Computed(DecisionInputs Inputs, Decision Decision, MatchConfidence Confidence, bool VersionUnknown, string Sentence, string? FixedIn, List<EvidenceClaim> Evidence, double? Epss, bool InKev, CvssVector? Cvss, List<string> Modifiers);
 
-    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, DateTime now)
+    /// <summary>Which PSIRT feed speaks for this subject's vendor, if any.</summary>
+    private static string? AdvisoryVendor(Subject s)
+    {
+        var v = s.VendorNorm; var eco = s.Ecosystem ?? "";
+        if (eco.StartsWith("Ubuntu", StringComparison.OrdinalIgnoreCase)) return "ubuntu";
+        if (eco.StartsWith("Debian", StringComparison.OrdinalIgnoreCase)) return "debian";
+        if (eco.StartsWith("Red Hat", StringComparison.OrdinalIgnoreCase) || eco.StartsWith("RedHat", StringComparison.OrdinalIgnoreCase) || eco.StartsWith("AlmaLinux", StringComparison.OrdinalIgnoreCase) || eco.StartsWith("Rocky", StringComparison.OrdinalIgnoreCase)) return "redhat";
+        if (v.StartsWith("microsoft")) return "microsoft";
+        if (v.Contains("fortinet")) return "fortinet";
+        if (v.Contains("cisco")) return "cisco";
+        if (v.Contains("vmware") || v.Contains("broadcom")) return "vmware";
+        return null;
+    }
+
+    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now)
     {
         var ev = new List<EvidenceClaim>();
         var retrieved = cve?.RetrievedAt ?? now;
@@ -274,6 +311,35 @@ public sealed class VerdictEvaluator
             exploitation = Exploitation.Active;
             ev.Add(new EvidenceClaim("CISA Vulnrichment SSVC Exploitation: active", "CISA ADP container in CVE List V5", retrieved));
         }
+        // vendor advisories (section 7): the vendor's own affected/fixed statement and "exploited in the wild"
+        foreach (var adv in advisories.OrderByDescending(a => a.Updated ?? a.Published).Take(2))
+        {
+            string? fixText = null;
+            try
+            {
+                if (adv.AffectedJson is not null)
+                {
+                    using var doc = JsonDocument.Parse(adv.AffectedJson);
+                    foreach (var item in doc.RootElement.EnumerateArray())
+                    {
+                        var product = item.TryGetProperty("product", out var p) ? p.GetString() ?? "" : "";
+                        var pn = Normalizer.Norm(product);
+                        if (pn.Length > 0 && (pn.Contains(s.ProductNorm) || s.ProductNorm.Contains(pn)))
+                        {
+                            var aff = item.TryGetProperty("affected", out var af) ? af.GetString() : null;
+                            var fix = item.TryGetProperty("fixedIn", out var fi) ? fi.GetString() : null;
+                            fixText = (string.IsNullOrWhiteSpace(aff) ? "" : "affected " + aff + "; ") + (string.IsNullOrWhiteSpace(fix) ? "" : "fixed in " + fix);
+                            if (fixedIn is null && !string.IsNullOrWhiteSpace(fix)) fixedIn = fix;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (JsonException) { }
+            ev.Add(new EvidenceClaim("Vendor advisory " + adv.AdvisoryId + (adv.Title is null ? "" : ": " + adv.Title) + (fixText is null ? "" : " (" + fixText.TrimEnd(';', ' ') + ")") + (adv.ExploitedInTheWild ? "; the vendor states it is exploited in the wild" : ""), adv.Url ?? adv.Vendor + " PSIRT", adv.RetrievedAt));
+            if (adv.ExploitedInTheWild && exploitation == Exploitation.None) exploitation = Exploitation.Active;
+        }
+
         if (exploitation == Exploitation.None)
         {
             foreach (var sig in signals.Take(4))

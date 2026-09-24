@@ -1,0 +1,20 @@
+#cloud-config
+# Ubuntu autoinstall for the VulnVerdict appliance image (used by build.pkr.hcl; served over HTTP to the installer).
+autoinstall:
+  version: 1
+  locale: en_GB.UTF-8
+  keyboard: { layout: gb }
+  identity:
+    hostname: vulnverdict
+    username: vulnverdict
+    # "vulnverdict", changed by the first-boot wizard
+    password: "$6$vvsalt$cT19l1mBXxLTzhGEH1idDeDNRqzaBv5cY86WKdJhCVoKqL/jMGa0LkUrfwTB5oeu3zSE4RmeteoBhCMuweqXO/"
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout: { name: lvm }
+  packages: [qemu-guest-agent, open-vm-tools]
+  late-commands:
+    - echo 'vulnverdict ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/vulnverdict
+    - chmod 440 /target/etc/sudoers.d/vulnverdict

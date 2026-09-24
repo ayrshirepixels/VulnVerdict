@@ -1,0 +1,40 @@
+@page "/reports"
+@inject ReportService ReportSvc
+@inject SettingsService Settings
+
+<PageTitle>Reports - VulnVerdict</PageTitle>
+
+<div class="page">
+    <h1>Weekly management report</h1>
+    <p class="lead">For the person who asks "are we affected by the thing on the news, and what are we doing about it". New, affecting us, actioned, overdue, dismissed. Emailed every @_day to the report recipients set under Settings; printable and downloadable here.</p>
+
+    @if (_r is null) { <p class="muted">Building...</p> }
+    else
+    {
+        <div class="stat-row">
+            <div class="stat"><b>@_r.NewCves.ToString("N0")</b><span>CVEs published this week</span></div>
+            <div class="stat"><b>@_r.NewMatched</b><span>matched something we run</span></div>
+            <div class="stat today"><b>@_r.NewActionable</b><span>needed action</span></div>
+            <div class="stat saved"><b>@_r.Actioned</b><span>done this week</span></div>
+            <div class="stat week"><b>@_r.OpenActionable</b><span>open, needing action</span></div>
+            <div class="stat" style="@(_r.Overdue > 0 ? "border-top:3px solid var(--amber)" : "")"><b>@_r.Overdue</b><span>overdue</span></div>
+            <div class="stat saved"><b>@_r.Dismissed</b><span>dismissed as noise</span></div>
+        </div>
+        <div class="btn-row" style="margin-bottom:16px">
+            <a class="btn btn-secondary" href="/reports/weekly.html" target="_blank">Open printable report</a>
+            <a class="btn btn-secondary" href="/reports/weekly.csv">Download CSV</a>
+            <a class="btn btn-secondary" href="/reports/weekly.html?weeks=1" target="_blank">Last week's report</a>
+        </div>
+        <iframe class="digest-frame" src="/reports/weekly.html" title="Weekly report"></iframe>
+    }
+</div>
+
+@code {
+    private ReportService.WeeklyReport? _r;
+    private string _day = "Monday";
+    protected override async Task OnInitializedAsync()
+    {
+        _day = (await Settings.LoadAsync()).ReportDay;
+        _r = await ReportSvc.BuildAsync();
+    }
+}

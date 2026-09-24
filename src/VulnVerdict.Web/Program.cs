@@ -181,6 +181,12 @@ api.MapGet("/verdicts/{id:guid}", async (Guid id, VvDbContext db) =>
     var v = await db.Verdicts.AsNoTracking().Include(x => x.WatchlistEntry).Include(x => x.History).FirstOrDefaultAsync(x => x.Id == id);
     return v is null ? Results.NotFound() : Results.Ok(new { v.Id, v.CveId, Verdict = v.Tier.ToString(), v.RuleNumber, v.Sentence, Evidence = System.Text.Json.JsonDocument.Parse(v.EvidenceJson).RootElement, v.History });
 });
+api.MapGet("/assets", async (VvDbContext db) => Results.Ok(await db.Assets.AsNoTracking().Include(a => a.Sources).Where(a => !a.Archived).OrderBy(a => a.DisplayName).Take(5000).Select(a => new
+{
+    a.Id, a.DisplayName, Kind = a.Kind.ToString(), Hostnames = a.HostnamesJson, IpAddresses = a.IpAddressesJson, a.OsProduct, a.OsVersion,
+    Exposure = a.Exposure.ToString(), a.ExposureEvidence, Criticality = a.Criticality.ToString(), a.Unknown, a.FirstSeen, a.LastSeen,
+    Sources = a.Sources.Select(s => s.AdapterId).Distinct().ToList()
+}).ToListAsync()));
 api.MapGet("/watchlist", async (VvDbContext db) => Results.Ok(await db.Watchlist.AsNoTracking().OrderBy(w => w.Vendor).ThenBy(w => w.Product).ToListAsync()));
 api.MapPost("/watchlist", async (HttpContext http, WatchlistService watchlist) =>
 {
@@ -201,6 +207,9 @@ app.MapGet("/digests/{id:guid}/html", async (Guid id, VvDbContext db) =>
     return run is null ? Results.NotFound() : Results.Content(run.Html, "text/html");
 });
 app.MapGet("/digests/preview/html", async (DigestService digest) => Results.Content((await digest.BuildAsync()).Html, "text/html"));
+app.MapGet("/reports/weekly.html", async (ReportService reports, int? weeks) => Results.Content((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Html, "text/html"));
+app.MapGet("/reports/weekly.csv", async (ReportService reports, int? weeks) =>
+    Results.File(System.Text.Encoding.UTF8.GetBytes((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Csv), "text/csv", "vulnverdict-weekly-" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ".csv"));
 
 app.MapGet("/healthz", () => Results.Ok("ok")).AllowAnonymous();
 
