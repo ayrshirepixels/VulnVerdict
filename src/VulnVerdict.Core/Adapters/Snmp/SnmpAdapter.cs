@@ -170,6 +170,52 @@ public sealed class SnmpAdapter : IInventoryAdapter
         return macs;
     }
 
+    // ------------------------------------------------------------------ shared read for other adapters
+
+    /// <summary>
+    /// Reads a handful of values from one device with the SNMP fields of a credential form (version, community,
+    /// username, authProtocol, authPassword, privProtocol, privPassword, timeoutMs), for adapters that need one or
+    /// two vendor OIDs (a firewall's firmware string, say). <paramref name="getOids"/> are fetched with GET;
+    /// for each of <paramref name="firstUnder"/> the first instance below it is fetched with GETNEXT (a scalar's .0
+    /// or a table column's first row). Returns null when the device does not answer; missing objects are left out.
+    /// Read-only: only GET and GETNEXT are sent.
+    /// </summary>
+    public static async Task<Dictionary<string, string>?> QueryAsync(string host, IReadOnlyDictionary<string, string> credentials, IEnumerable<string> getOids, IEnumerable<string> firstUnder, CancellationToken ct)
+    {
+        var opts = Options.From(credentials);
+        var ip = IPAddress.TryParse(host, out var parsed) ? parsed
+            : (await Dns.GetHostAddressesAsync(host, ct)).FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+              ?? throw new InvalidOperationException("Could not resolve " + host);
+        return await Task.Run(() =>
+        {
+            var values = new Dictionary<string, string>(StringComparer.Ordinal);
+            var gets = getOids.ToArray();
+            if (gets.Length > 0)
+            {
+                var vars = Get(ip, opts, gets);
+                if (vars is null) return null;
+                foreach (var v in vars)
+                    if (v.Data is not (NoSuchObject or NoSuchInstance or Null or EndOfMibView) && Value(v) is { Length: > 0 } s) values[v.Id.ToString()] = s;
+            }
+            foreach (var col in firstUnder)
+            {
+                var vars = GetNext(ip, opts, new ObjectIdentifier(col));
+                if (vars is null) { if (gets.Length == 0 && values.Count == 0) return null; continue; }
+                var v = vars.FirstOrDefault();
+                if (v is null || !v.Id.ToString().StartsWith(col + ".", StringComparison.Ordinal) || v.Data is EndOfMibView) continue;
+                if (Value(v) is { Length: > 0 } s) values[col] = s;
+            }
+            return values;
+        }, ct);
+    }
+
+    private static string? Value(Variable v) => v.Data switch
+    {
+        OctetString os => os.ToString().Replace("\0", "").Trim(),
+        ObjectIdentifier oid => oid.ToString(),
+        _ => v.Data?.ToString()
+    };
+
     // ------------------------------------------------------------------ SNMP plumbing
 
     /// <summary>GET the oids; null when the device does not answer within the timeout. Throws for authentication or protocol errors.</summary>

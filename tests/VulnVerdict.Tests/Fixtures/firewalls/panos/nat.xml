@@ -1,0 +1,48 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <rules>
+      <entry name="web-dnat">
+        <from><member>untrust</member></from>
+        <to><member>untrust</member></to>
+        <source><member>any</member></source>
+        <destination><member>web-public</member></destination>
+        <service>service-https</service>
+        <destination-translation>
+          <translated-address>web-internal</translated-address>
+          <translated-port>443</translated-port>
+        </destination-translation>
+      </entry>
+      <entry name="rdp-dnat">
+        <from><member>untrust</member></from>
+        <to><member>untrust</member></to>
+        <source><member>any</member></source>
+        <destination><member>rdp-public</member></destination>
+        <service>any</service>
+        <destination-translation>
+          <translated-address>rdp-internal</translated-address>
+        </destination-translation>
+      </entry>
+      <entry name="old-mail-dnat">
+        <from><member>untrust</member></from>
+        <to><member>untrust</member></to>
+        <source><member>any</member></source>
+        <destination><member>203.0.113.22</member></destination>
+        <service>any</service>
+        <destination-translation>
+          <translated-address>10.30.0.25</translated-address>
+        </destination-translation>
+        <disabled>yes</disabled>
+      </entry>
+      <entry name="outbound-snat">
+        <from><member>trust</member></from>
+        <to><member>untrust</member></to>
+        <source><member>lan-net</member></source>
+        <destination><member>any</member></destination>
+        <service>any</service>
+        <source-translation>
+          <dynamic-ip-and-port><interface-address><interface>ethernet1/1</interface></interface-address></dynamic-ip-and-port>
+        </source-translation>
+      </entry>
+    </rules>
+  </result>
+</response>

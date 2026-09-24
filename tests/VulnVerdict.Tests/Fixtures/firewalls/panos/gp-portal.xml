@@ -1,0 +1,17 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <global-protect-portal>
+      <entry name="GP-Portal">
+        <portal-config>
+          <local-address>
+            <interface>loopback.1</interface>
+            <ip><ipv4>203.0.113.5</ipv4></ip>
+          </local-address>
+          <client-auth>
+            <entry name="default"><os>Any</os></entry>
+          </client-auth>
+        </portal-config>
+      </entry>
+    </global-protect-portal>
+  </result>
+</response>

@@ -1,0 +1,25 @@
+<response status="success">
+  <result>
+    <system>
+      <hostname>PA-EDGE-01</hostname>
+      <ip-address>192.0.2.10</ip-address>
+      <public-ip-address>unknown</public-ip-address>
+      <netmask>255.255.255.0</netmask>
+      <default-gateway>192.0.2.1</default-gateway>
+      <is-dhcp>no</is-dhcp>
+      <mac-address>00:1b:17:00:aa:01</mac-address>
+      <time>Tue Sep 22 09:14:03 2026</time>
+      <uptime>41 days, 3:02:11</uptime>
+      <devicename>PA-EDGE-01</devicename>
+      <family>400</family>
+      <model>PA-440</model>
+      <serial>012801000001</serial>
+      <sw-version>11.1.5</sw-version>
+      <global-protect-client-package-version>6.2.4</global-protect-client-package-version>
+      <app-version>8912-9301</app-version>
+      <threat-version>8912-9301</threat-version>
+      <multi-vsys>off</multi-vsys>
+      <operational-mode>normal</operational-mode>
+    </system>
+  </result>
+</response>

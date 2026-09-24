@@ -1,0 +1,21 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <address>
+      <entry name="web-public">
+        <ip-netmask>203.0.113.20</ip-netmask>
+      </entry>
+      <entry name="web-internal">
+        <ip-netmask>10.30.0.20/32</ip-netmask>
+      </entry>
+      <entry name="rdp-public">
+        <ip-netmask>203.0.113.21</ip-netmask>
+      </entry>
+      <entry name="rdp-internal">
+        <ip-netmask>10.30.0.21</ip-netmask>
+      </entry>
+      <entry name="lan-net">
+        <ip-netmask>10.10.0.0/24</ip-netmask>
+      </entry>
+    </address>
+  </result>
+</response>

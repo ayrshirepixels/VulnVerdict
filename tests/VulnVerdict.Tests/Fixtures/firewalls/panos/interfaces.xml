@@ -1,0 +1,40 @@
+<response status="success" code="19">
+  <result total-count="1" count="1">
+    <interface>
+      <ethernet>
+        <entry name="ethernet1/1">
+          <layer3>
+            <ip><entry name="203.0.113.2/28"/></ip>
+            <interface-management-profile>allow-https-ssh</interface-management-profile>
+          </layer3>
+        </entry>
+        <entry name="ethernet1/2">
+          <layer3>
+            <ip><entry name="10.10.0.1/24"/></ip>
+            <interface-management-profile>allow-https-ssh</interface-management-profile>
+            <units>
+              <entry name="ethernet1/2.20">
+                <tag>20</tag>
+                <ip><entry name="10.20.0.1/24"/></ip>
+                <interface-management-profile>ping-only</interface-management-profile>
+              </entry>
+            </units>
+          </layer3>
+        </entry>
+        <entry name="ethernet1/3">
+          <layer3>
+            <dhcp-client><enable>yes</enable></dhcp-client>
+            <interface-management-profile>ping-only</interface-management-profile>
+          </layer3>
+        </entry>
+      </ethernet>
+      <loopback>
+        <units>
+          <entry name="loopback.1">
+            <ip><entry name="203.0.113.5"/></ip>
+          </entry>
+        </units>
+      </loopback>
+    </interface>
+  </result>
+</response>
