@@ -79,7 +79,10 @@ public sealed class InventoryService
             asset.HostnamesJson = MergeJson(asset.HostnamesJson, rec.Hostnames);
             asset.IpAddressesJson = MergeJson(asset.IpAddressesJson, rec.IpAddresses);
             asset.MacAddressesJson = MergeJson(asset.MacAddressesJson, rec.MacAddresses.Select(NormMac));
-            if (rec.OsProduct is not null) { asset.OsVendor = rec.OsVendor; asset.OsProduct = rec.OsProduct; asset.OsVersion = rec.OsVersion; asset.OsBuild = rec.OsBuild; }
+            // a hypervisor's guest label ("Ubuntu Linux (64-bit)") never overwrites what a server collector saw on the box
+            var weakOsSource = connector.AdapterId is "vcenter" or "hyperv" || isDiscovery;
+            if (rec.OsProduct is not null && (!weakOsSource || string.IsNullOrEmpty(asset.OsProduct)))
+            { asset.OsVendor = rec.OsVendor; asset.OsProduct = rec.OsProduct; asset.OsVersion = rec.OsVersion; asset.OsBuild = rec.OsBuild; }
             if (rec.Owner is not null) asset.Owner = rec.Owner;
             if (!asset.CriticalityPinned && (rec.Criticality ?? DefaultCriticality(rec)) == Criticality.Critical) asset.Criticality = Criticality.Critical;
             asset.LastSeen = now;
