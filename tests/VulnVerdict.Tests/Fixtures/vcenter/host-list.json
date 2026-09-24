@@ -1,0 +1,4 @@
+[
+  { "host": "host-10", "name": "esxi01.example.com", "connection_state": "CONNECTED", "power_state": "POWERED_ON" },
+  { "host": "host-11", "name": "10.20.0.3", "connection_state": "CONNECTED", "power_state": "POWERED_ON" }
+]
