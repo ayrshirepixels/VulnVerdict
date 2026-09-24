@@ -19,7 +19,9 @@ COPY src/VulnVerdict.Core/VulnVerdict.Core.csproj src/VulnVerdict.Core/
 COPY src/VulnVerdict.Web/VulnVerdict.Web.csproj src/VulnVerdict.Web/
 RUN dotnet restore src/VulnVerdict.Web/VulnVerdict.Web.csproj
 COPY src/ src/
-RUN dotnet publish src/VulnVerdict.Web/VulnVerdict.Web.csproj -c Release -o /app --no-restore
+# Publish restores again on purpose: the SDK only adds the package carrying _framework/blazor.web.js when it
+# can see the .razor files, which the csproj-only restore above cannot. Without it the console is not interactive.
+RUN dotnet publish src/VulnVerdict.Web/VulnVerdict.Web.csproj -c Release -o /app
 
 FROM caddy:2-alpine AS caddy
 

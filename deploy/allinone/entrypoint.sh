@@ -74,6 +74,9 @@ trap shutdown TERM INT
 
 # ---------------------------------------------------------------- application (console + worker)
 export Worker__CveMinYear="${CVE_MIN_YEAR:-0}"
+# Behind Caddy the app listens on loopback only. With VV_TLS=off there is no Caddy, so it must listen
+# on the container's interface or the published port 8080 reaches nothing.
+if [ "${VV_TLS:-internal}" = "off" ]; then export ASPNETCORE_URLS="http://0.0.0.0:8080"; fi
 cd /app
 gosu vulnverdict dotnet VulnVerdict.Web.dll &
 APP_PID=$!

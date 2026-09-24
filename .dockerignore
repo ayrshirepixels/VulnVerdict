@@ -6,3 +6,7 @@
 tests/
 docs/
 *.md
+deploy/ova/images/
+deploy/ova/output/
+deploy/ova/packer_cache/
+deploy/ova/seed/seed.iso
