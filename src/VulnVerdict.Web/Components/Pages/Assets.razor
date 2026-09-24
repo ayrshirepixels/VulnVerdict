@@ -24,6 +24,20 @@
         }
     }
 
+    <AuthorizeView Roles="Administrator,Operator">
+        <div class="card">
+            <h2>Upload an SBOM</h2>
+            <p class="muted" style="margin-top:0">CycloneDX or SPDX JSON from your CI dependency check. Name the application or site it belongs to; if that matches a hostname or site the connectors already know, the components land on that asset.</p>
+            @if (_sbomNotice is not null) { <div class="alert alert-ok">@_sbomNotice</div> }
+            @if (_sbomError is not null) { <div class="alert alert-error">@_sbomError</div> }
+            <div class="form"><div class="row-3">
+                <div><label>Application or site name</label><input type="text" @bind="_sbomAsset" placeholder="engage-web" /></div>
+                <div><label>SBOM file</label><InputFile OnChange="OnSbomFile" accept=".json,.cdx.json,.spdx.json" /></div>
+                <div style="align-self:end"><button class="btn" @onclick="UploadSbom" disabled="@(_sbomJson is null || string.IsNullOrWhiteSpace(_sbomAsset) || _sbomBusy)">Import</button></div>
+            </div></div>
+        </div>
+    </AuthorizeView>
+
     <div class="filters">
         <select @bind="_kind" @bind:after="Reload"><option value="">Any kind</option>@foreach (var k in Enum.GetValues<AssetKind>()) { <option value="@k">@k</option> }</select>
         <select @bind="_exposure" @bind:after="Reload"><option value="">Any exposure</option><option value="Internet">Internet-facing</option><option value="Internal">Internal</option><option value="Isolated">Isolated</option></select>
@@ -61,6 +75,41 @@
     private List<Row> _rows = new();
     private InventoryService.Coverage? _cov;
     private string _kind = "", _exposure = "", _crit = "", _state = "live", _search = "";
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [Inject] private VulnVerdict.Core.Adapters.Sbom.SbomImportService Sbom { get; set; } = default!;
+    private string _sbomAsset = "";
+    private string? _sbomJson, _sbomNotice, _sbomError;
+    private bool _sbomBusy;
+
+    private async Task OnSbomFile(InputFileChangeEventArgs e)
+    {
+        _sbomError = null;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(20 * 1024 * 1024));
+            _sbomJson = await reader.ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(_sbomAsset)) _sbomAsset = System.IO.Path.GetFileNameWithoutExtension(e.File.Name).Replace(".cdx", "").Replace(".spdx", "");
+        }
+        catch (Exception ex) { _sbomError = ex.Message; _sbomJson = null; }
+    }
+
+    private async Task UploadSbom()
+    {
+        if (_sbomJson is null) return;
+        _sbomBusy = true; _sbomError = null; _sbomNotice = null;
+        try
+        {
+            var actor = Ui.Actor((await AuthState).User);
+            var r = await Sbom.ImportAsync(_sbomAsset.Trim(), _sbomJson, actor);
+            await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+            _sbomNotice = r.Software + " components recorded for " + _sbomAsset + (r.Unmapped > 0 ? " (" + r.Unmapped + " need mapping)" : "") + ". Verdicts follow within a minute.";
+            _sbomJson = null;
+            _cov = await Inventory.CoverageAsync();
+            await Reload();
+        }
+        catch (Exception ex) { _sbomError = ex.Message; }
+        _sbomBusy = false;
+    }
 
     protected override async Task OnInitializedAsync()
     {

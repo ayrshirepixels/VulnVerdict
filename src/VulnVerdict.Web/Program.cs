@@ -194,6 +194,14 @@ api.MapPost("/watchlist", async (HttpContext http, WatchlistService watchlist) =
     var n = await watchlist.ImportJsonAsync(await reader.ReadToEndAsync(), "api");
     return Results.Ok(new { imported = n });
 });
+api.MapPost("/sbom", async (HttpContext http, string asset, VulnVerdict.Core.Adapters.Sbom.SbomImportService sbom, SettingsService settings) =>
+{
+    if (string.IsNullOrWhiteSpace(asset)) return Results.BadRequest(new { error = "asset query parameter is required (the application or site name)" });
+    using var reader = new StreamReader(http.Request.Body);
+    var summary = await sbom.ImportAsync(asset.Trim(), await reader.ReadToEndAsync(), "api");
+    await settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
+    return Results.Ok(new { asset, summary.Software, summary.Unmapped });
+});
 api.MapGet("/digest", async (DigestService digest) =>
 {
     var d = await digest.BuildAsync();

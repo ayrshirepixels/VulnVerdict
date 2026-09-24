@@ -12,6 +12,13 @@ public static class AdapterRegistry
 {
     public static void Register(IServiceCollection services)
     {
+        // inventory sources, section 9.2 steps 7 to 10
+        services.AddSingleton<IInventoryAdapter, Sbom.SbomUrlAdapter>();
+        services.AddSingleton<IInventoryAdapter, Snmp.SnmpAdapter>();
+        services.AddSingleton<IInventoryAdapter, Discovery.DiscoverySweepAdapter>();
+        services.AddSingleton<IInventoryAdapter, External.ExternalCrossCheckAdapter>();
+        services.AddSingleton<Sbom.SbomImportService>();
+
         // ticket channels (section 11.3)
         services.AddSingleton<ITicketAdapter, JiraCloudAdapter>();
         services.AddSingleton<ITicketAdapter, ServiceNowAdapter>();
