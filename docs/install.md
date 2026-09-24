@@ -17,6 +17,18 @@ Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator ac
 
 What runs: `web` (the console), `worker` (feeds, connectors, verdicts, digests), `db` (PostgreSQL 16), `proxy` (Caddy, TLS). Only ports 443 and 80 are published. The worker needs outbound HTTPS to the public feeds (or to your central bundle URL); nothing else needs the internet.
 
+## Option A2: one container (everything inside)
+
+For a customer who wants a single `docker run` and nothing to compose, the all-in-one image carries PostgreSQL, the console and worker, and Caddy for TLS, with one volume for everything:
+
+```bash
+docker run -d --name vulnverdict --restart unless-stopped \
+  -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \
+  ghcr.io/ayrshirepixels/vulnverdict:allinone
+```
+
+Build it with `docker build -f Dockerfile.allinone -t vulnverdict:allinone .`. Options: `VV_TLS=public` for Let's Encrypt on a public name, `VV_TLS=off` to expose plain HTTP on 8080 behind your own proxy, `VV_DB=sqlite` to skip Postgres for small estates, `VV_DB=external` with `Database__ConnectionString` to use your own Postgres. Back up the `vulnverdict` volume; it holds the database, the keys and the CA. The trade-off against Option A is that the database lifecycle (major-version upgrades, separate backups) is tied to the application container; the Compose stack is the better fit when someone already runs Postgres.
+
 ## Option B: the appliance (OVA)
 
 Import `vulnverdict-<version>.ova` into VMware, Hyper-V (convert with `qemu-img`) or VirtualBox, start it, and answer three questions on the console: hostname, password, done. The stack starts and prints the URL. Build the OVA yourself with Packer from `deploy/ova/`.
