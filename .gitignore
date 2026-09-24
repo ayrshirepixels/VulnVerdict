@@ -3,3 +3,4 @@ obj/
 data/
 *.user
 .vs/
+.claude/worktrees/
