@@ -36,11 +36,12 @@ public sealed class WorkerService : BackgroundService
         _log.LogInformation("Worker starting; data dir {Dir}", Path.GetFullPath(_opt.DataDir));
         Directory.CreateDirectory(_opt.DataDir);
         await EnsureFeedRowsAsync(ct);
+        // the heartbeat runs on its own timer: a long feed load or evaluation must never look like a dead worker
+        _ = Task.Run(() => HeartbeatLoopAsync(ct), ct);
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await HeartbeatAsync(ct);
                 // section 10.2: with a central bundle configured, the bundle replaces the public feeds
                 bool feedsRan;
                 using (var bundleScope = _sp.CreateScope())
@@ -54,6 +55,7 @@ public sealed class WorkerService : BackgroundService
                 if (feedsRan || connectorsRan || evaluateRequested || await EvaluationDueAsync(ct))
                 {
                     using var scope = _sp.CreateScope();
+                    _activity = "evaluating verdicts";
                     await scope.ServiceProvider.GetRequiredService<VerdictEvaluator>().EvaluateAllAsync(ct);
                     await scope.ServiceProvider.GetRequiredService<SettingsService>().SetStateAsync(SettingsService.Keys.EvaluateRequested, null, ct);
                 }
@@ -72,14 +74,30 @@ public sealed class WorkerService : BackgroundService
             {
                 _log.LogError(ex, "Worker loop error");
             }
+            _activity = "idle";
             try { await Task.Delay(TimeSpan.FromSeconds(_opt.LoopSeconds), ct); } catch (OperationCanceledException) { }
         }
     }
 
-    private async Task HeartbeatAsync(CancellationToken ct)
+    private volatile string _activity = "idle";
+    /// <summary>What the worker is doing right now, shown on the Sources page.</summary>
+    public const string ActivityKey = "state:worker:activity";
+
+    private async Task HeartbeatLoopAsync(CancellationToken ct)
     {
-        using var scope = _sp.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<SettingsService>().SetStateAsync(SettingsService.Keys.WorkerHeartbeat, DateTime.UtcNow.ToString("O"), ct);
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var scope = _sp.CreateScope();
+                var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                await settings.SetStateAsync(SettingsService.Keys.WorkerHeartbeat, DateTime.UtcNow.ToString("O"), ct);
+                await settings.SetStateAsync(ActivityKey, _activity, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception ex) { _log.LogDebug(ex, "Heartbeat write failed"); }
+            try { await Task.Delay(TimeSpan.FromSeconds(30), ct); } catch (OperationCanceledException) { }
+        }
     }
 
     private async Task EnsureFeedRowsAsync(CancellationToken ct)
@@ -119,6 +137,7 @@ public sealed class WorkerService : BackgroundService
 
             status.Running = true; status.RunRequested = false; status.LastAttempt = now; status.Progress = "Starting";
             await statusDb.SaveChangesAsync(ct);
+            _activity = "loading feed " + feed.DisplayName;
             _log.LogInformation("Feed {Feed} starting", feed.Name);
 
             try
@@ -186,6 +205,7 @@ public sealed class WorkerService : BackgroundService
             if (c.LastError is not null && c.LastSuccess is not null && c.LastAttempt is not null && now - c.LastAttempt.Value < TimeSpan.FromMinutes(15) && !c.RunRequested) due = false;
             if (!due) continue;
             var before = c.ConsecutiveFailures;
+            _activity = "collecting from " + c.DisplayName;
             var result = await connectors.RunAsync(c.Id, ct);
             if (result is not null) any = true;
             else if (before + 1 == 3)

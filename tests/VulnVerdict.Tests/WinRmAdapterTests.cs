@@ -113,10 +113,10 @@ public class WinRmAdapterTests
     {
         using var doc = LoadFixture();
         var result = new CollectResult();
-        var asset = WindowsCollectorMapper.Map("cp-desktop.example.local", doc.RootElement, result);
+        var asset = WindowsCollectorMapper.Map("vv-sample-01.example.local", doc.RootElement, result);
 
-        Assert.Equal("cp-desktop.example.local", asset.ExternalId);
-        Assert.Equal("CP-DESKTOP", asset.DisplayName);
+        Assert.Equal("vv-sample-01.example.local", asset.ExternalId);
+        Assert.Equal("VV-SAMPLE-01", asset.DisplayName);
         Assert.Equal("Microsoft", asset.OsVendor);
         Assert.Contains(asset.OsProduct, CnaOsNames);
         Assert.Equal("10.0.26200.9457", asset.OsBuild);
@@ -150,9 +150,9 @@ public class WinRmAdapterTests
         Assert.DoesNotContain(result.Software, s => s.Product.StartsWith("Microsoft .NET Framework 2.0") || s.Product.StartsWith("Microsoft .NET Framework 3.0"));
 
         // the collector's own warning (DISM needs elevation on a workstation) is surfaced, prefixed with the host
-        Assert.Contains(result.Warnings, w => w.StartsWith("cp-desktop.example.local: collector: features:"));
+        Assert.Contains(result.Warnings, w => w.StartsWith("vv-sample-01.example.local: collector: features:"));
         // every software record is tied to the host and has a stable external id so re-runs update instead of duplicating
-        Assert.All(result.Software, s => { Assert.Equal("cp-desktop.example.local", s.AssetExternalId); Assert.False(string.IsNullOrEmpty(s.ExternalId)); });
+        Assert.All(result.Software, s => { Assert.Equal("vv-sample-01.example.local", s.AssetExternalId); Assert.False(string.IsNullOrEmpty(s.ExternalId)); });
         Assert.Equal(result.Software.Count, result.Software.Select(s => s.ExternalId).Distinct().Count());
     }
 

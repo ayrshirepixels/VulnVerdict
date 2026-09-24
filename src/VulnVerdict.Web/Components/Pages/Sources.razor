@@ -14,7 +14,7 @@
     <div class="card">
         <h2>Worker</h2>
         <dl class="kv">
-            <dt>Heartbeat</dt><dd>@(_alive ? "running" : "not running") (last @Ui.Ago(_beat))</dd>
+            <dt>Heartbeat</dt><dd>@(_alive ? "running, " + (_activity ?? "idle") : "not running") (last @Ui.Ago(_beat))</dd>
             <dt>Last evaluation</dt><dd>@Ui.Ago(_lastEval)</dd>
             <dt>Watchlist entries</dt><dd>@_entries</dd>
             <dt>Verdicts stored</dt><dd>@_verdicts.ToString("N0")</dd>
@@ -52,6 +52,7 @@
 @code {
     private List<FeedStatus> _status = new();
     private bool _alive;
+    private string? _activity;
     private DateTime? _beat, _lastEval;
     private int _entries, _verdicts, _cves, _products;
     private System.Threading.Timer? _timer;
@@ -67,6 +68,7 @@
         await using var db = await Db.CreateDbContextAsync();
         _status = await db.FeedStatuses.AsNoTracking().OrderBy(f => f.Name == "cvelist" ? 0 : 1).ThenBy(f => f.DisplayName).ToListAsync();
         (_alive, _beat) = await WorkerMonitorService.WorkerStatusAsync(Settings);
+        _activity = await Settings.GetStateAsync(WorkerService.ActivityKey);
         var le = await Settings.GetStateAsync(SettingsService.Keys.LastEvaluation);
         _lastEval = le is not null && DateTime.TryParse(le, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : null;
         _entries = await db.Watchlist.CountAsync(w => w.Enabled);
