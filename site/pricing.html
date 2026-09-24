@@ -48,8 +48,8 @@
       </div>
       <div class="card tier featured">
         <div class="eyebrow">Supported</div>
-        <p class="price">£50 <small>to £150 per month</small></p>
-        <p class="muted">Up to 50 assets for £50, up to 250 for £150. The 50 to 500 seat organisation with one IT manager.</p>
+        <p class="price"><small>from</small> £100 <small>per month</small></p>
+        <p class="muted">For the 50 to 500 seat organisation with one IT manager. Quoted on the size of your estate after a short call.</p>
         <ul class="ticks">
           <li>Everything in Community</li>
           <li>Signed curated feed: one enrichment pass for everyone, pre-written plain-English explanations, the shared product-name alias table</li>
@@ -73,7 +73,7 @@
         <div class="btns"><a class="btn btn-outline" href="mailto:hello@vulnverdict.com?subject=VulnVerdict%20MSP">Talk to us</a></div>
       </div>
     </div>
-    <p class="muted" style="margin-top:20px">Introductory pricing, billed annually, prices exclude VAT. An asset is anything a connector sees: a server, an endpoint, a switch, a printer, a VM. Watchlist entries are free. A Supported console past its asset band keeps working; collection pauses and the console tells you.</p>
+    <p class="muted" style="margin-top:20px">Billed annually, prices exclude VAT. A support plan covers an agreed number of assets: anything a connector sees, such as a server, an endpoint, a switch, a printer or a VM. Watchlist entries are free. If your estate outgrows the plan, the console keeps working and tells you, and connector collection pauses until the plan is updated.</p>
   </div>
 </section>
 
@@ -89,7 +89,7 @@
         <tr><td><strong>Knows what faces the internet</strong></td><td>No</td><td>With configuration</td><td>Yes, from the firewall and an outside check</td></tr>
         <tr><td><strong>Needs</strong></td><td>Agents</td><td>An analyst and a project</td><td>Fifteen minutes and read-only credentials</td></tr>
         <tr><td><strong>You can read the code</strong></td><td>No</td><td>No</td><td>Yes, all of it</td></tr>
-        <tr><td><strong>Costs</strong></td><td>Bundled</td><td>Ten times our Supported plan, plus people</td><td>Free, or £50 to £150 a month with support</td></tr>
+        <tr><td><strong>Costs</strong></td><td>Bundled</td><td>Ten times our Supported plan, plus people</td><td>Free, or from £100 a month with support</td></tr>
       </tbody>
     </table>
     <p class="muted" style="margin-top:14px">Keep your RMM for patching. VulnVerdict is the layer above it that tells you which patches matter this week.</p>
@@ -97,25 +97,49 @@
 </section>
 
 <section class="alt faq">
-  <div class="wrap narrow" style="margin-left:0">
-    <div class="eyebrow">Questions</div>
-    <h2>Straight answers.</h2>
-    <h3>Is the free version crippled?</h3>
-    <p>No. Same code, same connectors, same verdicts, no asset cap. The console pulls the public feeds itself instead of our curated bundle, and support is the GitHub issue tracker. Plenty of small firms will never need more.</p>
-    <h3>So what am I paying for?</h3>
-    <p>The curated feed (built once for everyone, signed, with plain-English explanations already written), tested updates you can roll back with one command, and a human who answers email. The things a one-person team should not have to do at seven in the morning.</p>
-    <h3>Does my inventory leave my network?</h3>
-    <p>No, on any plan. The console runs on your VM. It pulls feeds in; nothing about your assets goes out. MSP reporting, if a client turns it on, sends counts and verdict sentences with asset names stripped.</p>
-    <h3>Which licence?</h3>
-    <p>AGPL-3.0. Run it, change it, redistribute it. If you offer it as a service to others you publish your changes. The VulnVerdict name and logo are trademarks, so a fork needs its own name. Contributions are welcome under the same licence.</p>
-    <h3>What are you liable for if a verdict is wrong?</h3>
-    <p>Nothing beyond what the support agreement says, and the software carries no warranty. A verdict is advice worked out from public data and what your connectors report; no tool can fully know your environment, which is why every verdict shows its evidence for a person to check. Patching decisions, and their consequences, stay with the people who run the systems. The full <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/disclaimer.md">advisory notice</a> says this properly.</p>
-    <h3>Is it a scanner?</h3>
-    <p>No. It reads your scanner's findings as a second opinion and matches vendor data against what your connectors report. The only network activity of its own is an optional host discovery sweep, which never runs vulnerability checks.</p>
-    <h3>Does it need an internet connection?</h3>
-    <p>Outbound HTTPS to the feeds, or only to our bundle service on a support plan. Fully air-gapped sites upload a signed bundle by hand; the console refuses anything unsigned or older than what it already has.</p>
-    <h3>What about the AI bit?</h3>
-    <p>Optional on every plan. Bring your own Anthropic or OpenAI key, or point it at a local model. It explains a verdict in plain English and describes how an attacker would go about it. It never decides a verdict, and it never sees a hostname or an address.</p>
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Questions</div>
+      <h2>Straight answers.</h2>
+    </div>
+    <div class="qa-list">
+      <details class="qa" open>
+        <summary>Is the free version crippled?</summary>
+        <p>No. Same code, same connectors, same verdicts, no asset cap. The console pulls the public feeds itself instead of our curated bundle, and support is the GitHub issue tracker. Plenty of small firms will never need more.</p>
+      </details>
+      <details class="qa">
+        <summary>So what am I paying for?</summary>
+        <p>The curated feed (built once for everyone, signed, with plain-English explanations already written), tested updates you can roll back with one command, and a human who answers email. The things a one-person team should not have to do at seven in the morning.</p>
+      </details>
+      <details class="qa">
+        <summary>How much is a support plan?</summary>
+        <p>From £100 a month, billed annually. The price depends on the size of your estate and how much help you want, so we agree it after a short call rather than make you pick a band from a table.</p>
+      </details>
+      <details class="qa">
+        <summary>Does my inventory leave my network?</summary>
+        <p>No, on any plan. The console runs on your VM. It pulls feeds in; nothing about your assets goes out. MSP reporting, if a client turns it on, sends counts and verdict sentences with asset names stripped.</p>
+      </details>
+      <details class="qa">
+        <summary>Which licence?</summary>
+        <p>AGPL-3.0. Run it, change it, redistribute it. If you offer it as a service to others you publish your changes. The VulnVerdict name and logo are trademarks, so a fork needs its own name. Contributions are welcome under the same licence.</p>
+      </details>
+      <details class="qa">
+        <summary>What are you liable for if a verdict is wrong?</summary>
+        <p>Nothing beyond what the support agreement says, and the software carries no warranty. A verdict is advice worked out from public data and what your connectors report; no tool can fully know your environment, which is why every verdict shows its evidence for a person to check. Patching decisions, and their consequences, stay with the people who run the systems. The full <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/disclaimer.md">advisory notice</a> says this properly.</p>
+      </details>
+      <details class="qa">
+        <summary>Is it a scanner?</summary>
+        <p>No. It reads your scanner's findings as a second opinion and matches vendor data against what your connectors report. The only network activity of its own is an optional host discovery sweep, which never runs vulnerability checks.</p>
+      </details>
+      <details class="qa">
+        <summary>Does it need an internet connection?</summary>
+        <p>Outbound HTTPS to the feeds, or only to our bundle service on a support plan. Fully air-gapped sites upload a signed bundle by hand; the console refuses anything unsigned or older than what it already has.</p>
+      </details>
+      <details class="qa">
+        <summary>What about the AI bit?</summary>
+        <p>Optional on every plan. Bring your own Anthropic or OpenAI key, or point it at a local model. It explains a verdict in plain English and describes how an attacker would go about it. It never decides a verdict, and it never sees a hostname or an address.</p>
+      </details>
+    </div>
   </div>
 </section>
 

@@ -134,7 +134,17 @@ section.dark .muted { color: var(--muted-on-dark); }
 table.compare { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 table.compare th, table.compare td { padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
 table.compare th { background: #f7f8fa; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-top: 0; }
-.faq h3 { font-size: 17px; margin-top: 22px; }
+/* Questions: a centred accordion, one question per row */
+.qa-list { max-width: 760px; margin: 28px auto 0; }
+.qa { border-bottom: 1px solid var(--line); }
+.qa:first-child { border-top: 1px solid var(--line); }
+.qa summary { list-style: none; cursor: pointer; position: relative; padding: 18px 44px 18px 4px; font-family: var(--head); font-size: 18px; font-weight: 600; }
+.qa summary::-webkit-details-marker { display: none; }
+.qa summary::after { content: '+'; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 26px; font-weight: 400; line-height: 1; color: var(--amber-ink); }
+.qa[open] summary::after { content: '\2212'; }
+.qa summary:hover { color: var(--amber-ink); }
+.qa summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 6px; }
+.qa p { margin: 0 4px 20px; color: var(--slate); }
 
 /* footer */
 footer { background: var(--charcoal); color: var(--muted-on-dark); padding: 40px 0; font-size: 14px; }
