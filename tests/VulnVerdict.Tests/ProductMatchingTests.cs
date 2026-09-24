@@ -33,6 +33,11 @@ public class ProductMatchingTests : IDisposable
             Add(db, "CVE-2099-0002", "Jenkins Project", "Jenkins Azure CLI Plugin", "0.10");        // a plugin
             Add(db, "CVE-2099-0003", "Jenkins Project", "Jenkins Pipeline: Groovy Plugin", "3000"); // another plugin
             Add(db, "CVE-2099-0004", "Microsoft", "Microsoft Exchange Server 2019 Cumulative Update 14", "15.02.1544.013");
+            Add(db, "CVE-2099-0010", "Fortinet", "FortiOS", "7.2.6");                              // exact
+            Add(db, "CVE-2099-0011", "Fortinet", "Fortinet FortiOS", "7.2.6");                     // vendor-prefixed: same product
+            Add(db, "CVE-2099-0012", "Fortinet", "Fortinet FortiOS, FortiProxy", "7.2.6");         // a list naming it
+            Add(db, "CVE-2099-0013", "Fortinet", "FortiOS and FortiProxy", "7.2.6");               // "and" list
+            Add(db, "CVE-2099-0014", "Fortinet", "FortiOS-6K7K", "7.2.6");                         // a different product line
             db.SaveChanges();
         }
         var settings = new SettingsService(_factory, new PassthroughProtectionProvider());
@@ -75,6 +80,13 @@ public class ProductMatchingTests : IDisposable
     {
         var cves = await VerdictsFor("Jenkins Project", "Jenkins", "2.440");
         Assert.Equal(new[] { "CVE-2099-0001" }, cves);
+    }
+
+    [Fact]
+    public async Task Vendor_prefixed_and_listed_names_still_match_alongside_the_exact_name()
+    {
+        var cves = await VerdictsFor("Fortinet", "FortiOS", "7.2.5");
+        Assert.Equal(new[] { "CVE-2099-0010", "CVE-2099-0011", "CVE-2099-0012", "CVE-2099-0013" }, cves);
     }
 
     [Fact]

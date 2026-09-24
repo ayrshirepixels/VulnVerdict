@@ -18,7 +18,7 @@ public sealed record EvaluationSummary(int Entries, int Candidates, int Created,
 /// table and stores a verdict with its evidence chain. Tier changes are recorded with a reason; a fixed version
 /// observed in inventory closes the verdict automatically (section 13, phase 4).
 /// </summary>
-public sealed class VerdictEvaluator
+public sealed partial class VerdictEvaluator
 {
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
@@ -141,15 +141,24 @@ public sealed class VerdictEvaluator
                 var rows = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == al.VendorNorm && a.ProductNorm == al.ProductNorm).ToListAsync(ct);
                 result.AddRange(rows.Select(a => new ProductMatch(a, a.CveId, MatchConfidence.Exact, "alias '" + s.Product + "' maps to " + a.Vendor + " / " + a.Product)));
             }
-            // "Contains" is a fallback for entries whose name matches nothing exactly (a CNA that writes
-            // "Microsoft Exchange Server 2019 Cumulative Update 14" for what you call "Exchange Server 2019").
-            // Once the product is found by its exact name or an alias, longer names are other products from
-            // the same vendor: "Jenkins" must not pick up every "Jenkins ... Plugin", nor "GitLab" the
-            // "GitLab Runner".
-            if (result.Count == 0 && !string.IsNullOrEmpty(vn) && pn.Length >= 5)
+            // Longer CNA product names that contain the entry's name are one of three things:
+            //  - the same product written differently: "Fortinet FortiOS", or a list such as
+            //    "Fortinet FortiOS, FortiProxy" — always a match;
+            //  - another product from the same vendor: "Jenkins Azure CLI Plugin", "GitLab Runner",
+            //    "FortiOS-6K7K" — never a match once the product has been found under its own name;
+            //  - the only way the CNA names it: "Microsoft Exchange Server 2019 Cumulative Update 14" for
+            //    an entry called "Exchange Server 2019" — the fallback when nothing matched exactly.
+            if (!string.IsNullOrEmpty(vn) && pn.Length >= 5)
             {
+                var foundByName = result.Count > 0;
                 var contains = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == vn && a.ProductNorm != pn && a.ProductNorm.Contains(pn)).ToListAsync(ct);
-                result.AddRange(contains.Select(a => new ProductMatch(a, a.CveId, MatchConfidence.Likely, "CNA product '" + a.Product + "' contains '" + s.Product + "'")));
+                foreach (var a in contains)
+                {
+                    if (NamesProduct(a.Product, vn, pn))
+                        result.Add(new ProductMatch(a, a.CveId, MatchConfidence.Likely, "CNA product '" + a.Product + "' names '" + s.Product + "'"));
+                    else if (!foundByName)
+                        result.Add(new ProductMatch(a, a.CveId, MatchConfidence.Likely, "CNA product '" + a.Product + "' contains '" + s.Product + "'"));
+                }
             }
             if (string.IsNullOrEmpty(vn))
             {
@@ -159,6 +168,26 @@ public sealed class VerdictEvaluator
         }
         return result.DistinctBy(m => m.Row?.Id ?? (object)m.CveId).ToList();
     }
+
+    /// <summary>
+    /// True when a CNA product string names this product outright: on its own after a leading vendor
+    /// name ("Fortinet FortiOS"), or as one item of a list ("Fortinet FortiOS, FortiProxy",
+    /// "FortiOS and FortiProxy"). Normalised names in, so punctuation and case don't matter.
+    /// </summary>
+    internal static bool NamesProduct(string cnaProduct, string vendorNorm, string productNorm)
+    {
+        foreach (var part in ListSeparators().Split(cnaProduct))
+        {
+            var n = Normalizer.Norm(part);
+            if (n.Length == 0) continue;
+            if (n == productNorm) return true;
+            if (vendorNorm.Length > 0 && n.StartsWith(vendorNorm, StringComparison.Ordinal) && n[vendorNorm.Length..] == productNorm) return true;
+        }
+        return false;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s*(?:,|;|/|&|\band\b)\s*", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex ListSeparators();
 
     // ------------------------------------------------------------------ evaluation
 
