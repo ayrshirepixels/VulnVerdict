@@ -1,0 +1,27 @@
+igb0: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: WAN
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:08:a2:00:00:01
+	inet 203.0.113.80 netmask 0xfffffff0 broadcast 203.0.113.95
+	inet6 fe80::208:a2ff:fe00:1%igb0 prefixlen 64 scopeid 0x1
+	media: Ethernet autoselect (1000baseT <full-duplex>)
+	status: active
+	nd6 options=21<PERFORMNUD,AUTO_LINKLOCAL>
+igb1: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: LAN
+	ether 00:08:a2:00:00:02
+	inet 10.120.0.1 netmask 0xffffff00 broadcast 10.120.0.255
+	status: active
+igb2: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: DMZ
+	ether 00:08:a2:00:00:03
+	inet 10.130.0.1 netmask 0xffffff00 broadcast 10.130.0.255
+	status: active
+lo0: flags=1008049<UP,LOOPBACK,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 16384
+	inet 127.0.0.1 netmask 0xff000000
+	inet6 ::1 prefixlen 128
+enc0: flags=0 metric 0 mtu 1536
+	groups: enc
+ovpns1: flags=1008051<UP,POINTOPOINT,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	inet 10.140.0.1 --> 10.140.0.2 netmask 0xffffff00
+	groups: tun openvpn
