@@ -1,0 +1,2012 @@
+{
+  "collector": "vulnverdict-windows/1",
+  "psVersion": "5.1.26100.9444",
+  "collectedAt": "2026-09-24T00:10:46.5859855Z",
+  "host": {
+    "name": "CP-DESKTOP",
+    "domain": "",
+    "osCaption": "Microsoft Windows 11 Pro for Workstations",
+    "editionId": "ProfessionalWorkstation",
+    "installationType": "Client",
+    "displayVersion": "25H2",
+    "osVersion": "10.0.26200",
+    "osBuild": "10.0.26200.9457",
+    "lastBoot": "2026-09-23T22:21:57.5000000Z",
+    "macs": [
+      "10-FF-E0-83-A1-D4"
+    ],
+    "ips": [
+      "192.168.1.184",
+      "2001:db8:1::184"
+    ],
+    "productType": "WinNT",
+    "isDomainController": false,
+    "isHyperVHost": false
+  },
+  "hotfixes": [
+    {
+      "id": "KB5126052",
+      "installedOn": "2026-09-11",
+      "description": "Update"
+    },
+    {
+      "id": "KB5054156",
+      "installedOn": "2025-11-09",
+      "description": "Update"
+    },
+    {
+      "id": "KB5129195",
+      "installedOn": "2026-09-18",
+      "description": "Security Update"
+    },
+    {
+      "id": "KB5120997",
+      "installedOn": "2026-08-27",
+      "description": "Update"
+    },
+    {
+      "id": "KB5124007",
+      "installedOn": "2026-09-10",
+      "description": "Security Update"
+    }
+  ],
+  "software": [
+    {
+      "name": "Streamlabs Desktop 1.21.9",
+      "version": "1.21.9",
+      "publisher": "General Workings, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "029c4619-0385-5543-9426-46f9987161d9"
+    },
+    {
+      "name": "7-Zip 26.02 (x64)",
+      "version": "26.02",
+      "publisher": "Igor Pavlov",
+      "installDate": null,
+      "arch": "x64",
+      "key": "7-Zip"
+    },
+    {
+      "name": "AMD Software",
+      "version": "24.30.18",
+      "publisher": "Advanced Micro Devices, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "AMD Catalyst Install Manager"
+    },
+    {
+      "name": "AMD Ryzen Master",
+      "version": "2.14.1.3277",
+      "publisher": "Advanced Micro Devices, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "AMD Ryzen Master"
+    },
+    {
+      "name": "Bitdefender Total Security",
+      "version": "27.0.49.250",
+      "publisher": "Bitdefender",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Bitdefender"
+    },
+    {
+      "name": "Bitdefender Agent",
+      "version": "27.1.1.48",
+      "publisher": "Bitdefender",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Bitdefender Agent"
+    },
+    {
+      "name": "Bitdefender VPN",
+      "version": "27.3.5.11",
+      "publisher": "Bitdefender",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Bitdefender VPN"
+    },
+    {
+      "name": "Logitech Capture",
+      "version": "2.08.11",
+      "publisher": "Logitech",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Capture"
+    },
+    {
+      "name": "GIGABYTE SSD Firmware Update Tool",
+      "version": "24.06.19.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBTSsdFirmwareUpdate"
+    },
+    {
+      "name": "GBT_Dynamic_Lighting_Lib_UC 25.07.21.01",
+      "version": "25.07.21.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBT_Dynamic_Lighting_Lib_UC"
+    },
+    {
+      "name": "GBT_MB_Update",
+      "version": "26.01.14.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBT_MB_Update"
+    },
+    {
+      "name": "GBT_rgbMotherboard_UC 26.03.25.01",
+      "version": "26.03.25.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBT_rgbMotherboard_UC"
+    },
+    {
+      "name": "GBT_RGB_Sync_Control 26.03.25.01",
+      "version": "26.03.25.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBT_RGB_Sync_Control"
+    },
+    {
+      "name": "GBT_VGA 26.06.02.01",
+      "version": "26.06.02.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GBT_VGA"
+    },
+    {
+      "name": "GIGABYTE Control Center 26.03.26.01",
+      "version": "26.03.26.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "GIGABYTE Control Center"
+    },
+    {
+      "name": "Git",
+      "version": "2.55.0.3",
+      "publisher": "The Git Development Community",
+      "installDate": "20260801",
+      "arch": "x64",
+      "key": "Git_is1"
+    },
+    {
+      "name": "GIGABYTE Performance Library",
+      "version": "26.03.19.01",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "MBEasyTune"
+    },
+    {
+      "name": "GIGABYTE Storage Library",
+      "version": "26.04.27.02",
+      "publisher": "GIGABYTE",
+      "installDate": null,
+      "arch": "x64",
+      "key": "MBStorage"
+    },
+    {
+      "name": "Microsoft Visual Studio 2010 Tools for Office Runtime (x64)",
+      "version": "10.0.60917",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Microsoft Visual Studio 2010 Tools for Office Runtime (x64)"
+    },
+    {
+      "name": "Mozilla Firefox (x64 en-GB)",
+      "version": "148.0",
+      "publisher": "Mozilla",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Mozilla Firefox"
+    },
+    {
+      "name": "Mozilla Maintenance Service",
+      "version": "148.0",
+      "publisher": "Mozilla",
+      "installDate": null,
+      "arch": "x64",
+      "key": "MozillaMaintenanceService"
+    },
+    {
+      "name": "Microsoft 365 - en-us",
+      "version": "16.0.20326.20158",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x64",
+      "key": "O365HomePremRetail - en-us"
+    },
+    {
+      "name": "Meta Horizon Link",
+      "version": "1.115.0",
+      "publisher": "Facebook Technologies, LLC",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Oculus"
+    },
+    {
+      "name": "Microsoft OneDrive",
+      "version": "26.168.0830.0006",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x64",
+      "key": "OneDriveSetup.exe"
+    },
+    {
+      "name": "ScoreCloud Studio",
+      "version": "4.10.3",
+      "publisher": "DoReMIR Music Research",
+      "installDate": null,
+      "arch": "x64",
+      "key": "ScoreCloud"
+    },
+    {
+      "name": "The Jackbox Party Pack 6",
+      "version": null,
+      "publisher": "Jackbox Games, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1005300"
+    },
+    {
+      "name": "Wizard with a Gun",
+      "version": null,
+      "publisher": "Galvanic Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1150530"
+    },
+    {
+      "name": "The Lamplighters League",
+      "version": null,
+      "publisher": "Harebrained Schemes",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1167750"
+    },
+    {
+      "name": "Battletoads",
+      "version": null,
+      "publisher": "Dlala Studios",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1244950"
+    },
+    {
+      "name": "Escape Simulator",
+      "version": null,
+      "publisher": "Pine Studio",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1435790"
+    },
+    {
+      "name": "My Friendly Neighborhood",
+      "version": null,
+      "publisher": "John Szymanski",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1574260"
+    },
+    {
+      "name": "Stumble Guys",
+      "version": null,
+      "publisher": "Scopely",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1677740"
+    },
+    {
+      "name": "Alien: Rogue Incursion VR",
+      "version": null,
+      "publisher": "Survios",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1850050"
+    },
+    {
+      "name": "Operation Wolf Returns: First Mission",
+      "version": null,
+      "publisher": "VIRTUALLYZ GAMING",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1852650"
+    },
+    {
+      "name": "Cryptmaster",
+      "version": null,
+      "publisher": "Paul Hart",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1885110"
+    },
+    {
+      "name": "Sherlock Holmes The Awakened",
+      "version": null,
+      "publisher": "Frogwares",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1949030"
+    },
+    {
+      "name": "OCTOPATH TRAVELER II",
+      "version": null,
+      "publisher": "Square Enix",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 1971650"
+    },
+    {
+      "name": "FPS Chess",
+      "version": null,
+      "publisher": "Meta Fork",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2021910"
+    },
+    {
+      "name": "Classified: France \u002744",
+      "version": null,
+      "publisher": "Absolutely Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2085370"
+    },
+    {
+      "name": "Warhammer 40,000: Rogue Trader",
+      "version": null,
+      "publisher": "Owlcat Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2186680"
+    },
+    {
+      "name": "Hello Neighbor VR: Search and Rescue",
+      "version": null,
+      "publisher": "Steel Wool Studios",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2206320"
+    },
+    {
+      "name": "Asterix \u0026 Obelix Slap Them All! 2",
+      "version": null,
+      "publisher": "Mr. Nutz Studio",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2360250"
+    },
+    {
+      "name": "Train Simulator Classic",
+      "version": null,
+      "publisher": "Dovetail Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 24010"
+    },
+    {
+      "name": "Assetto Corsa",
+      "version": null,
+      "publisher": "Kunos Simulazioni",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 244210"
+    },
+    {
+      "name": "SteamVR",
+      "version": null,
+      "publisher": "Valve",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 250820"
+    },
+    {
+      "name": "Stygian: Outer Gods",
+      "version": null,
+      "publisher": "Misterial Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2581410"
+    },
+    {
+      "name": "The Thaumaturge: Original Soundtrack",
+      "version": null,
+      "publisher": "Fool\u0027s Theory",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2776970"
+    },
+    {
+      "name": "The Jackbox Megapicker",
+      "version": null,
+      "publisher": "Jackbox Games, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2828500"
+    },
+    {
+      "name": "Avatar: Frontiers of Pandora",
+      "version": null,
+      "publisher": "Massive Entertainment \u2013 A Ubisoft Studio",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2840770"
+    },
+    {
+      "name": "HackHub - Ultimate Hacker Simulator",
+      "version": null,
+      "publisher": "HotBunny",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 2980270"
+    },
+    {
+      "name": "Crimson Desert",
+      "version": null,
+      "publisher": "Pearl Abyss",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 3321460"
+    },
+    {
+      "name": "Game Quest Demo",
+      "version": null,
+      "publisher": "Nic Taylor",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 3463740"
+    },
+    {
+      "name": "The Jackbox Party Pack 2",
+      "version": null,
+      "publisher": "Jackbox Games, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 397460"
+    },
+    {
+      "name": "Call of Cthulhu",
+      "version": null,
+      "publisher": "Cyanide Studio",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 399810"
+    },
+    {
+      "name": "Divinity: Original Sin 2",
+      "version": null,
+      "publisher": "Larian Studios",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 435150"
+    },
+    {
+      "name": "Half-Life: Alyx",
+      "version": null,
+      "publisher": "Valve",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 546560"
+    },
+    {
+      "name": "The Jackbox Party Pack 4",
+      "version": null,
+      "publisher": "Jackbox Games, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 610180"
+    },
+    {
+      "name": "Disco Elysium",
+      "version": null,
+      "publisher": "ZA/UM",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 632470"
+    },
+    {
+      "name": "Bugsnax",
+      "version": null,
+      "publisher": "Young Horses",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 674140"
+    },
+    {
+      "name": "AtmaSphere",
+      "version": null,
+      "publisher": "Mazen Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 753660"
+    },
+    {
+      "name": "The Jackbox Party Pack 5",
+      "version": null,
+      "publisher": "Jackbox Games, Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 774461"
+    },
+    {
+      "name": "eSail Sailing Simulator",
+      "version": null,
+      "publisher": "eSail Ltd.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 794860"
+    },
+    {
+      "name": "Honey, I Joined a Cult",
+      "version": null,
+      "publisher": "Sole Survivor Games",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 841190"
+    },
+    {
+      "name": "Little Nightmares II",
+      "version": null,
+      "publisher": "Tarsier Studios",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 860510"
+    },
+    {
+      "name": "Heavy Rain",
+      "version": null,
+      "publisher": "Quantic Dream",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Steam App 960910"
+    },
+    {
+      "name": "Sunshine",
+      "version": "2025.924.154138",
+      "publisher": "LizardByte",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Sunshine"
+    },
+    {
+      "name": "Unity 6000.5.6f1",
+      "version": "6000.5.6f1",
+      "publisher": "Unity Technologies ApS",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Unity 6000.5.6f1"
+    },
+    {
+      "name": "Unity 6000.5.9f1",
+      "version": "6000.5.9f1",
+      "publisher": "Unity Technologies ApS",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Unity 6000.5.9f1"
+    },
+    {
+      "name": "Unity Hub 3.21.0",
+      "version": "3.21.0",
+      "publisher": "Unity Technologies Inc.",
+      "installDate": null,
+      "arch": "x64",
+      "key": "Unity Technologies - Hub"
+    },
+    {
+      "name": "VLC media player",
+      "version": "3.0.23",
+      "publisher": "VideoLAN",
+      "installDate": null,
+      "arch": "x64",
+      "key": "VLC media player"
+    },
+    {
+      "name": "Ableton Live 12 Lite",
+      "version": "12.0.0.0",
+      "publisher": "Ableton",
+      "installDate": "20250829",
+      "arch": "x64",
+      "key": "{03EB54E2-2F44-4987-8870-EC76D91910A4}"
+    },
+    {
+      "name": "Core Temp 1.20.1",
+      "version": "1.20.1",
+      "publisher": "ALCPU",
+      "installDate": "20260821",
+      "arch": "x64",
+      "key": "{086D343F-8E78-4AFC-81AC-D6D414AFD8AC}_is1"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2010  x64 Redistributable - 10.0.40219",
+      "version": "10.0.40219",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260821",
+      "arch": "x64",
+      "key": "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}"
+    },
+    {
+      "name": "Microsoft Windows Application Compatibility Fix Database",
+      "version": null,
+      "publisher": null,
+      "installDate": null,
+      "arch": "x64",
+      "key": "{22221111-1111-1111-1111-111111111111}.sdb"
+    },
+    {
+      "name": "Microsoft Server Speech Platform Runtime (x64)",
+      "version": "11.0.7400.345",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x64",
+      "key": "{3B433087-E62E-4BF5-97F9-4AF6E1C2409C}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2008 Redistributable - x64 9.0.30729.6161",
+      "version": "9.0.30729.6161",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20250401",
+      "arch": "x64",
+      "key": "{5FCE6D76-F5DC-37AB-B2B8-22AB8CEDB1D4}"
+    },
+    {
+      "name": "GitHub CLI",
+      "version": "2.100.0",
+      "publisher": "GitHub, Inc.",
+      "installDate": "20260905",
+      "arch": "x64",
+      "key": "{67E6AC7F-85BD-4139-B4F8-69B62D830678}"
+    },
+    {
+      "name": "GOG GALAXY",
+      "version": "2.1.10.56",
+      "publisher": "GOG.com",
+      "installDate": "20250330",
+      "arch": "x64",
+      "key": "{7258BA11-600C-430E-A759-27E2C691A335}_is1"
+    },
+    {
+      "name": "Blender",
+      "version": "5.2.0",
+      "publisher": "Blender Foundation",
+      "installDate": "20260801",
+      "arch": "x64",
+      "key": "{72D5FB89-E923-4FC7-B2DE-14ED7C4B104F}"
+    },
+    {
+      "name": "Microsoft Build of OpenJDK  21.0.12\u002B8 (x64)",
+      "version": "21.0.12.8",
+      "publisher": "Microsoft",
+      "installDate": "20260821",
+      "arch": "x64",
+      "key": "{731F1E25-38F4-416B-A628-26984ABD49BB}"
+    },
+    {
+      "name": "Logi Options\u002B",
+      "version": "2.7.961922",
+      "publisher": "Logitech",
+      "installDate": null,
+      "arch": "x64",
+      "key": "{850cdc16-85df-4052-b06e-4e3e9e83c5c6}"
+    },
+    {
+      "name": "Logi Plugin Service",
+      "version": "6.4.1.3246",
+      "publisher": "Logitech",
+      "installDate": "20260924",
+      "arch": "x64",
+      "key": "{8AFB30E7-8172-472A-BE7A-B2367DED2FD5}"
+    },
+    {
+      "name": "AMD Application Compatibility Database File",
+      "version": null,
+      "publisher": null,
+      "installDate": null,
+      "arch": "x64",
+      "key": "{950d026e-be12-4dc6-988a-b15dcbc1e536}.sdb"
+    },
+    {
+      "name": "Microsoft Build of OpenJDK  25.0.4.1\u002B1 (x64)",
+      "version": "25.0.4.101",
+      "publisher": "Microsoft",
+      "installDate": "20260822",
+      "arch": "x64",
+      "key": "{96513FF2-C375-42F1-8D4E-4A87D1D24CF8}"
+    },
+    {
+      "name": "ViGEm Bus Driver",
+      "version": "1.22.0",
+      "publisher": "Nefarius Software Solutions e.U.",
+      "installDate": "20250408",
+      "arch": "x64",
+      "key": "{966606F3-2745-49E9-BF15-5C3EAA4E9077}"
+    },
+    {
+      "name": "Node.js",
+      "version": "24.18.1",
+      "publisher": "Node.js Foundation",
+      "installDate": "20260801",
+      "arch": "x64",
+      "key": "{A567373B-D484-4253-AB6A-007CFB51C5A6}"
+    },
+    {
+      "name": "Microsoft Teams Meeting Add-in for Microsoft Office",
+      "version": "1.24.31301",
+      "publisher": "Microsoft",
+      "installDate": "20250717",
+      "arch": "x64",
+      "key": "{A7AB73A3-CB10-4AA5-9D38-6AEFFBDE4C91}"
+    },
+    {
+      "name": "Ableton USB Audio Driver v5.68.0",
+      "version": "5.68.0",
+      "publisher": "Ableton",
+      "installDate": "20250829",
+      "arch": "x64",
+      "key": "{A823612A-AA91-4911-886A-7C589452C65C}"
+    },
+    {
+      "name": "Adobe Acrobat (64-bit)",
+      "version": "25.001.21223",
+      "publisher": "Adobe",
+      "installDate": "20260221",
+      "arch": "x64",
+      "key": "{AC76BA86-1033-1033-7760-BC15014EA700}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2005 Redistributable (x64)",
+      "version": "8.0.61000",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20250401",
+      "arch": "x64",
+      "key": "{ad8a2fa1-06e7-4b0d-927d-6e54b3d31028}"
+    },
+    {
+      "name": "NVIDIA Graphics Driver 616.64",
+      "version": "616.64",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260904",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_Display.Driver"
+    },
+    {
+      "name": "NVIDIA App 11.0.9.251",
+      "version": "11.0.9.251",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260910",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_Display.NvApp"
+    },
+    {
+      "name": "NVIDIA PhysX System Software 9.26.0703",
+      "version": "9.26.0703",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260828",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_Display.PhysX"
+    },
+    {
+      "name": "NVIDIA FrameView SDK 1.9.12728.38614306",
+      "version": "1.9.12728.38614306",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260910",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_FrameViewSdk"
+    },
+    {
+      "name": "NVIDIA HD Audio Driver 1.4.6.3",
+      "version": "1.4.6.3",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260904",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_HDAudio.Driver"
+    },
+    {
+      "name": "NVIDIA Broadcast 2.2.0",
+      "version": "2.2.0",
+      "publisher": "NVIDIA Corporation",
+      "installDate": "20260705",
+      "arch": "x64",
+      "key": "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_NVIDIABroadcast"
+    },
+    {
+      "name": "Microsoft GameInput",
+      "version": "3.5.270.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260923",
+      "arch": "x64",
+      "key": "{C7B6BB76-07B4-48D4-B257-4511AB9E002A}"
+    },
+    {
+      "name": "Elgato Stream Deck",
+      "version": "7.5.1.22901",
+      "publisher": "Corsair Memory, Inc.",
+      "installDate": "20260821",
+      "arch": "x64",
+      "key": "{ED591028-8D85-4D44-AA11-B2D8EC905F91}"
+    },
+    {
+      "name": "Fallout: London",
+      "version": "V1.03 IV3.00 RABBIT \u0026 PORK PUBLIC",
+      "publisher": "GOG.com",
+      "installDate": "20251030",
+      "arch": "x86",
+      "key": "1491728574_is1"
+    },
+    {
+      "name": "Fallout 4: Game of the Year Edition",
+      "version": "1.10.163.0",
+      "publisher": "GOG.com",
+      "installDate": "20250603",
+      "arch": "x86",
+      "key": "1998527297_is1"
+    },
+    {
+      "name": "AMD Chipset Software",
+      "version": "8.03.25.247",
+      "publisher": "Advanced Micro Devices, Inc.",
+      "installDate": null,
+      "arch": "x86",
+      "key": "AMD_Chipset_IODrivers"
+    },
+    {
+      "name": "Battle.net",
+      "version": null,
+      "publisher": "Blizzard Entertainment",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Battle.net"
+    },
+    {
+      "name": "FileZilla 3.69.0",
+      "version": "3.69.0",
+      "publisher": "Tim Kosse",
+      "installDate": null,
+      "arch": "x86",
+      "key": "FileZilla Client"
+    },
+    {
+      "name": "Google Chrome",
+      "version": "153.0.8010.53",
+      "publisher": "Google LLC",
+      "installDate": "20260921",
+      "arch": "x86",
+      "key": "Google Chrome"
+    },
+    {
+      "name": "HandBrake 1.11.2",
+      "version": "1.11.2",
+      "publisher": null,
+      "installDate": null,
+      "arch": "x86",
+      "key": "HandBrake"
+    },
+    {
+      "name": "Smart Backup (x64)",
+      "version": "3.24.0829.1",
+      "publisher": "Gigabyte",
+      "installDate": "20250329",
+      "arch": "x86",
+      "key": "InstallShield_{BC1FA5CF-A36F-4C61-9638-09D0B431B006}"
+    },
+    {
+      "name": "Realtek PCI-E Wireless LAN WiFi 6 Driver",
+      "version": "Drv_3.00.0045",
+      "publisher": "REALTEK Semiconductor Corp.",
+      "installDate": "20260408",
+      "arch": "x86",
+      "key": "InstallShield_{F226CA8A-6F3D-429b-B310-776FEA12B17E}"
+    },
+    {
+      "name": "Logi Download Assistant",
+      "version": "2.0.529",
+      "publisher": "Logitech",
+      "installDate": null,
+      "arch": "x86",
+      "key": "LogiDownloadAssistant"
+    },
+    {
+      "name": "Copilot",
+      "version": "153.0.4234.48",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260919",
+      "arch": "x86",
+      "key": "Microsoft Copilot"
+    },
+    {
+      "name": "Microsoft Edge",
+      "version": "153.0.4234.48",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260921",
+      "arch": "x86",
+      "key": "Microsoft Edge"
+    },
+    {
+      "name": "Steam",
+      "version": "2.10.91.91",
+      "publisher": "Valve Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Steam"
+    },
+    {
+      "name": "Syncios Mobile Manager 7.2.4",
+      "version": "7.2.4",
+      "publisher": "Syncios",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Syncios Mobile Manager"
+    },
+    {
+      "name": "Syncios Toolkit 1.1.0",
+      "version": "1.1.0",
+      "publisher": "Syncios",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Syncios Toolkit"
+    },
+    {
+      "name": "Ubisoft Connect",
+      "version": "172.1.13247",
+      "publisher": "Ubisoft",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Uplay"
+    },
+    {
+      "name": "Star Wars Outlaws",
+      "version": "",
+      "publisher": "Ubisoft",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Uplay Install 17903"
+    },
+    {
+      "name": "RabbidsCoding",
+      "version": "",
+      "publisher": "Ubisoft",
+      "installDate": null,
+      "arch": "x86",
+      "key": "Uplay Install 5408"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2013 Redistributable (x64) - 12.0.40664",
+      "version": "12.0.40664.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{042d26ef-3dbe-4c25-95d3-4c1b11b235a7}"
+    },
+    {
+      "name": "PS Remote Play",
+      "version": "9.0.0.02120",
+      "publisher": "Sony Interactive Entertainment Inc.",
+      "installDate": "20260406",
+      "arch": "x86",
+      "key": "{050A020A-7844-40CB-B3CB-DB8609C52D18}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2013 Redistributable (x64) - 12.0.30501",
+      "version": "12.0.30501.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{050d4fc8-5d48-4b8f-8972-47c82c46020f}"
+    },
+    {
+      "name": "Microsoft Windows Desktop Runtime - 6.0.36 (x64)",
+      "version": "6.0.36.34217",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{0532b8f2-12d7-43de-95fc-7b87006758a8}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-NZ)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{07FC9CAD-FCEC-4186-BB83-EF7CCC9372BA}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B v14 Redistributable (x64) - 14.51.36247",
+      "version": "14.51.36247.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{0e3bb569-69d6-4c34-bff9-c2f81db5e5f0}"
+    },
+    {
+      "name": "Windows 11 Installation Assistant",
+      "version": "1.4.19041.6448",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{115DF11E-4B4C-4EA9-9A79-00DB0C7EF02D}"
+    },
+    {
+      "name": "F1\u00AE 25",
+      "version": "1.0.132.9442",
+      "publisher": "Electronic Arts, Inc.",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{181EF6F2-7114-442A-B998-640EA60836C8}"
+    },
+    {
+      "name": "Microsoft .NET SDK 10.0.400 (x64)",
+      "version": "10.4.26.38015",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260821",
+      "arch": "x86",
+      "key": "{20DCD5C0-A475-42D4-8347-F8396987949B}"
+    },
+    {
+      "name": "Microsoft Server Speech Recognition Language - TELE (nl-NL)",
+      "version": "10.2.7300.97",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{2CBAB07E-4865-40F0-9D6A-EFA350420166}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2012 Redistributable (x86) - 11.0.61030",
+      "version": "11.0.61030.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{33d1fd90-4274-48a1-9bc1-97e33d9c2d6f}"
+    },
+    {
+      "name": "Microsoft Server Speech Recognition Language - TELE (en-IN)",
+      "version": "11.0.7400.335",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{3B06AC90-DE68-44A9-95EB-0A3C1AF1514F}"
+    },
+    {
+      "name": "Dragon",
+      "version": "6",
+      "publisher": "Realtek",
+      "installDate": "20250329",
+      "arch": "x86",
+      "key": "{3C8FA4F4-8471-4C60-9002-9B9F78B7B483}"
+    },
+    {
+      "name": "Microsoft Windows Desktop Runtime - 3.1.8 (x64)",
+      "version": "3.1.8.29220",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{3e04c2ef-ccc7-4fe6-a32f-f36572af0f42}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-AU)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{48CEC0A3-AE10-4EE3-AC62-76D3D58792E5}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (fr-FR)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{4CC174AA-25BC-46FF-B1E2-13B24AFB6142}"
+    },
+    {
+      "name": "Epic Games Launcher",
+      "version": "1.3.149.0",
+      "publisher": "Epic Games, Inc.",
+      "installDate": "20250705",
+      "arch": "x86",
+      "key": "{4CD58797-8AD3-40B1-933B-84C89EC9150C}"
+    },
+    {
+      "name": "Jabra Direct",
+      "version": "8.1.14601",
+      "publisher": "GN Hearing A/S",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{649687b6-d586-4541-bf74-978a8ba8db25}"
+    },
+    {
+      "name": "Epic Online Services",
+      "version": "4.2.1",
+      "publisher": "Epic Games, Inc.",
+      "installDate": "20260225",
+      "arch": "x86",
+      "key": "{6730F587-C259-4C4C-A527-F7FF31D970F8}"
+    },
+    {
+      "name": "SD Card Formatter",
+      "version": "5.0.3",
+      "publisher": "SD Association",
+      "installDate": "20250608",
+      "arch": "x86",
+      "key": "{685D9469-D3C5-44CD-944D-0336A30D97FE}"
+    },
+    {
+      "name": "skate.",
+      "version": "1.0.30.8",
+      "publisher": "Electronic Arts",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{7B682C4F-7110-4D96-A61B-393A497F7006}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (fr-CA)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{7D179500-CA0C-4456-B624-C15876B15F39}"
+    },
+    {
+      "name": "Realtek Ethernet Controller Driver",
+      "version": "11.28.20.1224",
+      "publisher": "Realtek",
+      "installDate": "20260617",
+      "arch": "x86",
+      "key": "{8833FFB6-5B0C-4764-81AA-06DFEED9A476}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (de-DE)",
+      "version": "11.0.7413.611",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{898AA67F-99B8-4C7F-9611-B11F98EF6E78}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-US)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{8AAA44BB-487E-4D01-AF76-484ACB90DBFE}"
+    },
+    {
+      "name": "EA app",
+      "version": "13.791.0.6304",
+      "publisher": "Electronic Arts",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{8f32d48f-46aa-420f-b3d2-b0f8bdee4b90}"
+    },
+    {
+      "name": "Microsoft Windows Desktop Runtime 10.0.11 (x64)",
+      "version": "10.0.11.50000",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260821",
+      "arch": "x86",
+      "key": "{96749152-C361-49E0-BAC6-818F491B9276}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (it-IT)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{969D900A-3481-4A77-B888-D24160D4D727}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-IE)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{998D5259-3BED-4710-98FF-D63387B5429E}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B v14 Redistributable (x86) - 14.51.36247",
+      "version": "14.51.36247.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{9a6ce18d-11c0-4452-aa35-9f2b8437c686}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-CA)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{9C5505DA-F9C1-46CB-9F8F-AC38F8EA518A}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2013 Redistributable (x86) - 12.0.40664",
+      "version": "12.0.40664.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{9dff3540-fc85-4ed5-ac84-9e3c7fd8bece}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (en-GB)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{A0186231-0A8B-455A-8A25-B64AABCC11A6}"
+    },
+    {
+      "name": "Microsoft Server Speech Recognition Language - TELE (zh-CN)",
+      "version": "11.0.7400.335",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{BAD2A75A-1708-47BA-A498-20890D2C78A7}"
+    },
+    {
+      "name": "Microsoft Server Speech Recognition Language - TELE (pl-PL)",
+      "version": "11.0.7400.335",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{BEFB9378-5E88-4266-8EB1-C92869449885}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2012 Redistributable (x64) - 11.0.61030",
+      "version": "11.0.61030.0",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{ca67548a-5ebe-413a-b50c-4b9ceb6d66c6}"
+    },
+    {
+      "name": "Microsoft .NET SDK 8.0.424 (x64)",
+      "version": "8.4.2426.37308",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{ccf60232-681c-46c3-9a96-c6d763b51c0f}"
+    },
+    {
+      "name": "Microsoft Windows Desktop Runtime - 8.0.30 (x64)",
+      "version": "8.0.30.36323",
+      "publisher": "Microsoft Corporation",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{d374321a-d08b-4207-8ef4-6953f782a26c}"
+    },
+    {
+      "name": "Microsoft .NET SDK 10.0.301 (x64)",
+      "version": "10.3.126.27133",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260613",
+      "arch": "x86",
+      "key": "{D3B0C96C-7E40-4CE4-A50B-15991126C0A3}"
+    },
+    {
+      "name": "Corsair Device Control Service Bundle",
+      "version": "1.9.9",
+      "publisher": "Corsair",
+      "installDate": null,
+      "arch": "x86",
+      "key": "{dffe1772-7f42-4dd2-ae7c-f07b34d720be}"
+    },
+    {
+      "name": "Python Launcher",
+      "version": "3.14.7150.0",
+      "publisher": "Python Software Foundation",
+      "installDate": "20260823",
+      "arch": "x86",
+      "key": "{E81C7963-7B6A-4296-9368-C4CA4D78470A}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (es-MX)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{E8F3B154-03CE-4120-8B9D-9E83ED5F3AD7}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (ja-JP)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{EDA8693D-9E82-4FD1-98C8-0DC4F9141E0F}"
+    },
+    {
+      "name": "Microsoft Visual C\u002B\u002B 2010  x86 Redistributable - 10.0.40219",
+      "version": "10.0.40219",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260821",
+      "arch": "x86",
+      "key": "{F0C3E5D1-1ADE-321E-8167-68EF0DE699A5}"
+    },
+    {
+      "name": "Realtek Audio Driver",
+      "version": "6.0.9927.1",
+      "publisher": "Realtek Semiconductor Corp.",
+      "installDate": "20260408",
+      "arch": "x86",
+      "key": "{F132AF7F-7BCA-4EDE-8A7C-958108FE7DBC}"
+    },
+    {
+      "name": "Kinect for Windows Speech Recognition Language Pack (es-ES)",
+      "version": "11.0.7400.336",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{F49AF755-A5C3-4252-A190-5772B2669C3B}"
+    },
+    {
+      "name": "Microsoft Server Speech Recognition Language - TELE (pt-BR)",
+      "version": "11.0.7400.335",
+      "publisher": "Microsoft Corporation",
+      "installDate": "20260305",
+      "arch": "x86",
+      "key": "{F6B5EB21-0ABF-487C-B9A9-D9DB259C4403}"
+    }
+  ],
+  "features": [],
+  "featureSource": null,
+  "services": [
+    {
+      "name": "LanmanServer",
+      "displayName": "Server",
+      "status": "Running",
+      "startType": "Automatic"
+    },
+    {
+      "name": "MSDTC",
+      "displayName": "Distributed Transaction Coordinator",
+      "status": "Stopped",
+      "startType": "Manual"
+    },
+    {
+      "name": "Spooler",
+      "displayName": "Print Spooler",
+      "status": "Running",
+      "startType": "Automatic"
+    },
+    {
+      "name": "TermService",
+      "displayName": "Remote Desktop Services",
+      "status": "Stopped",
+      "startType": "Manual"
+    },
+    {
+      "name": "WebClient",
+      "displayName": "WebClient",
+      "status": "Stopped",
+      "startType": "Manual"
+    },
+    {
+      "name": "WinRM",
+      "displayName": "Windows Remote Management (WS-Management)",
+      "status": "Stopped",
+      "startType": "Manual"
+    }
+  ],
+  "smb1Enabled": false,
+  "rdpEnabled": false,
+  "rdpNlaRequired": true,
+  "listeners": [
+    {
+      "address": "::",
+      "port": 135,
+      "pid": 2660,
+      "process": "svchost",
+      "service": "RpcEptMapper,RpcSs"
+    },
+    {
+      "address": "::",
+      "port": 445,
+      "pid": 4,
+      "process": "System",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 1844,
+      "pid": 47244,
+      "process": "ElgatoAudioControlServer",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 2869,
+      "pid": 4,
+      "process": "System",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 5357,
+      "pid": 4,
+      "process": "System",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 7680,
+      "pid": 7372,
+      "process": "svchost",
+      "service": "DoSvc"
+    },
+    {
+      "address": "::",
+      "port": 8264,
+      "pid": 48288,
+      "process": "MrBackgroundHost",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 28198,
+      "pid": 42640,
+      "process": "StreamDeck",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49664,
+      "pid": 2212,
+      "process": "lsass",
+      "service": "KeyIso,SamSs,VaultSvc"
+    },
+    {
+      "address": "::",
+      "port": 49665,
+      "pid": 1816,
+      "process": "wininit",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49666,
+      "pid": 3228,
+      "process": "svchost",
+      "service": "Schedule"
+    },
+    {
+      "address": "::",
+      "port": 49667,
+      "pid": 5016,
+      "process": "svchost",
+      "service": "EventLog"
+    },
+    {
+      "address": "::",
+      "port": 49842,
+      "pid": 11792,
+      "process": "spoolsv",
+      "service": "Spooler"
+    },
+    {
+      "address": "::",
+      "port": 49919,
+      "pid": 2176,
+      "process": "services",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49951,
+      "pid": 13072,
+      "process": "OVRServer_x64",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49952,
+      "pid": 13072,
+      "process": "OVRServer_x64",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49953,
+      "pid": 13072,
+      "process": "OVRServer_x64",
+      "service": null
+    },
+    {
+      "address": "::",
+      "port": 49954,
+      "pid": 13072,
+      "process": "OVRServer_x64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 5554,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 5555,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 35783,
+      "pid": 34368,
+      "process": "EpicOnlineServicesUserHelper",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 42050,
+      "pid": 52888,
+      "process": "OneDrive.Sync.Service",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 55678,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 55681,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 55688,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 55699,
+      "pid": 60500,
+      "process": "netsimd",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 59433,
+      "pid": 37808,
+      "process": "EABackgroundService",
+      "service": "EABackgroundService"
+    },
+    {
+      "address": "::1",
+      "port": 59439,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 63115,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "::1",
+      "port": 63116,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 135,
+      "pid": 2660,
+      "process": "svchost",
+      "service": "RpcEptMapper,RpcSs"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 5040,
+      "pid": 8676,
+      "process": "svchost",
+      "service": "CDPSvc"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 27036,
+      "pid": 29416,
+      "process": "steam",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 47984,
+      "pid": 17380,
+      "process": "sunshine",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 47989,
+      "pid": 17380,
+      "process": "sunshine",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 47990,
+      "pid": 17380,
+      "process": "sunshine",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 48010,
+      "pid": 17380,
+      "process": "sunshine",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49664,
+      "pid": 2212,
+      "process": "lsass",
+      "service": "KeyIso,SamSs,VaultSvc"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49665,
+      "pid": 1816,
+      "process": "wininit",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49666,
+      "pid": 3228,
+      "process": "svchost",
+      "service": "Schedule"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49667,
+      "pid": 5016,
+      "process": "svchost",
+      "service": "EventLog"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49842,
+      "pid": 11792,
+      "process": "spoolsv",
+      "service": "Spooler"
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 49919,
+      "pid": 2176,
+      "process": "services",
+      "service": null
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 59869,
+      "pid": 23196,
+      "process": "logioptionsplus_agent",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 1120,
+      "pid": 5904,
+      "process": "Agent",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 3215,
+      "pid": 38604,
+      "process": "EALocalHostSvc",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 3216,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 3217,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 5037,
+      "pid": 60896,
+      "process": "adb",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 5554,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 5555,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 6402,
+      "pid": 60500,
+      "process": "netsimd",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 6463,
+      "pid": 4432,
+      "process": "Discord",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 8554,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 9977,
+      "pid": 33260,
+      "process": "GalaxyCommunication",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 11434,
+      "pid": 10776,
+      "process": "ollama",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 18100,
+      "pid": 40624,
+      "process": "NVIDIA Broadcast",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 22885,
+      "pid": 15320,
+      "process": "Battle.net",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 24563,
+      "pid": 34612,
+      "process": "EpicGamesLauncher",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 28196,
+      "pid": 42640,
+      "process": "StreamDeck",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 35783,
+      "pid": 34368,
+      "process": "EpicOnlineServicesUserHelper",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 50313,
+      "pid": 29416,
+      "process": "steam",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 50353,
+      "pid": 29416,
+      "process": "steam",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 50545,
+      "pid": 32736,
+      "process": "GalaxyClient",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 55688,
+      "pid": 61216,
+      "process": "qemu-system-x86_64",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 55699,
+      "pid": 60500,
+      "process": "netsimd",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 59433,
+      "pid": 37808,
+      "process": "EABackgroundService",
+      "service": "EABackgroundService"
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 59439,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 60503,
+      "pid": 57800,
+      "process": "LogiPluginService",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 60507,
+      "pid": 57800,
+      "process": "LogiPluginService",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 62550,
+      "pid": 3308,
+      "process": "ollama app",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 63115,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "127.0.0.1",
+      "port": 63116,
+      "pid": 36972,
+      "process": "EADesktop",
+      "service": null
+    },
+    {
+      "address": "192.168.1.184",
+      "port": 139,
+      "pid": 4,
+      "process": "System",
+      "service": null
+    }
+  ],
+  "iis": {
+    "version": null,
+    "sites": []
+  },
+  "sql": [],
+  "dotnet": {
+    "runtimes": [
+      {
+        "name": "Microsoft.AspNetCore.App",
+        "version": "8.0.30"
+      },
+      {
+        "name": "Microsoft.AspNetCore.App",
+        "version": "10.0.9"
+      },
+      {
+        "name": "Microsoft.AspNetCore.App",
+        "version": "10.0.11"
+      },
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "3.1.8"
+      },
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "6.0.36"
+      },
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "8.0.30"
+      },
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "10.0.9"
+      },
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "10.0.11"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "3.1.8"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "6.0.36"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "8.0.30"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "10.0.9"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "10.0.11"
+      }
+    ],
+    "sdks": [
+      "8.0.424",
+      "10.0.301",
+      "10.0.400"
+    ],
+    "frameworks": [
+      {
+        "release": 533509,
+        "version": "4.8.09221"
+      },
+      {
+        "release": null,
+        "version": "2.0.50727.4927"
+      },
+      {
+        "release": null,
+        "version": "3.0.30729.4926"
+      },
+      {
+        "release": null,
+        "version": "3.5.30729.4926"
+      }
+    ]
+  },
+  "hyperv": {
+    "vms": []
+  },
+  "warnings": [
+    "features: The requested operation requires elevation.\r\n"
+  ]
+}
