@@ -33,7 +33,13 @@ Start-VM -Name $name
 $vm = Get-CimInstance -Namespace root\virtualization\v2 -ClassName Msvm_ComputerSystem -Filter "ElementName='$name'"
 $kb = Get-CimAssociatedInstance -InputObject $vm -ResultClassName Msvm_Keyboard
 function Type-Line([string] $text) {
-  if ($text) { Invoke-CimMethod -InputObject $kb -MethodName TypeText -Arguments @{ asciiText = $text } | Out-Null }
+  # One character at a time with a pause: TypeText of a whole string dropped most of the first answer
+  # (the hostname arrived as one letter) while the console was still catching up.
+  foreach ($ch in $text.ToCharArray()) {
+    Invoke-CimMethod -InputObject $kb -MethodName TypeText -Arguments @{ asciiText = [string]$ch } | Out-Null
+    Start-Sleep -Milliseconds 40
+  }
+  Start-Sleep -Milliseconds 200
   Invoke-CimMethod -InputObject $kb -MethodName TypeKey -Arguments @{ keyCode = 13 } | Out-Null
 }
 function Save-Shot([string] $label) {
