@@ -39,6 +39,8 @@ A ready-built Ubuntu 24.04 LTS VM with Docker and the stack inside. 2 vCPU, 4 GB
 
 Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL. SSH is off until the wizard has run, so the build's default password is never reachable over the network.
 
+The appliance installs Ubuntu's security updates automatically. The first run starts a few minutes after first boot, so a reboot in that window can take several minutes to complete while it finishes; later reboots are quick.
+
 To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: Packer on a Hyper-V host (then `make-ova.sh`) or on a VirtualBox host.
 
 ## First ten minutes in the console

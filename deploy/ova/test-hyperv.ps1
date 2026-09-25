@@ -135,8 +135,10 @@ Pass 'stack services running' (($running -match '\bweb\b') -and ($running -match
 
 # 5. Survives a reboot: the stack comes back without the wizard. The Default Switch's DHCP often
 #    hands out a different address after a restart, so re-read it rather than polling the old one.
+#    Allow a long while: a graceful reboot soon after first boot waits for Ubuntu's unattended
+#    security-update run, and one test saw the stack still starting six minutes in.
 Restart-VM -Name $name -Force
-$health = $null; $ip2 = $null; $deadline = (Get-Date).AddMinutes(6); Start-Sleep 30
+$health = $null; $ip2 = $null; $deadline = (Get-Date).AddMinutes(15); Start-Sleep 30
 while (-not $health -and (Get-Date) -lt $deadline) {
   Start-Sleep 10
   $ip2 = (Get-VMNetworkAdapter -VMName $name).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
