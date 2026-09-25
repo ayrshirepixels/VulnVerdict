@@ -219,6 +219,16 @@ app.MapGet("/reports/weekly.html", async (ReportService reports, int? weeks) => 
 app.MapGet("/reports/weekly.csv", async (ReportService reports, int? weeks) =>
     Results.File(System.Text.Encoding.UTF8.GetBytes((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Csv), "text/csv", "vulnverdict-weekly-" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ".csv"));
 
-app.MapGet("/healthz", () => Results.Ok("ok")).AllowAnonymous();
+// Healthy means the console can reach its database, so a stack whose web container is up but cut off
+// from Postgres shows as unhealthy to Docker, the appliance test and anyone probing it.
+app.MapGet("/healthz", async (IDbContextFactory<VvDbContext> factory, CancellationToken ct) =>
+{
+    try
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Database.CanConnectAsync(ct) ? Results.Ok("ok") : Results.Json("database unreachable", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (Exception ex) { return Results.Json("database unreachable: " + ex.GetType().Name, statusCode: StatusCodes.Status503ServiceUnavailable); }
+}).AllowAnonymous();
 
 app.Run();

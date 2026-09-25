@@ -84,10 +84,15 @@ WantedBy=multi-user.target
 UNIT
 
 # Fresh SSH host keys on each appliance's first boot (the build's keys are deleted below).
+# Runs early, outside the default dependencies: ssh.socket is ordered before sockets.target, which every
+# ordinary service waits for, so a normal service ordered before ssh.socket makes a cycle and systemd
+# resolves it by dropping the socket's start job (seen on the second boot: SSH never came up).
 cat > /etc/systemd/system/vulnverdict-hostkeys.service <<'UNIT'
 [Unit]
 Description=Generate this appliance's SSH host keys
-Before=ssh.service ssh.socket
+DefaultDependencies=no
+After=local-fs.target
+Before=ssh.service ssh.socket sockets.target
 ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
 
 [Service]
@@ -95,7 +100,7 @@ Type=oneshot
 ExecStart=/usr/bin/ssh-keygen -A
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target
 UNIT
 
 systemctl daemon-reload
