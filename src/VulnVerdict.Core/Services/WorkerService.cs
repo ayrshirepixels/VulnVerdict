@@ -281,18 +281,17 @@ public sealed class WorkerService : BackgroundService
         if (sent) _log.LogInformation("Weekly management report sent");
     }
 
-    /// <summary>A feed more than 24 hours stale triggers the administrator alert (at most once a day).</summary>
+    /// <summary>A feed overdue by its own schedule (see <see cref="Feeds.FeedHealth"/>) triggers the administrator alert (at most once a day).</summary>
     private async Task FeedHealthAlertAsync(CancellationToken ct)
     {
         using var scope = _sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<VvDbContext>();
         var now = DateTime.UtcNow;
-        var stale = await db.FeedStatuses.AsNoTracking()
-            .Where(f => f.LastAttempt != null && (f.LastSuccess == null || f.LastSuccess < now.AddHours(-24)) && f.LastAttempt < now.AddHours(-1))
-            .ToListAsync(ct);
+        var stale = (await db.FeedStatuses.AsNoTracking().Where(f => f.LastAttempt != null && f.LastAttempt < now.AddHours(-1)).ToListAsync(ct))
+            .Where(f => Feeds.FeedHealth.IsOverdue(f, now)).ToList();
         if (stale.Count == 0) return;
         var body = string.Join("\n", stale.Select(f => f.DisplayName + ": last success " + (f.LastSuccess?.ToString("u") ?? "never") + ", last error: " + (f.LastError ?? "none")));
-        await AdminAlertAsync(scope.ServiceProvider, "Feeds stale for more than 24 hours", body, ct);
+        await AdminAlertAsync(scope.ServiceProvider, "Feeds overdue", body, ct);
     }
 
     public static async Task AdminAlertAsync(IServiceProvider sp, string subject, string body, CancellationToken ct)

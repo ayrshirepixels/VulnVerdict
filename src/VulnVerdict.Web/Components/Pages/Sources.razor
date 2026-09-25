@@ -28,7 +28,7 @@
             @foreach (var f in _status)
             {
                 var feed = Feeds.FirstOrDefault(x => x.Name == f.Name);
-                var stale = f.LastSuccess is null || DateTime.UtcNow - f.LastSuccess.Value > TimeSpan.FromHours(24);
+                var stale = VulnVerdict.Core.Feeds.FeedHealth.IsOverdue(f, DateTime.UtcNow);
                 <tr>
                     <td><b>@f.DisplayName</b><br /><small class="muted">@feed?.Licence</small></td>
                     <td>every @(f.IntervalMinutes >= 60 ? (f.IntervalMinutes / 60) + " h" : f.IntervalMinutes + " min")</td>

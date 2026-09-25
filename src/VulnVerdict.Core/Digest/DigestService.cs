@@ -102,14 +102,14 @@ public sealed class DigestService
         var feeds = await db.FeedStatuses.AsNoTracking().ToListAsync(ct);
         var entries = await db.Watchlist.CountAsync(w => w.Enabled, ct);
         var feedsAsOf = feeds.Where(f => f.LastSuccess.HasValue).Select(f => f.LastSuccess!.Value).DefaultIfEmpty().Min();
-        var stale = feeds.Where(f => f.LastSuccess is null || now - f.LastSuccess.Value > TimeSpan.FromHours(24)).Select(f => f.DisplayName).ToList();
+        var stale = feeds.Where(f => VulnVerdict.Core.Feeds.FeedHealth.IsOverdue(f, now)).Select(f => f.DisplayName + (f.LastSuccess is { } ls ? " (last updated " + TimeZoneInfo.ConvertTimeFromUtc(ls, tz).ToString("d MMM HH:mm") + ")" : " (never updated)")).ToList();
         var staleBefore = now.AddDays(-30);
         var assetCount = await db.Assets.CountAsync(a => !a.Archived && a.LastSeen >= staleBefore, ct);
         var sourceCount = await db.Connectors.CountAsync(c => c.Enabled && c.LastSuccess != null, ct);
         var unknownCount = await db.Assets.CountAsync(a => !a.Archived && a.Unknown, ct);
         var coverage = (assetCount > 0 ? "Seeing " + assetCount + " asset" + (assetCount == 1 ? "" : "s") + " from " + sourceCount + " source" + (sourceCount == 1 ? "" : "s") + (unknownCount > 0 ? ", " + unknownCount + " unknown host" + (unknownCount == 1 ? "" : "s") : "") + ". " : "")
             + "Watching " + entries + " product" + (entries == 1 ? "" : "s") + " on the watchlist. Feeds current as of " + (feedsAsOf == default ? "never" : TimeZoneInfo.ConvertTimeFromUtc(feedsAsOf, tz).ToString("d MMM HH:mm")) + ".";
-        var warning = stale.Count > 0 ? "Feeds not updated in the last 24 hours: " + string.Join(", ", stale) + "." : null;
+        var warning = stale.Count > 0 ? "Feeds overdue (not updated on schedule): " + string.Join(", ", stale) + "." : null;
 
         var headline = fixToday.Count + " to fix today, " + fixWeek.Count + " this week. " + dismissedSinceMonday + " CVE" + (dismissedSinceMonday == 1 ? "" : "s") + " since Monday you did not need to read.";
         var subject = "VulnVerdict" + (string.IsNullOrWhiteSpace(s.OrganisationName) ? "" : " for " + s.OrganisationName) + ": " + headline;
