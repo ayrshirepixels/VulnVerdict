@@ -50,15 +50,6 @@ public sealed class LicenseService
 
     public static int DefaultCap(string tier) => tier switch { Starter => 50, Business => 250, _ => 0 };
 
-    /// <summary>Central side (and tests): sign the claims into a key string.</summary>
-    public static string Issue(LicenceClaims claims, ECDsa privateKey)
-    {
-        if (!Tiers.Contains(claims.Tier)) throw new ArgumentException("Tier must be starter, business or msp", nameof(claims));
-        var json = JsonSerializer.SerializeToUtf8Bytes(claims, BundleJson.Options);
-        var sig = privateKey.SignData(json, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
-        return Base64UrlText.Encode(json) + "." + Base64UrlText.Encode(sig);
-    }
-
     /// <summary>Parse and verify a key. Never throws: an unreadable or tampered key comes back with Valid = false and a reason.</summary>
     public static LicenseInfo Parse(string? key, ECDsa publicKey, DateTime now)
     {

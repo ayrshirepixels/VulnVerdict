@@ -37,7 +37,7 @@ public static class BundleJson
 public sealed record BundleFile(string Name, string Sha256, long Bytes);
 
 /// <summary>
-/// manifest.json. The signature is ECDSA P-256 (SHA-256, IEEE P1363 r||s) over <see cref="Canonical"/>: the manifest
+/// manifest.json. The signature is ECDSA P-256 (SHA-256, IEEE P1363 r||s) over <see cref="Canonical"/> (issued by the central service, verified here): the manifest
 /// without the signature field, fixed property order, files sorted by name, no whitespace.
 /// </summary>
 public sealed class BundleManifest
@@ -54,8 +54,6 @@ public sealed class BundleManifest
         return JsonSerializer.Serialize(new { version = Version, builtAt = DateTime.SpecifyKind(BuiltAt, DateTimeKind.Utc).ToString("O"), files, signer = Signer });
     }
 
-    public void Sign(ECDsa privateKey) =>
-        Signature = Convert.ToBase64String(privateKey.SignData(Encoding.UTF8.GetBytes(Canonical()), HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
 
     /// <summary>False for an unsigned manifest, a malformed signature or a signature by any other key.</summary>
     public bool Verify(ECDsa publicKey)

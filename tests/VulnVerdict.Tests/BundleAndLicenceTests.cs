@@ -91,7 +91,7 @@ public class BundleAndLicenceTests
         using var key = NewKey();
         await SeedAsync(src.Context);
 
-        var written = await BundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, "Test signer", "202609240800");
+        var written = await TestBundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, "Test signer", "202609240800");
         var manifest = BundleManifest.Parse(await File.ReadAllTextAsync(Path.Combine(dir.Path, BundleFiles.Manifest)));
 
         Assert.NotNull(manifest);
@@ -131,7 +131,7 @@ public class BundleAndLicenceTests
         using var dir = new TempDir();
         using var key = NewKey();
         await SeedAsync(src.Context);
-        var manifest = await BundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, version: "202609240800");
+        var manifest = await TestBundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, version: "202609240800");
 
         // same length so only the hash gives it away
         var kevPath = Path.Combine(dir.Path, BundleFiles.Kev);
@@ -158,7 +158,7 @@ public class BundleAndLicenceTests
         using var dir = new TempDir();
         using var key = NewKey();
         await SeedAsync(src.Context);
-        var v1 = await BundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, version: "202609240800", builtAt: new DateTime(2026, 9, 24, 8, 0, 0, DateTimeKind.Utc));
+        var v1 = await TestBundleWriter.WriteAsync(src.Context, dir.Path, key, CancellationToken.None, version: "202609240800", builtAt: new DateTime(2026, 9, 24, 8, 0, 0, DateTimeKind.Utc));
 
         var result = await BundleApplier.ApplyAsync(dst.Context, v1, dir.Path, "upload by test", CancellationToken.None);
         Assert.Equal(2, result.Cves);
@@ -186,7 +186,7 @@ public class BundleAndLicenceTests
         Assert.NotNull(state);
         Assert.Equal("202609240800", state!.Version);
         Assert.Equal("upload by test", state.Source);
-        Assert.Equal(BundleWriter.DefaultSigner, state.Signer);
+        Assert.Equal(TestBundleWriter.DefaultSigner, state.Signer);
         Assert.Equal(new DateTime(2026, 9, 24, 8, 0, 0), state.BuiltAt);
 
         var feeds = await db.FeedStatuses.ToListAsync();
@@ -202,7 +202,7 @@ public class BundleAndLicenceTests
 
         // an older version: refused as a downgrade, nothing changes
         using var older = new TempDir();
-        var v0 = await BundleWriter.WriteAsync(src.Context, older.Path, key, CancellationToken.None, version: "202609240700");
+        var v0 = await TestBundleWriter.WriteAsync(src.Context, older.Path, key, CancellationToken.None, version: "202609240700");
         var down = await Assert.ThrowsAsync<BundleRejectedException>(() => BundleApplier.ApplyAsync(db, v0, older.Path, "test", CancellationToken.None));
         Assert.Contains("downgrade", down.Message);
         Assert.Equal("202609240800", (await BundleApplier.CurrentAsync(db, CancellationToken.None))!.Version);
@@ -223,7 +223,7 @@ public class BundleAndLicenceTests
         await src.Context.SaveChangesAsync();
         src.Context.ChangeTracker.Clear();
         using var newer = new TempDir();
-        var v2 = await BundleWriter.WriteAsync(src.Context, newer.Path, key, CancellationToken.None, version: "202609240900");
+        var v2 = await TestBundleWriter.WriteAsync(src.Context, newer.Path, key, CancellationToken.None, version: "202609240900");
         var r2 = await BundleApplier.ApplyAsync(db, v2, newer.Path, "central test", CancellationToken.None);
         Assert.Equal(3, r2.Cves);
         Assert.Equal(3, await db.Cves.CountAsync());
@@ -244,7 +244,7 @@ public class BundleAndLicenceTests
         using var pub = PublicOf(key);
         var now = new DateTime(2026, 9, 24, 12, 0, 0, DateTimeKind.Utc);
 
-        var issued = LicenseService.Issue(new LicenceClaims { Customer = "Ayrshire Widgets Ltd", Tier = LicenseService.Business, AssetCap = 250, Expires = now.AddYears(1), IssuedAt = now }, key);
+        var issued = TestLicence.Issue(new LicenceClaims { Customer = "Ayrshire Widgets Ltd", Tier = LicenseService.Business, AssetCap = 250, Expires = now.AddYears(1), IssuedAt = now }, key);
         Assert.Contains(".", issued);
         Assert.DoesNotContain("=", issued);
 
@@ -280,7 +280,7 @@ public class BundleAndLicenceTests
 
         // signed by somebody else
         using var otherKey = NewKey();
-        var foreign = LicenseService.Issue(new LicenceClaims { Customer = "Impostor", Tier = LicenseService.Starter, AssetCap = 50, Expires = now.AddYears(1) }, otherKey);
+        var foreign = TestLicence.Issue(new LicenceClaims { Customer = "Impostor", Tier = LicenseService.Starter, AssetCap = 50, Expires = now.AddYears(1) }, otherKey);
         Assert.False(LicenseService.Parse(foreign, pub, now).Valid);
 
         // garbage and blank
@@ -292,14 +292,14 @@ public class BundleAndLicenceTests
         Assert.Equal("Internal build", none.TierName);
 
         // MSP keys carry the tenant token; starter defaults
-        var msp = LicenseService.Parse(LicenseService.Issue(new LicenceClaims { Customer = "Client A", Tier = LicenseService.Msp, AssetCap = 80, Expires = now.AddMonths(1), TenantToken = "tok-0123456789abcdef" }, key), pub, now);
+        var msp = LicenseService.Parse(TestLicence.Issue(new LicenceClaims { Customer = "Client A", Tier = LicenseService.Msp, AssetCap = 80, Expires = now.AddMonths(1), TenantToken = "tok-0123456789abcdef" }, key), pub, now);
         Assert.True(msp.Valid);
         Assert.Equal("MSP", msp.TierName);
         Assert.Equal("tok-0123456789abcdef", msp.TenantToken);
         Assert.Equal(80, msp.AssetCap);
         Assert.Equal(50, LicenseService.DefaultCap(LicenseService.Starter));
         Assert.Equal(250, LicenseService.DefaultCap(LicenseService.Business));
-        Assert.Throws<ArgumentException>(() => LicenseService.Issue(new LicenceClaims { Customer = "x", Tier = "enterprise", Expires = now }, key));
+        Assert.Throws<ArgumentException>(() => TestLicence.Issue(new LicenceClaims { Customer = "x", Tier = "enterprise", Expires = now }, key));
     }
 
     [Fact]
