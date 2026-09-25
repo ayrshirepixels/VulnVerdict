@@ -37,18 +37,9 @@ function Type-Line([string] $text) {
   Invoke-CimMethod -InputObject $kb -MethodName TypeKey -Arguments @{ keyCode = 13 } | Out-Null
 }
 function Save-Shot([string] $label) {
-  $svc = Get-CimInstance -Namespace root\virtualization\v2 -ClassName Msvm_VirtualSystemManagementService
-  $sd = Get-CimAssociatedInstance -InputObject $vm -ResultClassName Msvm_VirtualSystemSettingData | Where-Object { $_.VirtualSystemType -eq 'Microsoft:Hyper-V:System:Realized' }
-  $w = 1024; $h = 768
-  $r = Invoke-CimMethod -InputObject $svc -MethodName GetVirtualSystemThumbnailImage -Arguments @{ TargetSystem = $sd; WidthPixels = [uint16]$w; HeightPixels = [uint16]$h }
-  Add-Type -AssemblyName System.Drawing
-  $bmp = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
-  $data = $bmp.LockBits((New-Object System.Drawing.Rectangle(0, 0, $w, $h)), 'WriteOnly', $bmp.PixelFormat)
-  [System.Runtime.InteropServices.Marshal]::Copy([byte[]]$r.ImageData, 0, $data.Scan0, $r.ImageData.Length)
-  $bmp.UnlockBits($data)
   $file = Join-Path $shots "$label.png"
-  $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-  "screenshot: $file"
+  try { & (Join-Path $here 'vm-screenshot.ps1') -Name $name -Out $file | Out-Null; "screenshot: $file" }
+  catch { "screenshot failed: $($_.Exception.Message)" }
 }
 
 # 1. Boots, gets an address by DHCP, and the wizard is waiting on the console.
