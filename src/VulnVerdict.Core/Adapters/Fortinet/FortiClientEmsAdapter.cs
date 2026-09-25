@@ -11,7 +11,7 @@ using static VulnVerdict.Core.Adapters.Fortinet.FortinetJson;
 namespace VulnVerdict.Core.Adapters.Fortinet;
 
 /// <summary>
-/// Section 9.2 step 2: FortiClient EMS 7.x REST API. One pull returns the endpoint inventory, each endpoint's
+/// FortiClient EMS 7.x REST API. One pull returns the endpoint inventory, each endpoint's
 /// installed software and the findings of EMS's own vulnerability scan.
 ///
 /// Sign-in is POST /api/v1/auth/signin with {"name","password"}; EMS answers with a session cookie and a

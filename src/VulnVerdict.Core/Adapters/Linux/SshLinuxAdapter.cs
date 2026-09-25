@@ -84,7 +84,7 @@ public sealed class LinuxHostFacts
 public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> Software, List<string> Warnings);
 
 /// <summary>
-/// Section 9.2 step 6: Linux over SSH. Reads os-release, the installed package list (dpkg, rpm or apk), listening
+/// Linux over SSH. Reads os-release, the installed package list (dpkg, rpm or apk), listening
 /// sockets and running Docker containers as an ordinary user. Every command is read-only and runs without sudo;
 /// nothing is written to the host. Packages carry an OSV ecosystem string and a purl so they are matched through
 /// OSV rather than through CNA product names.

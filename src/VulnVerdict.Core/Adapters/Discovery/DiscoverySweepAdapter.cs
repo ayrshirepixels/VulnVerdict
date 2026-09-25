@@ -10,7 +10,7 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.Discovery;
 
 /// <summary>
-/// Section 9.2 step 9: periodic host discovery of the server and management subnets, compared against every
+/// Periodic host discovery of the server and management subnets, compared against every
 /// adapter's asset list; hosts no adapter claims are listed as unknown (the adapter id starts with "discovery",
 /// which is what InventoryService keys on). Pure .NET: TCP connects, reverse DNS and a banner read on a handful of
 /// well-known ports. nmap is not required. No vulnerability scripts and no authenticated checks, and it stays that way.

@@ -6,7 +6,7 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Services;
 
-/// <summary>Section 10.2 MSP mode: the verdict summary a client console posts to the MSP portal. Counts and product names only; never a hostname.</summary>
+/// <summary>MSP mode: the verdict summary a client console posts to the MSP portal. Counts and product names only; never a hostname.</summary>
 public sealed class MspReportPayload
 {
     public string Tenant { get; set; } = "";

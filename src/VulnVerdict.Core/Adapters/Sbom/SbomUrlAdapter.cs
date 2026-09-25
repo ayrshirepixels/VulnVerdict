@@ -5,7 +5,7 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.Sbom;
 
 /// <summary>
-/// Section 9.2 step 7, the API side of SBOM import: the console fetches the latest CycloneDX or SPDX JSON from a
+/// The API side of SBOM import: the console fetches the latest CycloneDX or SPDX JSON from a
 /// CI artifact URL on the connector schedule, so the application layer stays current without a manual upload.
 /// </summary>
 public sealed class SbomUrlAdapter : IInventoryAdapter

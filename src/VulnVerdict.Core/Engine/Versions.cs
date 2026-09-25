@@ -122,7 +122,7 @@ public enum VersionMatch { Affected, NotAffected, Unknown }
 
 public sealed record VersionMatchResult(VersionMatch Match, MatchConfidence Confidence, string Explanation, string? FixedIn);
 
-/// <summary>Section 9.3 step 3: decide whether an installed version falls inside the CNA affected ranges.</summary>
+/// <summary>Decide whether an installed version falls inside the CNA affected ranges.</summary>
 public static partial class VersionMatcher
 {
     private static readonly string[] Wildcards = { "*", "all", "any", "-", "n/a", "unspecified", "unknown", "", "0" };

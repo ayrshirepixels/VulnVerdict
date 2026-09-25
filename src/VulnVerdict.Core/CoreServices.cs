@@ -69,7 +69,7 @@ public static class CoreServices
         services.AddSingleton<LlmService>();
         services.AddSingleton<InventoryService>();
         services.AddSingleton<ConnectorService>();
-        // phase 5: signed bundles, licence, telemetry, MSP reporting
+        // signed bundles, licence, telemetry, MSP reporting
         services.AddSingleton<BundleService>();
         services.AddSingleton<LicenseService>();
         services.AddSingleton<TelemetryService>();
@@ -229,7 +229,7 @@ public static class CoreServices
     };
 }
 
-/// <summary>Section 3 rule 8: the console emails the administrator if the worker stops working.</summary>
+/// <summary>The console emails the administrator if the worker stops working.</summary>
 public sealed class WorkerMonitorService : BackgroundService
 {
     private readonly IServiceProvider _sp;

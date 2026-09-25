@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # VulnVerdict update: pull a new image tag, keep the previous one for rollback, restart web and worker.
 # Usage: ./update.sh [tag]   (default: latest published tag from the release channel in .env, or "latest")
-# Opt-in by design (section 10.4): nothing updates until someone runs this.
+# Opt-in by design: nothing updates until someone runs this.
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -f .env ] && set -a && . ./.env && set +a

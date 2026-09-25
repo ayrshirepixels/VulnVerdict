@@ -5,7 +5,7 @@ using VulnVerdict.Core.Engine;
 
 namespace VulnVerdict.Core.Services;
 
-/// <summary>Section 8.4 state workflow: done, snooze, suppress, accept risk, reopen. Every change is audited.</summary>
+/// <summary>Verdict state workflow: done, snooze, suppress, accept risk, reopen. Every change is audited.</summary>
 public sealed class VerdictWorkflow
 {
     private readonly IDbContextFactory<VvDbContext> _factory;
@@ -85,7 +85,7 @@ public sealed class VerdictWorkflow
     }
 }
 
-/// <summary>Section 8.5 watchlist maintenance. Any change requests a re-evaluation of that entry.</summary>
+/// <summary>Watchlist maintenance. Any change requests a re-evaluation of that entry.</summary>
 public sealed class WatchlistService
 {
     private readonly IDbContextFactory<VvDbContext> _factory;
@@ -166,7 +166,7 @@ public sealed class WatchlistService
         public string? Note { get; set; }
     }
 
-    /// <summary>Import a JSON array of ImportRow. Phase 1 "watchlist as a file".</summary>
+    /// <summary>Import a JSON array of ImportRow: the "watchlist as a file" route.</summary>
     public async Task<int> ImportJsonAsync(string json, string actor, CancellationToken ct = default)
     {
         var rows = JsonSerializer.Deserialize<List<ImportRow>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();

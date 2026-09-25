@@ -8,7 +8,7 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.External;
 
 /// <summary>
-/// Section 9.2 step 10: resolve the organisation's public DNS names and declared IP ranges and see what answers.
+/// External cross-check: resolve the organisation's public DNS names and declared IP ranges and see what answers.
 /// Anything answering is tagged Internet regardless of what the firewall adapter says. Shodan is optional and adds
 /// the view from outside; the console's own probe proves reachability from wherever the console sits.
 /// </summary>

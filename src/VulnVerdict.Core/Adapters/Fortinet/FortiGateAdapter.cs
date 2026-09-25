@@ -9,7 +9,7 @@ using static VulnVerdict.Core.Adapters.Fortinet.FortinetJson;
 namespace VulnVerdict.Core.Adapters.Fortinet;
 
 /// <summary>
-/// Section 9.2 step 4: FortiGate over the FortiOS REST API v2 with a REST API administrator token
+/// FortiGate over the FortiOS REST API v2 with a REST API administrator token
 /// (Authorization: Bearer). Firmware of the FortiGate, its managed FortiSwitches and FortiAPs, and exposure for
 /// free: SSL-VPN or admin access on a WAN interface marks the FortiGate itself internet-facing; a virtual IP on a
 /// WAN interface that an accept policy from a WAN interface points at marks the mapped host internet-facing.

@@ -6,7 +6,7 @@ using VulnVerdict.Core.Services;
 namespace VulnVerdict.Core.Adapters.Sbom;
 
 /// <summary>
-/// Section 9.2 step 7: SBOM upload from CI (file or API). Each upload is applied as a full snapshot through one
+/// SBOM upload from CI (file or API). Each upload is applied as a full snapshot through one
 /// upload-fed connector per asset name ("SBOM: name"), so a library CVE lands on the named site and libraries
 /// missing from the next upload are removed. The connector row is stored disabled because nothing polls it;
 /// the worker skips disabled connectors and the console shows where the software came from.

@@ -28,7 +28,7 @@ public sealed record Subject(
 }
 
 /// <summary>
-/// Section 6.5. Template: {Product} {version} on {asset}: {exploitation phrase}, {attack path phrase}, {exposure phrase}. {Fix phrase}.
+/// The one-sentence explanation. Template: {Product} {version} on {asset}: {exploitation phrase}, {attack path phrase}, {exposure phrase}. {Fix phrase}.
 /// Example: "FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8."
 /// </summary>
 public static class SentenceBuilder

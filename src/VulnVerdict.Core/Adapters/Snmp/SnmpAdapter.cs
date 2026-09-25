@@ -9,7 +9,7 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.Snmp;
 
 /// <summary>
-/// Section 9.2 step 8: the management network over read-only SNMP. sysDescr, sysObjectID, sysName and a short
+/// The management network over read-only SNMP. sysDescr, sysObjectID, sysName and a short
 /// ifPhysAddress walk for non-Fortinet switches, printers, UPS, NAS and out-of-band management (iDRAC, iLO, IPMI).
 /// Devices the mapper cannot name land in the needs-mapping queue on first sight and are tracked automatically after.
 /// </summary>

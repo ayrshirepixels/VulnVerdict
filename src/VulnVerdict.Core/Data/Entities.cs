@@ -135,9 +135,9 @@ public class Verdict
 {
     public Guid Id { get; set; }
     [MaxLength(32)] public string CveId { get; set; } = "";
-    /// <summary>Set for watchlist-derived verdicts (phase 1 and 2).</summary>
+    /// <summary>Set for watchlist-derived verdicts.</summary>
     public Guid? WatchlistEntryId { get; set; }
-    /// <summary>Set for inventory-derived verdicts (phase 3).</summary>
+    /// <summary>Set for inventory-derived verdicts.</summary>
     public Guid? SoftwareInstanceId { get; set; }
     public Guid? AssetId { get; set; }
     /// <summary>JSON array of applied compensating-control descriptions.</summary>
@@ -290,7 +290,7 @@ public class AuditEntry
     public string? After { get; set; }
 }
 
-/// <summary>Product display name to canonical CNA vendor/product. Grown by the needs-mapping queue (phase 3); seeded here.</summary>
+/// <summary>Product display name to canonical CNA vendor/product. Grown by the needs-mapping queue; seeded here.</summary>
 public class ProductAlias
 {
     public int Id { get; set; }
@@ -299,7 +299,7 @@ public class ProductAlias
     [MaxLength(200)] public string ProductNorm { get; set; } = "";
 }
 
-/// <summary>Section 12: cached AI narrative ("cve:CVE-..." ) or attack story ("verdict:guid"), with provenance.</summary>
+/// <summary>Cached AI narrative ("cve:CVE-..." ) or attack story ("verdict:guid"), with provenance.</summary>
 public class Narrative
 {
     [MaxLength(64)] public string Key { get; set; } = "";
@@ -310,5 +310,5 @@ public class Narrative
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>Section 8.4: one link in the evidence chain behind a verdict.</summary>
+/// <summary>One link in the evidence chain behind a verdict.</summary>
 public record EvidenceClaim(string Claim, string Source, DateTime RetrievedAt, string? Excerpt = null);

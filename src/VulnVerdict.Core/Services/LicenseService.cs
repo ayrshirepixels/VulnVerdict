@@ -32,7 +32,7 @@ public sealed record LicenseInfo(bool Present, bool Valid, string? Customer, str
 }
 
 /// <summary>
-/// Phase 5 licence keys and tiers: Starter up to 50 assets, Business up to 250, MSP per client. A key is
+/// Licence keys and tiers: Starter up to 50 assets, Business up to 250, MSP per client. A key is
 /// base64url(claims JSON) "." base64url(ECDSA P-256 signature over the claims JSON bytes), signed by the central
 /// service and verified with the same embedded public key as the feed bundle. No key at all is the internal build.
 /// </summary>

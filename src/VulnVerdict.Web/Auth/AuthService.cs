@@ -9,7 +9,7 @@ using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Web;
 
-/// <summary>Section 10.3: local administrator created at install, OIDC for everything else, roles from groups.</summary>
+/// <summary>Local administrator created at install, OIDC for everything else, roles from groups.</summary>
 public sealed class AuthService
 {
     public const string OidcScheme = "oidc";

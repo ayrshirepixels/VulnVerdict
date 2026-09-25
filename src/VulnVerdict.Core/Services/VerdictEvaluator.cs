@@ -12,11 +12,11 @@ namespace VulnVerdict.Core.Services;
 public sealed record EvaluationSummary(int Entries, int Candidates, int Created, int Changed, int Removed, TimeSpan Elapsed);
 
 /// <summary>
-/// Section 9.3 steps 2 to 5 for every subject: watchlist entries (phases 1 and 2) and mapped software instances
-/// on live assets (phase 3). Finds candidate CVEs by normalised vendor/product (or OSV for packages), evaluates the
-/// version range, computes the four SSVC-derived inputs, applies compensating-control modifiers, runs the decision
-/// table and stores a verdict with its evidence chain. Tier changes are recorded with a reason; a fixed version
-/// observed in inventory closes the verdict automatically (section 13, phase 4).
+/// For every subject (watchlist entries and mapped software instances on live assets): finds candidate CVEs by
+/// normalised vendor/product (or OSV for packages), evaluates the version range, computes the four SSVC-derived
+/// inputs, applies compensating-control modifiers, runs the decision table and stores a verdict with its evidence
+/// chain. Tier changes are recorded with a reason; a fixed version observed in inventory closes the verdict
+/// automatically.
 /// </summary>
 public sealed partial class VerdictEvaluator
 {
@@ -103,7 +103,7 @@ public sealed partial class VerdictEvaluator
     {
         var result = new List<ProductMatch>();
 
-        // packages: OSV by purl or ecosystem + name (section 9.2 steps 6 and 7)
+        // packages: OSV by purl or ecosystem + name
         if (s.SoftwareInstanceId is not null && (s.Purl is not null || s.Ecosystem is not null))
         {
             var source = _sp.GetService<IPackageVulnSource>();
@@ -221,7 +221,7 @@ public sealed partial class VerdictEvaluator
                 (signals.TryGetValue(sig.CveId, out var l) ? l : signals[sig.CveId] = new()).Add(sig);
         }
 
-        // vendor PSIRT advisories that mention any candidate CVE (section 7): evidence, and "exploited in the wild" = Active
+        // vendor PSIRT advisories that mention any candidate CVE: evidence, and "exploited in the wild" = Active
         var advisories = new Dictionary<string, List<Advisory>>(StringComparer.OrdinalIgnoreCase);
         var vendorKey = AdvisoryVendor(s);
         if (ids.Count > 0 && vendorKey is not null)
@@ -352,7 +352,7 @@ public sealed partial class VerdictEvaluator
             exploitation = Exploitation.Active;
             ev.Add(new EvidenceClaim("CISA Vulnrichment SSVC Exploitation: active", "CISA ADP container in CVE List V5", retrieved));
         }
-        // vendor advisories (section 7): the vendor's own affected/fixed statement and "exploited in the wild"
+        // vendor advisories: the vendor's own affected/fixed statement and "exploited in the wild"
         foreach (var adv in advisories.OrderByDescending(a => a.Updated ?? a.Published).Take(2))
         {
             string? fixText = null;
@@ -428,9 +428,9 @@ public sealed partial class VerdictEvaluator
         ev.Add(new EvidenceClaim("Exposure " + inputs.DeclaredExposure.Plain() + (inputs.ExposureCapped ? ", treated as internal because the attack vector is " + attackVector.ToString().ToLowerInvariant() : "") + "; criticality " + s.Criticality, subjectSource, s.DeclaredAt == default ? now : s.DeclaredAt));
 
         var decision = DecisionTable.Evaluate(inputs);
-        ev.Add(new EvidenceClaim("Decision table rule " + decision.Rule + ": " + DecisionTable.RuleText(decision.Rule) + " => " + decision.Tier.Plain(), "VulnVerdict decision table (section 6.3)", now));
+        ev.Add(new EvidenceClaim("Decision table rule " + decision.Rule + ": " + DecisionTable.RuleText(decision.Rule) + " => " + decision.Tier.Plain(), "VulnVerdict decision table", now));
 
-        // ---- compensating-control modifiers (section 6.3): one tier down, never for Active + Internet
+        // ---- compensating-control modifiers: one tier down, never for Active + Internet
         var modifiers = new List<string>();
         if (controls.Count > 0 && decision.Tier >= VerdictTier.NextPatchCycle && !(exploitation == Exploitation.Active && inputs.EffectiveExposure == Exposure.Internet))
         {
@@ -441,7 +441,7 @@ public sealed partial class VerdictEvaluator
             decision = decision with { Tier = lowered };
         }
         else if (controls.Count > 0 && exploitation == Exploitation.Active && inputs.EffectiveExposure == Exposure.Internet)
-            ev.Add(new EvidenceClaim("Compensating control recorded (" + controls[0].KindText + ") but not applied: exploited in the wild and internet-facing is never lowered", "VulnVerdict decision table (section 6.3)", now));
+            ev.Add(new EvidenceClaim("Compensating control recorded (" + controls[0].KindText + ") but not applied: exploited in the wild and internet-facing is never lowered", "VulnVerdict decision table", now));
 
         var sentence = SentenceBuilder.Build(s, inputs, cvss, decision.Tier, fixedIn, confidence, versionUnknown, modifiers);
         return new Computed(inputs, decision, confidence, versionUnknown, sentence, fixedIn, ev, epss?.Score, kev is not null, cvss, modifiers);
@@ -488,7 +488,7 @@ public sealed partial class VerdictEvaluator
                     v.State = VerdictState.Open; v.StateReason = null; v.SnoozedUntil = null; v.AcceptedRiskExpiry = null; v.StateChangedAt = now;
                 }
             }
-            // phase 4 auto-close: inventory now shows a version outside the affected range
+            // auto-close: inventory now shows a version outside the affected range
             else if (c.Decision.Tier == VerdictTier.NotAffected && v.Tier >= VerdictTier.NextPatchCycle && v.State == VerdictState.Open && s.SoftwareInstanceId is not null)
             {
                 v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Open", To = "Closed", Reason = "patched, closed: fixed version observed (" + (s.Version ?? "?") + ")" });

@@ -17,7 +17,7 @@ public sealed record SnmpDevice(
     string? OsBuild = null);
 
 /// <summary>
-/// Section 9.2 step 8: enterprise number (sysObjectID 1.3.6.1.4.1.n) to vendor, sysDescr to product family, version and
+/// Enterprise number (sysObjectID 1.3.6.1.4.1.n) to vendor, sysDescr to product family, version and
 /// asset kind. Deliberately a table plus a handful of per-vendor regexes: anything it cannot name goes to the
 /// needs-mapping queue, is mapped once by a person, and is tracked automatically from then on.
 /// </summary>

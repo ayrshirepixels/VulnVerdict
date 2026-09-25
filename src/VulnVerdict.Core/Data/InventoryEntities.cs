@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace VulnVerdict.Core.Data;
 
-/// <summary>Section 8.1. Written by adapters through the canonical model; nothing downstream knows which product supplied it.</summary>
+/// <summary>An asset. Written by adapters through the canonical model; nothing downstream knows which product supplied it.</summary>
 public class Asset
 {
     public Guid Id { get; set; }
@@ -45,7 +45,7 @@ public class AssetSource
     public DateTime LastSeen { get; set; }
 }
 
-/// <summary>Section 8.2.</summary>
+/// <summary>One piece of software observed on an asset.</summary>
 public class SoftwareInstance
 {
     public Guid Id { get; set; }
@@ -70,7 +70,7 @@ public class SoftwareInstance
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
 
-    // resolved CNA identity (section 9.3 step 1)
+    // resolved CNA identity (set by the mapping step in InventoryService)
     public MappingStatus MappingStatus { get; set; } = MappingStatus.Unmapped;
     [MaxLength(200)] public string? MappedVendorNorm { get; set; }
     [MaxLength(200)] public string? MappedProductNorm { get; set; }
@@ -79,7 +79,7 @@ public class SoftwareInstance
     public string Display => (Vendor + " " + Product).Trim() + (Version == "" ? "" : " " + Version);
 }
 
-/// <summary>Section 8.3. Stored as evidence and used as a second opinion, never as the verdict.</summary>
+/// <summary>A finding from an external scanner or service. Stored as evidence and used as a second opinion, never as the verdict.</summary>
 public class ExternalFinding
 {
     public Guid Id { get; set; }
@@ -95,7 +95,7 @@ public class ExternalFinding
     public DateTime LastSeen { get; set; }
 }
 
-/// <summary>A configured instance of an adapter (section 9.1): hostname plus a read-only credential.</summary>
+/// <summary>A configured instance of an adapter: hostname plus a read-only credential.</summary>
 public class Connector
 {
     public Guid Id { get; set; }
@@ -117,7 +117,7 @@ public class Connector
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>Section 6.3 compensating-control modifier. Lowers a verdict one tier and is named in the explanation. Never lowers Active + Internet.</summary>
+/// <summary>Compensating-control modifier. Lowers a verdict one tier and is named in the explanation. Never lowers Active + Internet.</summary>
 public class CompensatingControl
 {
     public Guid Id { get; set; }
@@ -150,7 +150,7 @@ public class PackageVulnCache
     public DateTime FetchedAt { get; set; }
 }
 
-/// <summary>Section 11.4 webhook delivery log.</summary>
+/// <summary>Webhook delivery log.</summary>
 public class WebhookDelivery
 {
     public long Id { get; set; }
@@ -162,7 +162,7 @@ public class WebhookDelivery
     [MaxLength(500)] public string? Error { get; set; }
 }
 
-/// <summary>Section 7: vendor PSIRT advisory, the earliest and most accurate affected-version data for the products SMEs run.</summary>
+/// <summary>Vendor PSIRT advisory, the earliest and most accurate affected-version data for the products SMEs run.</summary>
 public class Advisory
 {
     public long Id { get; set; }
@@ -182,7 +182,7 @@ public class Advisory
     public DateTime RetrievedAt { get; set; }
 }
 
-/// <summary>Section 10.2: the signed feed bundle currently applied (central service or air-gap upload).</summary>
+/// <summary>The signed feed bundle currently applied (central service or air-gap upload).</summary>
 public class BundleState
 {
     public int Id { get; set; }

@@ -14,7 +14,7 @@ public sealed record BundleCheck(BundleOutcome Outcome, string? Version, string 
 }
 
 /// <summary>
-/// Section 10.2 console side. Polls the central service for the latest signed bundle (hourly, from the worker loop),
+/// The console side of signed feed bundles. Polls the central service for the latest signed bundle (hourly, from the worker loop),
 /// verifies the manifest signature against the embedded public key, refuses unsigned or downgraded bundles, verifies
 /// every file hash and applies the bundle locally. Also applies an uploaded bundle file for air-gapped sites.
 /// The customer's inventory never leaves the network: this service only ever downloads.

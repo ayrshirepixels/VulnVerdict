@@ -8,7 +8,7 @@ using VulnVerdict.Core.Engine;
 namespace VulnVerdict.Core.Feeds.Psirt;
 
 /// <summary>
-/// Section 7: VMware security advisories on the Broadcom support portal. The portal's list endpoint
+/// VMware security advisories on the Broadcom support portal. The portal's list endpoint
 /// (POST getSecurityAdvisoryList, no authentication) returns the VMSA id, title, CVE list, severity, dates, products and URL
 /// per segment (VC = VMware Cloud Foundation, VA = application networking and security, VT = Tanzu). Affected and fixed
 /// versions are only on the advisory pages, so rows carry product names only. Cursor: ISO 8601 of the newest "updated" seen.

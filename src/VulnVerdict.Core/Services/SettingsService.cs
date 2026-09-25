@@ -4,7 +4,7 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Services;
 
-/// <summary>Section 11.2 item 9. Opinionated defaults; the customer changes only what they must.</summary>
+/// <summary>Opinionated defaults; the customer changes only what they must.</summary>
 public sealed class AppSettings
 {
     // digest
@@ -48,18 +48,18 @@ public sealed class AppSettings
     // api
     public string ApiToken { get; set; } = "";
 
-    // tickets (section 11.3): "email" or the id of a ticket-adapter connector
+    // tickets: "email" or the id of a ticket-adapter connector
     public string TicketChannel { get; set; } = "email";
 
-    // webhooks (section 11.4): verdict created, promoted, closed
+    // webhooks: verdict created, promoted, closed
     public string WebhookUrl { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
 
-    // weekly management report (section 11.2 item 8)
+    // weekly management report
     public string ReportRecipients { get; set; } = "";
     public string ReportDay { get; set; } = "Monday";
 
-    // central service, licence, MSP (section 10.2, phase 5)
+    // central service, licence, MSP
     public string BundleUrl { get; set; } = "";
     public string LicenceKey { get; set; } = "";
     public bool TelemetryOptIn { get; set; }
@@ -67,7 +67,7 @@ public sealed class AppSettings
     public string MspPortalUrl { get; set; } = "";
     public string MspTenantToken { get; set; } = "";
 
-    // AI explanations (section 12): none | anthropic | openai | openai-compatible (Ollama, vLLM, LM Studio)
+    // AI explanations: none | anthropic | openai | openai-compatible (Ollama, vLLM, LM Studio)
     public string LlmProvider { get; set; } = "none";
     public string LlmApiKey { get; set; } = "";
     public string LlmModel { get; set; } = "";

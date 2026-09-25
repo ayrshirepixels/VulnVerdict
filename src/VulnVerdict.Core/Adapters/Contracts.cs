@@ -2,10 +2,10 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Adapters;
 
-/// <summary>One field of an adapter's credential form. Every adapter is one credential form (section 3, rule 5).</summary>
+/// <summary>One field of an adapter's credential form. Every adapter is one credential form.</summary>
 public sealed record CredentialField(string Key, string Label, string Type = "text", string? Help = null, bool Required = true, string? Default = null);
 
-/// <summary>Section 9.1 adapter metadata.</summary>
+/// <summary>Adapter metadata: what it collects, what credential it needs and where it shows in the console.</summary>
 public sealed record AdapterMetadata(
     string Id,
     string DisplayName,
@@ -67,7 +67,7 @@ public sealed class CollectResult
 public sealed record TestResult(bool Ok, string Message);
 
 /// <summary>
-/// Section 9.1. Every inventory source implements this. Read-only credentials only; never writes to the source.
+/// Every inventory source implements this. Read-only credentials only; never writes to the source.
 /// Credentials arrive decrypted for the duration of the call and are never logged.
 /// </summary>
 public interface IInventoryAdapter
@@ -77,7 +77,7 @@ public interface IInventoryAdapter
     Task<CollectResult> CollectAsync(IReadOnlyDictionary<string, string> credentials, DateTime? since, IProgress<string>? progress, CancellationToken ct);
 }
 
-/// <summary>Section 11.3: native ticket adapters follow the same contract shape as inventory sources.</summary>
+/// <summary>Native ticket adapters follow the same contract shape as inventory sources.</summary>
 public interface ITicketAdapter
 {
     AdapterMetadata Metadata { get; }

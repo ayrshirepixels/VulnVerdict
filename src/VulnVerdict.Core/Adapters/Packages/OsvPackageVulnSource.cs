@@ -15,7 +15,7 @@ public sealed record OsvAffected(string? Ecosystem, string? Name, string? Purl, 
 public sealed record OsvVuln(string Id, string[] CveIds, OsvAffected[] Affected, bool Withdrawn);
 
 /// <summary>
-/// Section 7 / 9.2 step 6: OSV.dev as the package vulnerability source. Sends up to 1000 queries per
+/// OSV.dev as the package vulnerability source. Sends up to 1000 queries per
 /// /v1/querybatch call, then fetches each returned record once (in-memory cache, 8 fetches at a time, HTTP 429
 /// honoured with a short backoff) to read its CVE ids and the fixed version for the queried package.
 /// Records without a CVE id are skipped.

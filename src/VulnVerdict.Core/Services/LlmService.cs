@@ -11,7 +11,7 @@ using VulnVerdict.Core.Engine;
 namespace VulnVerdict.Core.Services;
 
 /// <summary>
-/// Section 12. The model never decides a verdict; it explains one. Two artefacts, both cached with the
+/// AI explanations. The model never decides a verdict; it explains one. Two artefacts, both cached with the
 /// provider, model and prompt version recorded: a plain-English narrative per CVE, and an attack story per
 /// verdict built from abstracted inputs only (no hostnames, IPs or asset names leave the box).
 /// Providers: Anthropic (official SDK), OpenAI, or any OpenAI-compatible endpoint such as Ollama.

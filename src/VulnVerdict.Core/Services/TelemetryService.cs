@@ -30,7 +30,7 @@ public static class AppVersion
     public static string Current => Environment.GetEnvironmentVariable("VV_VERSION") is { Length: > 0 } v ? v : "dev";
 }
 
-/// <summary>Phase 5 opt-in telemetry: once a day, anonymous counts to the central service.</summary>
+/// <summary>Opt-in telemetry: once a day, anonymous counts to the central service.</summary>
 public sealed class TelemetryService
 {
     public const string LastSentKey = "state:telemetry:last";

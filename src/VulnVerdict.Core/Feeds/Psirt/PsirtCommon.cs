@@ -7,7 +7,7 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Feeds.Psirt;
 
-/// <summary>Section 7 vendor PSIRT feed names.</summary>
+/// <summary>Vendor PSIRT feed names.</summary>
 public static class PsirtFeedNames
 {
     public const string Fortinet = "psirt-fortinet";

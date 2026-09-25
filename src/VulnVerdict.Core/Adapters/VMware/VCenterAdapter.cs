@@ -18,7 +18,7 @@ public interface IVCenterSession : IAsyncDisposable
 }
 
 /// <summary>
-/// Section 9.2 step 5: VMware vCenter through the vSphere Automation REST API. Emits the vCenter appliance, every
+/// VMware vCenter through the vSphere Automation REST API. Emits the vCenter appliance, every
 /// ESXi host and the complete VM list (the coverage reconciliation set: a VM with no WinRM or SSH record shows as
 /// "unknown coverage"). Only GET calls are made after the session is created; nothing is written to vCenter.
 /// </summary>

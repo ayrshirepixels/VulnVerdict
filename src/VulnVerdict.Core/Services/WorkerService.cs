@@ -17,7 +17,7 @@ public sealed class WorkerOptions
 }
 
 /// <summary>
-/// Section 10.1 "worker": feed ingestion, matching, verdict evaluation, digest generation, ticket emission,
+/// The worker: feed ingestion, matching, verdict evaluation, digest generation, ticket emission,
 /// self-monitoring. One loop, idempotent steps, nothing to babysit.
 /// </summary>
 public sealed class WorkerService : BackgroundService
@@ -42,7 +42,7 @@ public sealed class WorkerService : BackgroundService
         {
             try
             {
-                // section 10.2: with a central bundle configured, the bundle replaces the public feeds
+                // with a central bundle configured, the bundle replaces the public feeds
                 bool feedsRan;
                 using (var bundleScope = _sp.CreateScope())
                 {
@@ -181,7 +181,7 @@ public sealed class WorkerService : BackgroundService
         catch { }
     }
 
-    /// <summary>Section 9.1: run connectors that are due or requested; three failures in a row raise the administrator alert.</summary>
+    /// <summary>Run connectors that are due or requested; three failures in a row raise the administrator alert.</summary>
     private async Task<bool> RunDueConnectorsAsync(CancellationToken ct)
     {
         using var scope = _sp.CreateScope();
@@ -190,7 +190,7 @@ public sealed class WorkerService : BackgroundService
         var licence = scope.ServiceProvider.GetRequiredService<LicenseService>();
         var now = DateTime.UtcNow;
         var any = false;
-        // phase 5: a licensed console stops collecting new assets beyond its tier's cap (the banner explains; nothing is deleted)
+        // a licensed console stops collecting new assets beyond its tier's cap (the banner explains; nothing is deleted)
         if (!await licence.WithinAssetCapAsync(ct))
         {
             _log.LogWarning("Asset cap reached for this licence tier; connector runs paused");
@@ -281,7 +281,7 @@ public sealed class WorkerService : BackgroundService
         if (sent) _log.LogInformation("Weekly management report sent");
     }
 
-    /// <summary>Section 7: a feed more than 24 hours stale triggers the administrator alert (at most once a day).</summary>
+    /// <summary>A feed more than 24 hours stale triggers the administrator alert (at most once a day).</summary>
     private async Task FeedHealthAlertAsync(CancellationToken ct)
     {
         using var scope = _sp.CreateScope();

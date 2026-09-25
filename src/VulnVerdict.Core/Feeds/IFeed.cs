@@ -15,7 +15,7 @@ public sealed class FeedContext
     public Action<string> Progress { get; init; } = _ => { };
 }
 
-/// <summary>Section 7. Every public feed implements this. Ingestion is idempotent and resumable.</summary>
+/// <summary>Every public feed implements this. Ingestion is idempotent and resumable.</summary>
 public interface IFeed
 {
     string Name { get; }

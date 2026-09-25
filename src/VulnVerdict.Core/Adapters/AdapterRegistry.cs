@@ -7,15 +7,15 @@ using VulnVerdict.Core.Services;
 namespace VulnVerdict.Core.Adapters;
 
 /// <summary>
-/// The one place adapters are registered. Inventory adapters implement IInventoryAdapter (section 9.2 order),
-/// ticket adapters ITicketAdapter (11.3), package sources IPackageVulnSource, vendor PSIRT feeds IFeed (7).
+/// The one place adapters are registered. Inventory adapters implement IInventoryAdapter,
+/// ticket adapters ITicketAdapter, package sources IPackageVulnSource, vendor PSIRT feeds IFeed.
 /// Order here is the order shown in the console.
 /// </summary>
 public static class AdapterRegistry
 {
     public static void Register(IServiceCollection services)
     {
-        // inventory sources, section 9.2 order
+        // inventory sources
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiClientEmsAdapter>();
         services.AddSingleton<IInventoryAdapter, Windows.WinRmAdapter>();
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiGateAdapter>();
@@ -39,7 +39,7 @@ public static class AdapterRegistry
         services.AddSingleton<Sbom.SbomImportService>();
         services.AddSingleton<IPackageVulnSource>(sp => new Packages.OsvPackageVulnSource(sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Packages.OsvPackageVulnSource>>()));
 
-        // vendor PSIRT advisories, section 7
+        // vendor PSIRT advisories
         services.AddSingleton<IFeed, FortinetPsirtFeed>();
         services.AddSingleton<IFeed, MsrcFeed>();
         services.AddSingleton<IFeed, CiscoOpenVulnFeed>();
@@ -48,7 +48,7 @@ public static class AdapterRegistry
         services.AddSingleton<IFeed, DebianSecurityFeed>();
         services.AddSingleton<IFeed, RedHatCsafFeed>();
 
-        // ticket channels, section 11.3
+        // ticket channels
         services.AddSingleton<ITicketAdapter, JiraCloudAdapter>();
         services.AddSingleton<ITicketAdapter, ServiceNowAdapter>();
         services.AddSingleton<ITicketAdapter, FreshserviceAdapter>();
@@ -57,7 +57,7 @@ public static class AdapterRegistry
         services.AddSingleton<ITicketAdapter, HaloPsaAdapter>();
         services.AddSingleton<ITicketAdapter, AutotaskAdapter>();
 
-        // webhooks, section 11.4
+        // webhooks
         services.AddSingleton<WebhookService>();
     }
 }

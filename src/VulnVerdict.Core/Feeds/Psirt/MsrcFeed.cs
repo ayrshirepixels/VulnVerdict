@@ -9,7 +9,7 @@ namespace VulnVerdict.Core.Feeds.Psirt;
 public sealed record MsrcUpdateDoc(string Id, DateTime? InitialReleaseDate, DateTime? CurrentReleaseDate);
 
 /// <summary>
-/// Section 7: Microsoft MSRC CVRF API v3. The updates list gives one document per month with its CurrentReleaseDate; each
+/// Microsoft MSRC CVRF API v3. The updates list gives one document per month with its CurrentReleaseDate; each
 /// document is fetched as JSON and every Vulnerability becomes one Advisory (AdvisoryId = CVE). Threats of Type 1 carry the
 /// exploit status ("Exploited:Yes"), Type 3 the severity; Remediations of Type 2 give the KB and FixedBuild per product.
 /// Cursor: ISO 8601 of the newest CurrentReleaseDate processed. First run takes the last InitialMonths months only.

@@ -1,18 +1,18 @@
 namespace VulnVerdict.Core.Data;
 
-/// <summary>Section 6.2 A. Highest applicable wins.</summary>
+/// <summary>Exploitation status, the first decision-table input. Highest applicable wins.</summary>
 public enum Exploitation { None = 0, PoC = 1, Active = 2 }
 
-/// <summary>Section 6.2 B attack path, derived from the CVSS Attack Vector.</summary>
+/// <summary>Attack path, the second decision-table input, derived from the CVSS Attack Vector.</summary>
 public enum AttackVector { Unknown = 0, Physical = 1, Local = 2, Adjacent = 3, Network = 4 }
 
-/// <summary>Section 6.2 C. Declared per watchlist entry (phase 1/2) or derived from inventory (phase 3).</summary>
+/// <summary>Exposure, the third decision-table input. Declared per watchlist entry or derived from inventory.</summary>
 public enum Exposure { Isolated = 0, Internal = 1, Internet = 2, NotInstalled = 3 }
 
-/// <summary>Section 6.2 D.</summary>
+/// <summary>Criticality, the fourth decision-table input.</summary>
 public enum Criticality { Low = 0, Standard = 1, Critical = 2 }
 
-/// <summary>Section 6.3 / 6.4. Higher value is more urgent.</summary>
+/// <summary>Verdict tier from the decision table (DecisionTable.cs). Higher value is more urgent.</summary>
 public enum VerdictTier
 {
     NotAffected = 0,
@@ -22,10 +22,10 @@ public enum VerdictTier
     FixToday = 4
 }
 
-/// <summary>Section 8.4 match confidence.</summary>
+/// <summary>Match confidence between a CVE and the product it was matched to.</summary>
 public enum MatchConfidence { Possible = 0, Likely = 1, Exact = 2 }
 
-/// <summary>Section 8.4 verdict workflow state.</summary>
+/// <summary>Verdict workflow state.</summary>
 public enum VerdictState { Open = 0, Suppressed = 1, Snoozed = 2, AcceptedRisk = 3, Closed = 4 }
 
 public enum SuppressionScope { Cve = 0, Product = 1, WatchlistEntry = 2 }
@@ -34,20 +34,20 @@ public enum UserRole { Viewer = 0, Operator = 1, Administrator = 2 }
 
 public enum DigestKind { Daily = 0, Immediate = 1, Manual = 2 }
 
-/// <summary>Section 8.1 asset kinds.</summary>
+/// <summary>Asset kinds.</summary>
 public enum AssetKind
 {
     Endpoint = 0, Server = 1, Hypervisor = 2, Firewall = 3, Switch = 4, AccessPoint = 5, NetworkDevice = 6, Printer = 7,
     Storage = 8, OutOfBandManagement = 9, VirtualMachine = 10, ContainerHost = 11, Other = 12
 }
 
-/// <summary>Section 8.2 software kinds.</summary>
+/// <summary>Software kinds.</summary>
 public enum SoftwareKind { Application = 0, Package = 1, Firmware = 2, Runtime = 3, RoleOrFeature = 4, Service = 5, OperatingSystem = 6, Library = 7 }
 
-/// <summary>How a software instance was tied to a CNA vendor/product (section 9.3 step 1).</summary>
+/// <summary>How a software instance was tied to a CNA vendor/product (the mapping step in InventoryService).</summary>
 public enum MappingStatus { Unmapped = 0, Exact = 1, Alias = 2, Fuzzy = 3, Package = 4, Ignored = 5 }
 
-/// <summary>Section 6.3 compensating-control modifiers.</summary>
+/// <summary>Compensating-control modifiers applied after the decision table.</summary>
 public enum ControlKind { WafInFront = 0, MfaEnforced = 1, FeatureDisabled = 2, NetworkRestricted = 3, Other = 4 }
 
 public static class EnumText

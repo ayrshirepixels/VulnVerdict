@@ -98,7 +98,7 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-// section 10.4: security headers on every response
+// security headers on every response
 app.Use(async (ctx, next) =>
 {
     var h = ctx.Response.Headers;
@@ -153,7 +153,7 @@ app.MapPost("/auth/logout", async (HttpContext http) =>
     return Results.Redirect("/login");
 }).AllowAnonymous();
 
-// ---- section 11.4: read API with a static token (Authorization: Bearer <token>)
+// ---- read API with a static token (Authorization: Bearer <token>)
 var api = app.MapGroup("/api").RequireRateLimiting("api").AllowAnonymous().AddEndpointFilter(async (ctx, next) =>
 {
     var settings = ctx.HttpContext.RequestServices.GetRequiredService<SettingsService>();
