@@ -70,6 +70,13 @@ public class SoftwareInstance
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
 
+    /// <summary>
+    /// Set when the connector that reported this stops reporting it (uninstalled, or the connector was deleted).
+    /// The row is kept so its verdicts close with a reason and their history survives; it is hidden from every
+    /// query by a global filter, and cleared again if the software comes back.
+    /// </summary>
+    public DateTime? RemovedAt { get; set; }
+
     // resolved CNA identity (set by the mapping step in InventoryService)
     public MappingStatus MappingStatus { get; set; } = MappingStatus.Unmapped;
     [MaxLength(200)] public string? MappedVendorNorm { get; set; }

@@ -60,6 +60,11 @@ public sealed class CollectResult
     public List<ExposureRecord> Exposures { get; } = new();
     public List<FindingRecord> Findings { get; } = new();
     public List<string> Warnings { get; } = new();
+    /// <summary>
+    /// Asset external ids whose software list is incomplete this run (a per-device read failed, or the source
+    /// refused the software endpoint part-way through). Nothing is marked removed from these assets.
+    /// </summary>
+    public HashSet<string> IncompleteSoftware { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>False for adapters that only add to what they saw last time (deltas); true means software not in this run was removed from the source.</summary>
     public bool FullSnapshot { get; set; } = true;
 }

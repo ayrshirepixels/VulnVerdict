@@ -91,7 +91,9 @@ public sealed class DattoRmmAdapter : IInventoryAdapter
             }
             catch (EndpointApiException ex) when (ex.Status is 404)
             {
-                // devices that have never been audited (new, or ESXi hosts and network nodes) have no software audit
+                // devices that have never been audited (new, or ESXi hosts and network nodes) have no software audit;
+                // whatever an earlier audit reported is kept rather than marked removed
+                result.IncompleteSoftware.Add(asset.ExternalId);
             }
         }
         if (stale > 0) result.Warnings.Add(stale + " device(s) not seen for " + EndpointNaming.StaleDays + " days were left out.");

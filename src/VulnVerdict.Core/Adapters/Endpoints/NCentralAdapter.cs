@@ -93,6 +93,8 @@ public sealed class NCentralAdapter : IInventoryAdapter
                 }
             }
             var (asset, os, apps) = Map(d, assets);
+            // no asset record this run: keep what an earlier run reported rather than marking it removed
+            if (assets.ValueKind != System.Text.Json.JsonValueKind.Object) result.IncompleteSoftware.Add(asset.ExternalId);
             result.Assets.Add(asset);
             if (os is not null) result.Software.Add(os);
             else if (asset.OsVendor == "Microsoft") noPatchLevel++;

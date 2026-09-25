@@ -44,7 +44,7 @@ public sealed partial class VerdictEvaluator
             var r = await EvaluateSubjectAsync(db, s, settings, ct);
             cand += r.Candidates; created += r.Created; changed += r.Changed; removed += r.Removed;
         }
-        removed += await RemoveOrphansAsync(db, ct);
+        removed += await CloseGoneAsync(db, ct);
         await MaintainStatesAsync(db, ct);
         await _settings.SetStateAsync(SettingsService.Keys.LastEvaluation, DateTime.UtcNow.ToString("O"), ct);
         var summary = new EvaluationSummary(subjects.Count, cand, created, changed, removed, sw.Elapsed);
@@ -276,8 +276,13 @@ public sealed partial class VerdictEvaluator
             }
         }
 
-        var stale = existing.Values.Where(v => !seen.Contains(v.CveId)).ToList();
-        if (stale.Count > 0) { db.Verdicts.RemoveRange(stale); removed = stale.Count; }
+        // a CVE that no longer matches (the record was corrected, or the product was re-mapped) closes rather than
+        // vanishing, so what was reported and what was done about it stays on record
+        foreach (var v in existing.Values.Where(v => !seen.Contains(v.CveId) && IsOpenish(v.State)))
+        {
+            CloseAsGone(db, v, NoLongerMatches, now, events);
+            removed++;
+        }
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
@@ -460,6 +465,20 @@ public sealed partial class VerdictEvaluator
     {
         var tierChanged = !isNew && v.Tier != c.Decision.Tier;
         if (isNew && c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventCreated, v.Id));
+
+        // the software, asset or match that went away is back and still affected: the same verdict re-opens, with a
+        // fresh SLA and fresh alerts, instead of a second verdict appearing next to the closed one
+        var reopened = false;
+        if (!isNew && IsClosedAsGone(v) && c.Decision.Tier > VerdictTier.NotAffected)
+        {
+            var why = v.StateReason!.StartsWith("no longer matches", StringComparison.Ordinal) ? "matches again"
+                : "reported again" + (s.Version is null ? "" : " at " + s.Version);
+            v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Closed", To = "Open", Reason = "re-opened: " + why });
+            v.State = VerdictState.Open; v.StateReason = null; v.StateOwner = null; v.StateChangedAt = now;
+            v.ImmediateEmailSentAt = null; v.TicketSentAt = null;
+            if (c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventPromoted, v.Id));
+            reopened = true;
+        }
         if (tierChanged)
         {
             var reason = c.InKev && !v.InKev ? "now in CISA KEV"
@@ -522,7 +541,7 @@ public sealed partial class VerdictEvaluator
         v.LastEvaluatedAt = now;
         v.UpdatedAt = now;
 
-        if (isNew || tierChanged)
+        if (isNew || tierChanged || reopened)
         {
             v.Tier = c.Decision.Tier;
             v.RuleNumber = c.Decision.Rule;
@@ -551,14 +570,63 @@ public sealed partial class VerdictEvaluator
                 v.State = VerdictState.Open; v.SuppressedByRuleId = null; v.StateReason = null; v.StateChangedAt = now;
             }
         }
-        return tierChanged;
+        return tierChanged || reopened;
     }
 
-    /// <summary>Verdicts whose software instance or watchlist entry no longer exists (cascade covers deletes; this covers archived assets).</summary>
-    private static async Task<int> RemoveOrphansAsync(VvDbContext db, CancellationToken ct)
+    // ------------------------------------------------------------------ gone: close, never delete
+
+    /// <summary>Reason prefix for verdicts closed because their software or asset stopped being reported.</summary>
+    public const string NoLongerReported = "no longer reported";
+    /// <summary>Reason for verdicts closed because the CVE stopped matching the subject.</summary>
+    public const string NoLongerMatches = "no longer matches: the CVE record or the product mapping changed";
+
+    private static readonly VerdictState[] OpenishStates = { VerdictState.Open, VerdictState.Snoozed, VerdictState.AcceptedRisk, VerdictState.Suppressed };
+    private static bool IsOpenish(VerdictState s) => OpenishStates.Contains(s);
+
+    /// <summary>Closed by the system because its subject went away, as opposed to fixed or closed by a person.</summary>
+    public static bool IsClosedAsGone(Verdict v) => v.State == VerdictState.Closed && v.StateOwner == "system"
+        && v.StateReason is { } r && (r.StartsWith(NoLongerReported, StringComparison.Ordinal) || r.StartsWith("no longer matches", StringComparison.Ordinal));
+
+    private static void CloseAsGone(VvDbContext db, Verdict v, string reason, DateTime now, List<(string Event, Guid VerdictId)> events)
     {
-        var staleBefore = DateTime.UtcNow.AddDays(-30);
-        return await db.Verdicts.Where(v => v.AssetId != null && db.Assets.Any(a => a.Id == v.AssetId && (a.Archived || a.LastSeen < staleBefore))).ExecuteDeleteAsync(ct);
+        v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = v.State.ToString(), To = "Closed", Reason = "closed: " + reason });
+        v.State = VerdictState.Closed; v.StateReason = reason; v.StateOwner = "system"; v.StateChangedAt = now;
+        v.SnoozedUntil = null; v.AcceptedRiskExpiry = null; v.SuppressedByRuleId = null; v.UpdatedAt = now;
+        events.Add((WebhookService.EventClosed, v.Id));
+    }
+
+    /// <summary>
+    /// Closes (never deletes) the open verdicts of software a connector stopped reporting, and of assets that were
+    /// archived or not seen for 30 days. The verdict and its history stay; if the software or asset comes back the
+    /// same verdict re-opens (see <see cref="Apply"/>).
+    /// </summary>
+    private async Task<int> CloseGoneAsync(VvDbContext db, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var staleBefore = now.AddDays(-30);
+        var events = new List<(string Event, Guid VerdictId)>();
+        var names = (await db.Connectors.AsNoTracking().Select(c => new { c.Id, c.DisplayName }).ToListAsync(ct))
+            .ToDictionary(c => c.Id.ToString("N"), c => c.DisplayName);
+
+        var removedSoftware = await (from v in db.Verdicts
+                                     join s in db.Software.IgnoreQueryFilters() on v.SoftwareInstanceId equals (Guid?)s.Id
+                                     where s.RemovedAt != null && OpenishStates.Contains(v.State)
+                                     select new { Verdict = v, s.ConnectorId, s.RemovedAt }).ToListAsync(ct);
+        foreach (var x in removedSoftware)
+            CloseAsGone(db, x.Verdict, NoLongerReported + " by " + (names.TryGetValue(x.ConnectorId, out var n) ? n : "a connector that has since been deleted")
+                + " (since " + x.RemovedAt!.Value.ToString("yyyy-MM-dd") + ")", now, events);
+
+        var goneAssets = await (from v in db.Verdicts
+                                join a in db.Assets on v.AssetId equals (Guid?)a.Id
+                                where (a.Archived || a.LastSeen < staleBefore) && OpenishStates.Contains(v.State)
+                                select new { Verdict = v, a.Archived, a.LastSeen }).ToListAsync(ct);
+        foreach (var x in goneAssets.Where(x => IsOpenish(x.Verdict.State)))
+            CloseAsGone(db, x.Verdict, NoLongerReported + ": " + (x.Archived ? "asset archived" : "asset not seen since " + x.LastSeen.ToString("yyyy-MM-dd")), now, events);
+
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+        foreach (var (evt, id) in events) _webhooks.Enqueue(evt, id);
+        return events.Count;
     }
 
     private static async Task MaintainStatesAsync(VvDbContext db, CancellationToken ct)

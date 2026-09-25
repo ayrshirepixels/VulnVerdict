@@ -82,7 +82,8 @@ public sealed class ConnectorService
         var cid = c.Id.ToString("N");
         db.Connectors.Remove(c);
         db.AssetSources.RemoveRange(db.AssetSources.Where(s => s.ConnectorId == cid));
-        db.Software.RemoveRange(db.Software.Where(s => s.ConnectorId == cid));
+        // software is marked removed, not deleted: its verdicts close as "no longer reported" and keep their history
+        await db.Software.Where(s => s.ConnectorId == cid).ExecuteUpdateAsync(u => u.SetProperty(s => s.RemovedAt, DateTime.UtcNow), ct);
         db.Findings.RemoveRange(db.Findings.Where(f => f.ConnectorId == cid));
         db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = actor, Action = "connector.delete", Target = c.DisplayName });
         await db.SaveChangesAsync(ct);

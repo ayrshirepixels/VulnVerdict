@@ -74,7 +74,7 @@ public sealed class IntuneAdapter : IInventoryAdapter
             devices.AddRange(EpJson.Items(page));
             next = EpJson.Str(page, "@odata.nextLink");
         }
-        var includeApps = EpCreds.Bool(credentials, "includeApps", true);
+        var includeApps = EpCreds.Bool(credentials, "includeApps", true); var appsFailed = false;
         var stale = 0; var n = 0;
         foreach (var d in devices)
         {
@@ -86,7 +86,7 @@ public sealed class IntuneAdapter : IInventoryAdapter
             result.Assets.Add(asset);
             if (os is not null) result.Software.Add(os);
             n++;
-            if (!includeApps) continue;
+            if (!includeApps) { if (appsFailed) result.IncompleteSoftware.Add(asset.ExternalId); continue; }
             progress?.Report("Device " + n + "/" + devices.Count + ": " + asset.DisplayName);
             try
             {
@@ -98,7 +98,7 @@ public sealed class IntuneAdapter : IInventoryAdapter
             catch (EndpointApiException ex) when (ex.Status is 403 or 404)
             {
                 result.Warnings.Add("Detected apps are not readable (" + ex.Message + "); devices and OS versions were still read.");
-                includeApps = false;
+                includeApps = false; appsFailed = true; result.IncompleteSoftware.Add(asset.ExternalId);
             }
         }
         if (stale > 0) result.Warnings.Add(stale + " device(s) not synced with Intune for " + EndpointNaming.StaleDays + " days were left out.");

@@ -68,7 +68,7 @@ public sealed class KandjiAdapter : IInventoryAdapter
             devices.AddRange(page);
             if (page.Count < PageSize) break;
         }
-        var includeApps = EpCreds.Bool(credentials, "includeApps", true);
+        var includeApps = EpCreds.Bool(credentials, "includeApps", true); var appsFailed = false;
         var stale = 0; var n = 0;
         foreach (var d in devices)
         {
@@ -84,7 +84,7 @@ public sealed class KandjiAdapter : IInventoryAdapter
             var (asset, os) = MapDevice(d, details);
             result.Assets.Add(asset);
             if (os is not null) result.Software.Add(os);
-            if (!includeApps) continue;
+            if (!includeApps) { if (appsFailed) result.IncompleteSoftware.Add(asset.ExternalId); continue; }
             try
             {
                 var apps = MapApps(asset.ExternalId, await api.GetJsonAsync(AppsPath(id), ct));
@@ -93,7 +93,7 @@ public sealed class KandjiAdapter : IInventoryAdapter
             catch (EndpointApiException ex) when (ex.Status is 403)
             {
                 result.Warnings.Add("Device apps are not readable (" + ex.Message + "); devices were still read.");
-                includeApps = false;
+                includeApps = false; appsFailed = true; result.IncompleteSoftware.Add(asset.ExternalId);
             }
         }
         if (stale > 0) result.Warnings.Add(stale + " device(s) that have not checked in for " + EndpointNaming.StaleDays + " days were left out.");

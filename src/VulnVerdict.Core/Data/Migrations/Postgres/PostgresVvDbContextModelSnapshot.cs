@@ -1021,6 +1021,9 @@ namespace VulnVerdict.Core.Data.Migrations.Postgres
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)");
 
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Vendor")
                         .IsRequired()
                         .HasMaxLength(200)

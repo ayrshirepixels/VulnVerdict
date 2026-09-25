@@ -104,7 +104,8 @@ public sealed class InventoryService
         foreach (var group in result.Software.GroupBy(s => s.AssetExternalId, StringComparer.OrdinalIgnoreCase))
         {
             if (!extToAsset.TryGetValue(group.Key, out var asset)) continue;
-            var existing = await db.Software.Where(s => s.AssetId == asset.Id && s.ConnectorId == connectorId).ToListAsync(ct);
+            // removed rows too: software that comes back revives its old row, so its closed verdicts can reopen
+            var existing = await db.Software.IgnoreQueryFilters().Where(s => s.AssetId == asset.Id && s.ConnectorId == connectorId).ToListAsync(ct);
             var seen = new HashSet<Guid>();
             foreach (var rec in group)
             {
@@ -120,7 +121,7 @@ public sealed class InventoryService
                 match.Vendor = Trunc(rec.Vendor, 200); match.Product = Trunc(rec.Product, 300); match.Version = Trunc(rec.Version ?? "", 100);
                 match.VendorNorm = vn; match.ProductNorm = pn; match.Edition = rec.Edition; match.Architecture = rec.Architecture;
                 match.Cpe = rec.Cpe; match.Purl = rec.Purl; match.Ecosystem = rec.Ecosystem; match.Kind = rec.Kind; match.Enabled = rec.Enabled;
-                match.ExternalId = rec.ExternalId; match.LastSeen = now;
+                match.ExternalId = rec.ExternalId; match.LastSeen = now; match.RemovedAt = null;
                 match.ListenersJson = rec.Listeners is { Length: > 0 } ? JsonSerializer.Serialize(rec.Listeners) : null;
                 if (match.MappingStatus != MappingStatus.Ignored)
                 {
@@ -129,8 +130,9 @@ public sealed class InventoryService
                 }
                 seen.Add(match.Id); softwareCount++;
             }
-            if (result.FullSnapshot)
-                db.Software.RemoveRange(existing.Where(s => !seen.Contains(s.Id)));
+            // not deleted: marked removed, so the evaluator closes its verdicts with a reason and keeps their history
+            if (result.FullSnapshot && !result.IncompleteSoftware.Contains(group.Key))
+                foreach (var gone in existing.Where(s => !seen.Contains(s.Id) && s.RemovedAt == null)) gone.RemovedAt = now;
         }
         await db.SaveChangesAsync(ct);
 

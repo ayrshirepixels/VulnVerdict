@@ -98,6 +98,8 @@ public class VvDbContext : DbContext
             e.HasIndex(x => new { x.AssetId, x.ConnectorId });
             e.HasIndex(x => new { x.MappedVendorNorm, x.MappedProductNorm });
             e.HasIndex(x => x.MappingStatus);
+            // removed software stays in the table for its verdicts' history; everything except the inventory upsert and the evaluator's close step ignores it
+            e.HasQueryFilter(x => x.RemovedAt == null);
         });
         b.Entity<ExternalFinding>(e => e.HasIndex(x => x.AssetId));
         b.Entity<Connector>(e => e.HasIndex(x => x.AdapterId));

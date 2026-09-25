@@ -82,7 +82,7 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
         foreach (var o in await AllAsync(api, OsPath, ct))
             if (EpJson.Int(o, "ResourceID") is { } rid && EpJson.Str(o, "Caption") is { } cap) captions[rid] = cap;
 
-        var includeSoftware = EpCreds.Bool(credentials, "includeSoftware", true);
+        var includeSoftware = EpCreds.Bool(credentials, "includeSoftware", true); var appsFailed = false;
         var n = 0; var skipped = 0;
         foreach (var s in systems)
         {
@@ -96,7 +96,7 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
             result.Assets.Add(asset);
             if (os is not null) result.Software.Add(os);
             n++;
-            if (!includeSoftware) continue;
+            if (!includeSoftware) { if (appsFailed) result.IncompleteSoftware.Add(asset.ExternalId); continue; }
             progress?.Report("Device " + n + ": " + asset.DisplayName);
             try
             {
@@ -107,7 +107,7 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
             catch (EndpointApiException ex) when (ex.Status is 403 or 404)
             {
                 result.Warnings.Add("Installed software is not readable (" + ex.Message + "); devices and OS builds were still read.");
-                includeSoftware = false;
+                includeSoftware = false; appsFailed = true; result.IncompleteSoftware.Add(asset.ExternalId);
             }
         }
         if (skipped > 0) result.Warnings.Add(skipped + " obsolete, decommissioned or client-less record(s) were left out.");

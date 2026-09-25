@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using VulnVerdict.Core.Data;
 
@@ -10,9 +11,11 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Data.Migrations.Sqlite
 {
     [DbContext(typeof(SqliteVvDbContext))]
-    partial class SqliteVvDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925224043_SoftwareRemovedAt")]
+    partial class SoftwareRemovedAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
