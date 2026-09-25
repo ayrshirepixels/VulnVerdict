@@ -153,7 +153,7 @@
                     </div>
                     <AuthorizeView Roles="Administrator,Operator" Context="auth">
                         <div class="actions">
-                            <button class="btn btn-secondary btn-sm" @onclick="() => Done(i.VerdictId)">Done</button>
+                            <a class="btn btn-secondary btn-sm" href="/verdicts/@i.VerdictId?action=done">Done</a>
                             <button class="btn btn-secondary btn-sm" @onclick="() => Snooze(i.VerdictId)">Snooze 7 days</button>
                         </div>
                     </AuthorizeView>
@@ -163,13 +163,6 @@
     };
 
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
-
-    private async Task Done(Guid id)
-    {
-        await Workflow.CloseAsync(id, await ActorAsync(), "marked done from Today");
-        _notice = "Marked as done.";
-        await LoadAsync();
-    }
 
     private async Task Snooze(Guid id)
     {

@@ -488,11 +488,18 @@ public sealed partial class VerdictEvaluator
                     v.State = VerdictState.Open; v.StateReason = null; v.SnoozedUntil = null; v.AcceptedRiskExpiry = null; v.StateChangedAt = now;
                 }
             }
-            // auto-close: inventory now shows a version outside the affected range
-            else if (c.Decision.Tier == VerdictTier.NotAffected && v.Tier >= VerdictTier.NextPatchCycle && v.State == VerdictState.Open && s.SoftwareInstanceId is not null)
+            // auto-close: the version now recorded is outside the affected range. For an asset that is the version a
+            // connector saw; for a watchlist entry it is the version someone recorded after upgrading, which is how
+            // one upgrade (7.5 to 7.8, say) settles every CVE the new version fixes, not only the one marked done.
+            // Snoozed and accepted-risk items close too: the risk they were parked for no longer exists.
+            else if (c.Decision.Tier == VerdictTier.NotAffected && v.Tier > VerdictTier.NotAffected
+                     && v.State is VerdictState.Open or VerdictState.Snoozed or VerdictState.AcceptedRisk)
             {
-                v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Open", To = "Closed", Reason = "patched, closed: fixed version observed (" + (s.Version ?? "?") + ")" });
-                v.State = VerdictState.Closed; v.StateReason = "fixed version observed: " + (s.Version ?? "?"); v.StateOwner = "system"; v.StateChangedAt = now;
+                var source = s.SoftwareInstanceId is not null ? "fixed version observed" : "watchlist now records";
+                var fromState = v.State;
+                v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = fromState.ToString(), To = "Closed", Reason = "patched, closed: " + source + " " + (s.Version ?? "?") });
+                v.State = VerdictState.Closed; v.StateReason = source + ": " + (s.Version ?? "?"); v.StateOwner = "system"; v.StateChangedAt = now;
+                v.SnoozedUntil = null; v.AcceptedRiskExpiry = null;
                 events.Add((WebhookService.EventClosed, v.Id));
             }
         }

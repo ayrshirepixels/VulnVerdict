@@ -36,7 +36,7 @@
 
         <AuthorizeView Roles="Administrator,Operator">
             <div class="btn-row" style="margin-bottom:18px">
-                @if (_v.State != VerdictState.Closed) { <button class="btn" @onclick="() => _dialog = Dialog.Done">Done</button> }
+                @if (_v.State != VerdictState.Closed) { <button class="btn" @onclick="OpenDone">Done</button> }
                 @if (_v.State == VerdictState.Open)
                 {
                     <button class="btn btn-secondary" @onclick="() => _dialog = Dialog.Snooze">Snooze</button>
@@ -180,8 +180,29 @@
                 {
                     case Dialog.Done:
                         <h3>Mark as done</h3>
-                        <p>@_v.CveId on @_v.WatchlistEntry?.DisplayName will be closed. It stays closed even if the tier changes later; update the watchlist version so it is re-evaluated as fixed.</p>
-                        <div class="form"><div><label>Reason</label><input type="text" @bind="_reason" placeholder="patched to 7.2.8" /></div></div>
+                        @if (_v.WatchlistEntry is not null)
+                        {
+                            <p>@_v.CveId on @_v.WatchlistEntry.DisplayName will be closed. If you patched it, record the version you are running now.</p>
+                            <div class="form">
+                                <div>
+                                    <label for="done-version">Version now running</label>
+                                    <input id="done-version" type="text" @bind="_running" placeholder="@(_v.WatchlistEntry.Version ?? "e.g. 7.2.8")" />
+                                </div>
+                                <div>
+                                    <label class="check" for="done-uprev">
+                                        <input id="done-uprev" type="checkbox" @bind="_uprev" />
+                                        Update the watchlist from @(_v.WatchlistEntry.Version ?? "no version") to this version
+                                    </label>
+                                    <p class="muted" style="margin:4px 0 0">Every other CVE this version fixes for @_v.WatchlistEntry.DisplayName closes too, each with a note in its history. Anything the new version is still affected by stays open.</p>
+                                </div>
+                                <div><label for="done-note">Note (optional)</label><input id="done-note" type="text" @bind="_reason" placeholder="change CHG-1042" /></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p>@_v.CveId will be closed. This asset's version comes from its connector, and the verdict closes itself when the connector next sees a fixed version, so mark it done here only if you dealt with it another way.</p>
+                            <div class="form"><div><label for="done-note">Note</label><input id="done-note" type="text" @bind="_reason" placeholder="feature removed" /></div></div>
+                        }
                         <div class="btn-row" style="margin-top:14px"><button class="btn" @onclick="Done">Confirm done</button><button class="btn btn-secondary" @onclick="() => _dialog = Dialog.None">Cancel</button></div>
                         break;
                     case Dialog.Snooze:
@@ -263,7 +284,7 @@
     {
         _tz = (await Settings.LoadAsync()).ResolveTimeZone();
         await LoadAsync();
-        if (Action == "done" && _v is not null && _v.State != VerdictState.Closed && Ui.CanOperate((await AuthState).User)) _dialog = Dialog.Done;
+        if (Action == "done" && _v is not null && _v.State != VerdictState.Closed && Ui.CanOperate((await AuthState).User)) OpenDone();
     }
 
     private async Task LoadAsync()
@@ -297,7 +318,35 @@
         catch (Exception ex) { _error = ex.Message; }
     }
 
-    private Task Done() => Run(a => Workflow.CloseAsync(Id, a, string.IsNullOrWhiteSpace(_reason) ? "marked done" : _reason), "Marked as done.");
+    private string _running = "";
+    private bool _uprev = true;
+
+    /// <summary>Open the Done dialog with the fixed version pre-filled when the record gives a plain one.</summary>
+    private void OpenDone()
+    {
+        var fix = _v?.FixedIn?.Trim();
+        _running = fix is { Length: > 0 } && !fix.Contains(' ') && VersionCompare.IsParseable(fix) ? fix : "";
+        _uprev = _v?.WatchlistEntry is not null;
+        _dialog = Dialog.Done;
+    }
+
+    private async Task Done()
+    {
+        _error = null; _notice = null;
+        try
+        {
+            var r = await Workflow.DoneAsync(Id, await ActorAsync(), _running, _uprev && _v?.WatchlistEntry is not null, _reason);
+            _notice = !r.WatchlistUpdated
+                ? "Marked as done."
+                : "Marked as done. The watchlist now records " + r.ToVersion + " (was " + (r.FromVersion ?? "no version") + "). "
+                  + (r.OthersClosed == 0 ? "No other open verdicts were fixed by it." : r.OthersClosed + " other " + (r.OthersClosed == 1 ? "verdict is" : "verdicts are") + " fixed by it and closed.")
+                  + (r.StillAffected == 0 ? "" : " " + r.StillAffected + " still " + (r.StillAffected == 1 ? "affects" : "affect") + " " + r.ToVersion + " and stay open.")
+                  + (r.ThisStillListed ? " Note: this CVE's record still lists " + r.ToVersion + " as affected, so check the evidence." : "");
+            _dialog = Dialog.None; _reason = ""; _running = "";
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
     private Task Reopen() => Run(a => Workflow.ReopenAsync(Id, a), "Re-opened.");
     private Task Snooze() => Run(a => Workflow.SnoozeAsync(Id, a, (_date ?? DateTime.UtcNow.AddDays(7)).ToUniversalTime(), string.IsNullOrWhiteSpace(_reason) ? "snoozed" : _reason), "Snoozed.");
     private Task Accept() => Run(a => Workflow.AcceptRiskAsync(Id, a, string.IsNullOrWhiteSpace(_owner) ? a : _owner, string.IsNullOrWhiteSpace(_reason) ? "risk accepted" : _reason, _date?.ToUniversalTime()), "Risk accepted.");

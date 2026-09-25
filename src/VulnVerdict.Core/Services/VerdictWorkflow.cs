@@ -11,14 +11,73 @@ public sealed class VerdictWorkflow
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly SettingsService _settings;
     private readonly WebhookService _webhooks;
+    private readonly WatchlistService _watchlist;
 
-    public VerdictWorkflow(IDbContextFactory<VvDbContext> factory, SettingsService settings, WebhookService webhooks)
+    public VerdictWorkflow(IDbContextFactory<VvDbContext> factory, SettingsService settings, WebhookService webhooks, WatchlistService watchlist)
     {
-        _factory = factory; _settings = settings; _webhooks = webhooks;
+        _factory = factory; _settings = settings; _webhooks = webhooks; _watchlist = watchlist;
     }
 
     public Task CloseAsync(Guid id, string actor, string reason, CancellationToken ct = default) =>
         ChangeStateAsync(id, actor, VerdictState.Closed, reason, v => { v.StateOwner = actor; }, ct);
+
+    /// <summary>What marking a verdict done at a version did.</summary>
+    /// <param name="WatchlistUpdated">The watchlist entry's version was changed.</param>
+    /// <param name="OthersClosed">Other verdicts on the same entry that the new version fixes, closed by the re-evaluation.</param>
+    /// <param name="StillAffected">Verdicts on the entry that still affect the new version and remain open.</param>
+    /// <param name="ThisStillListed">The CVE just marked done still lists the new version as affected.</param>
+    public sealed record DoneResult(bool WatchlistUpdated, string? FromVersion, string? ToVersion, int OthersClosed, int StillAffected, bool ThisStillListed);
+
+    /// <summary>
+    /// Mark a verdict done, optionally recording the version now running. With <paramref name="updateWatchlist"/> the
+    /// watchlist entry moves to that version and is re-evaluated, so every other verdict the upgrade fixes closes too
+    /// (each with its own history line); anything the new version is still affected by stays open.
+    /// </summary>
+    public async Task<DoneResult> DoneAsync(Guid id, string actor, string? runningVersion, bool updateWatchlist, string? note, CancellationToken ct = default)
+    {
+        runningVersion = string.IsNullOrWhiteSpace(runningVersion) ? null : runningVersion.Trim();
+        note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        WatchlistEntry? entry;
+        await using (var db = await _factory.CreateDbContextAsync(ct))
+        {
+            var v = await db.Verdicts.AsNoTracking().Include(x => x.WatchlistEntry).FirstOrDefaultAsync(x => x.Id == id, ct)
+                    ?? throw new KeyNotFoundException("Verdict not found");
+            entry = v.WatchlistEntry;
+        }
+
+        var reason = (note, runningVersion) switch
+        {
+            (null, null) => "marked done",
+            (null, _) => "marked done: now running " + runningVersion,
+            (_, null) => note!,
+            _ => note + " (now running " + runningVersion + ")",
+        };
+        await CloseAsync(id, actor, reason, ct);
+
+        if (!updateWatchlist || runningVersion is null || entry is null || entry.Version == runningVersion)
+            return new DoneResult(false, entry?.Version, entry?.Version, 0, 0, false);
+
+        var fromVersion = entry.Version;
+        List<Guid> openBefore;
+        await using (var db = await _factory.CreateDbContextAsync(ct))
+            openBefore = await db.Verdicts.Where(x => x.WatchlistEntryId == entry.Id && x.Id != id
+                                                      && (x.State == VerdictState.Open || x.State == VerdictState.Snoozed || x.State == VerdictState.AcceptedRisk))
+                                          .Select(x => x.Id).ToListAsync(ct);
+
+        entry.Version = runningVersion;
+        await _watchlist.UpsertAsync(entry, actor, ct);   // re-evaluates the entry; fixed verdicts close themselves
+
+        await using (var db = await _factory.CreateDbContextAsync(ct))
+        {
+            var after = await db.Verdicts.AsNoTracking().Where(x => x.WatchlistEntryId == entry.Id)
+                                .Select(x => new { x.Id, x.State, x.Tier }).ToListAsync(ct);
+            var othersClosed = after.Count(x => openBefore.Contains(x.Id) && x.State == VerdictState.Closed);
+            var stillAffected = after.Count(x => x.Id != id && x.Tier > VerdictTier.NotAffected
+                                                 && x.State is VerdictState.Open or VerdictState.Snoozed or VerdictState.AcceptedRisk);
+            var thisStill = after.FirstOrDefault(x => x.Id == id)?.Tier > VerdictTier.NotAffected;
+            return new DoneResult(true, fromVersion, runningVersion, othersClosed, stillAffected, thisStill);
+        }
+    }
 
     public Task ReopenAsync(Guid id, string actor, CancellationToken ct = default) =>
         ChangeStateAsync(id, actor, VerdictState.Open, "re-opened manually", v => { v.SnoozedUntil = null; v.AcceptedRiskExpiry = null; v.SuppressedByRuleId = null; v.StateOwner = null; }, ct);
