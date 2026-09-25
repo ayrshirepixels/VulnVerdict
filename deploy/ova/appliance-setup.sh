@@ -136,6 +136,14 @@ rm -f /var/lib/dbus/machine-id && ln -s /etc/machine-id /var/lib/dbus/machine-id
 rm -rf /tmp/vv
 
 # ── Shrink ───────────────────────────────────────────────────────────────
+# Ubuntu Server seeds snapd and a few hundred megabytes of snaps that an appliance never uses; the OVA
+# has to stay under GitHub's 2 GiB release asset limit.
+snap remove --purge lxd 2>/dev/null || true
+snap remove --purge core22 2>/dev/null || true
+snap remove --purge snapd 2>/dev/null || true
+apt-get purge -y snapd 2>/dev/null || true
+rm -rf /var/lib/snapd /var/cache/snapd /root/snap /home/*/snap
+apt-get autoremove --purge -y
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 journalctl --rotate && journalctl --vacuum-time=1s || true
