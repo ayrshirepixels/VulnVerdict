@@ -85,21 +85,26 @@ Type-Line $Password; Start-Sleep 2
 Type-Line $Password; Start-Sleep 5
 Save-Shot '2-after-password'
 
-# 3. The console answers over HTTPS once the stack is up.
+# 3. The console answers over HTTPS once the stack is up. curl, not Invoke-WebRequest: the .NET/schannel
+#    client intermittently fails a connection made by IP address with no server name, which curl
+#    (pinned to TLS 1.2) and every browser handle.
+function Http([string] $url) {
+  $ErrorActionPreference = 'Continue'
+  $r = & curl.exe -sk -m 10 --tls-max 1.2 -w '%{http_code}' $url 2>$null
+  $ErrorActionPreference = 'Stop'
+  $s = ($r -join ''); if ($s.Length -lt 3) { return @{ code = 0; body = '' } }
+  @{ code = [int]$s.Substring($s.Length - 3); body = $s.Substring(0, $s.Length - 3) }
+}
 $health = $null; $deadline = (Get-Date).AddMinutes(8)
-[Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 while (-not $health -and (Get-Date) -lt $deadline) {
   Start-Sleep 10
-  try { $health = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "https://$ip/healthz").StatusCode } catch { }
+  $h = Http "https://$ip/healthz"; if ($h.code -eq 200) { $health = 200 }
 }
-Pass 'console /healthz over HTTPS' ($health -eq 200) "https://$ip/healthz -> $health"
-if ($health -ne 200) {
-  # Evidence for the failure: what curl sees by IP (no server name) and with the hostname forced.
-  "curl by IP:   " + ((& curl.exe -sk -m 8 -o NUL -w '%{http_code} %{ssl_verify_result}' "https://$ip/healthz" 2>&1) -join ' ')
-  "curl by name: " + ((& curl.exe -sk -m 8 --resolve "${HostName}:443:$ip" -o NUL -w '%{http_code}' "https://$HostName/healthz" 2>&1) -join ' ')
-}
-try { $setup = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "https://$ip/" ; Pass 'first page is the administrator setup' ($setup.Content -match 'administrator|Create') "$($setup.StatusCode)" } catch { Pass 'first page is the administrator setup' $false $_.Exception.Message }
+Pass 'console /healthz over HTTPS by IP' ($health -eq 200) "https://$ip/healthz -> $health"
+$byName = & curl.exe -sk -m 10 --resolve "${HostName}:443:$ip" -o NUL -w '%{http_code}' "https://$HostName/healthz" 2>$null
+Pass 'console /healthz over HTTPS by hostname' ("$byName" -eq '200') "https://$HostName/healthz -> $byName"
+$setup = Http "https://$ip/setup"
+Pass 'first page is the administrator setup' ($setup.body -match 'Create the local administrator account') "$($setup.code)"
 Save-Shot '3-done'
 Type-Line ''   # "Press Enter for a login prompt"
 
@@ -112,7 +117,7 @@ echo "machine-id=$(cat /etc/machine-id)";
 echo "hostkeys=$(ls /etc/ssh/ssh_host_*_key 2>/dev/null | wc -l)";
 echo "configured=$(test -f /opt/vulnverdict/.configured && echo yes)";
 echo "nopasswd-sudo=$(test -e /etc/sudoers.d/vulnverdict && echo present || echo removed)";
-echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; docker compose -f /opt/vulnverdict/docker-compose.yml ps --format "{{.Service}}={{.State}}"'
+echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; cd /opt/vulnverdict && echo "running=$(docker compose ps --status running --services | sort | tr "\n" ,)"'
 '@ -replace '\$Password', $Password
 # A refused login writes to stderr, which would otherwise end the script under ErrorActionPreference Stop.
 $ErrorActionPreference = 'Continue'
@@ -125,14 +130,15 @@ Pass 'SSH host keys generated on first boot' ($out -match 'hostkeys=[1-9]') ''
 Pass 'build sudo removed' ($out -match 'nopasswd-sudo=removed') ''
 Pass 'database password generated (placeholder gone)' ($out -match '(?m)^0\s*$') ''
 Pass '.env readable by root only' ($out -match 'env-mode=600') ''
-Pass 'stack services running' (($out -match 'web=running') -and ($out -match 'worker=running') -and ($out -match 'db=running') -and ($out -match 'proxy=running')) ''
+$running = if ($out -match 'running=([^\s]*)') { $Matches[1] } else { '' }
+Pass 'stack services running' (($running -match '\bweb\b') -and ($running -match '\bworker\b') -and ($running -match '\bdb\b') -and ($running -match '\bproxy\b')) $running
 
 # 5. Survives a reboot: the stack comes back without the wizard.
 Restart-VM -Name $name -Force
 $health = $null; $deadline = (Get-Date).AddMinutes(6); Start-Sleep 30
 while (-not $health -and (Get-Date) -lt $deadline) {
   Start-Sleep 10
-  try { $health = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "https://$ip/healthz").StatusCode } catch { }
+  $h = Http "https://$ip/healthz"; if ($h.code -eq 200) { $health = 200 }
 }
 Pass 'console back after a reboot, no wizard' ($health -eq 200) "$health"
 Save-Shot '4-after-reboot'
