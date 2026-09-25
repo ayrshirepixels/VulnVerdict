@@ -1,4 +1,8 @@
 # Rendered by the all-in-one entrypoint: __HOST__ and __TLS__ are substituted at start.
+{
+	# Connections by IP address carry no server name; without a default Caddy refuses them.
+	default_sni __HOST__
+}
 __HOST__ {
 	__TLS__
 	encode gzip

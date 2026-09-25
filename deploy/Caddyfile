@@ -1,6 +1,12 @@
 # Only 443 (and 80 for redirects) is exposed. Default is Caddy's internal CA, which suits an
 # internal hostname; import its root certificate on the clients or point at your own CA.
 # For a public hostname with a Let's Encrypt certificate, delete the "tls internal" line.
+{
+	# A browser opening the console by IP address sends no server name, and without a default
+	# Caddy would refuse the handshake. Serve the hostname's certificate instead: the page loads
+	# (with a name warning until the hostname is used or the root certificate is imported).
+	default_sni {$VV_HOSTNAME}
+}
 {$VV_HOSTNAME} {
 	tls internal
 	encode gzip
