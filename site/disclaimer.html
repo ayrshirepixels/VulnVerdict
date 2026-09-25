@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VulnVerdict advisory notice</title>
+  <meta name="description" content="What a VulnVerdict verdict is and is not: advice worked out from public data and your connectors, to be checked by a person. No warranty, no liability.">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+    <nav class="nav">
+      <a href="how-it-works.html">How it works</a>
+      <a href="pricing.html">Support plans</a>
+      <a href="index.html#install">Install</a>
+      <a class="cta" href="https://github.com/ayrshirepixels/VulnVerdict">Get it on GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="eyebrow">Advisory notice</div>
+    <h1>What a verdict is, and what it is not.</h1>
+    <p class="lead">This notice appears in the console, at the foot of every digest and weekly report, and on every verdict page. It is short because it matters.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap narrow" style="margin-left:0">
+    <h3>Verdicts are advice, not a guarantee.</h3>
+    <p>VulnVerdict works each verdict out from public vulnerability data (the CVE Program, CISA, EPSS, exploit indexes, vendor advisories) and from what your connectors and watchlist report about your estate. Both can be incomplete, late or wrong: a vendor's affected-version list can be inaccurate, a connector can miss a host, a version string can be ambiguous, and a compensating control you rely on may be one the console has no way to see.</p>
+
+    <h3>No automated assessment can fully account for your environment.</h3>
+    <p>Whether a vulnerability matters to you depends on configuration, network layout, who can reach what, and what you have already done about it. VulnVerdict makes its reasoning visible so a person can check it; it does not replace that person.</p>
+
+    <h3>Check the evidence before you act, and treat "not affected" with the same care as "fix today".</h3>
+    <p>A missed match looks like silence. The evidence chain on every verdict, including the dismissed ones, exists so a bad match can be found.</p>
+
+    <h3>Decisions about patching, and their consequences, remain yours.</h3>
+    <p>Applying, delaying or declining a fix is an operational decision for the people who run the systems.</p>
+
+    <h3>No warranty, no liability.</h3>
+    <p>VulnVerdict is provided "as is", without warranty of any kind, and its authors and distributors accept no liability for any loss arising from its use or from reliance on its output, to the fullest extent permitted by law. The software licence (GNU AGPL-3.0, sections 15 and 16) says the same in longer words. Support subscriptions cover the services described in the subscription agreement and nothing else.</p>
+
+    <p class="muted" style="margin-top:28px">The short form, as printed on digests:</p>
+    <blockquote class="muted" style="border-left:3px solid var(--amber);margin:12px 0 0;padding:4px 0 4px 16px">Verdicts are advisory. They are worked out from public vulnerability data and what your connectors and watchlist report, and no automated assessment can fully account for your environment, configuration or compensating controls. Check the evidence before you act. Decisions about patching, and their consequences, remain yours. VulnVerdict is provided without warranty and its authors accept no liability for loss arising from its use.</blockquote>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>Open source under the AGPL-3.0. An Ayrshire Pixels product. <a href="https://github.com/ayrshirepixels/VulnVerdict">GitHub</a> &middot; <a href="mailto:chris@pless.uk">chris@pless.uk</a></p>
+    </div>
+    <p class="attr">VulnVerdict and the logo are trademarks of Ayrshire Pixels. Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation.</p>
+  </div>
+</footer>
+</body>
+</html>
