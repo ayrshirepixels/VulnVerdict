@@ -165,6 +165,18 @@ public static partial class VersionMatcher
 
     private sealed record Range(string? From, string? To, bool ToInclusive, bool Affected, MatchConfidence Confidence, string Text);
 
+    [GeneratedRegex(@"\d+(?:\.\d+)+")] private static partial Regex DottedToken();
+
+    /// <summary>
+    /// "macOS Mojave 10.14.3" to "10.14.3", "iOS 12.1.3" to "12.1.3", "iTunes 12.9.3 for Windows" to "12.9.3": the one
+    /// dotted version inside a bound that starts with a name. Null when there is none, or more than one to choose from.
+    /// </summary>
+    internal static string? NamedVersion(string bound)
+    {
+        var tokens = DottedToken().Matches(bound);
+        return tokens.Count == 1 && char.IsLetter(bound.TrimStart()[0]) ? tokens[0].Value : null;
+    }
+
     private static IEnumerable<Range> Expand(AffectedVersion v)
     {
         var status = (v.Status ?? "affected").ToLowerInvariant();
@@ -182,8 +194,13 @@ public static partial class VersionMatcher
             if (BranchCeiling(top) is { } ceiling) { top = ceiling; incl = false; }
             var from = IsWild(v.Version) ? null : v.Version;
             var to = IsWild(top) ? null : top;
+            // Apple writes bounds with the product name in them ("macOS Mojave 10.14.3", "iOS 12.1.3"). Unread, every
+            // old Apple CVE came out as an unresolved "check this" at the top tier on current devices.
+            var named = false;
+            if (from is not null && !VersionCompare.IsParseable(from) && NamedVersion(from) is { } nf) { from = nf; named = true; }
+            if (to is not null && !VersionCompare.IsParseable(to) && NamedVersion(to) is { } nt) { to = nt; named = true; }
             var conf = (from is null || VersionCompare.IsParseable(from)) && (to is null || VersionCompare.IsParseable(to))
-                ? MatchConfidence.Exact : MatchConfidence.Possible;
+                ? (named ? MatchConfidence.Likely : MatchConfidence.Exact) : MatchConfidence.Possible;
             var text = (from ?? "any") + " " + (incl ? "<= " : "< ") + (to ?? "any");
             yield return new Range(from, to, incl, affected, conf, text);
             // "changes" mark later sub-ranges with a different status
