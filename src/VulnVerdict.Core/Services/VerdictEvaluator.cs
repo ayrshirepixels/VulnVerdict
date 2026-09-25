@@ -132,6 +132,10 @@ public sealed partial class VerdictEvaluator
         {
             var exact = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == vn && a.ProductNorm == pn).ToListAsync(ct);
             result.AddRange(exact.Select(a => new ProductMatch(a, a.CveId, s.ProductConfidence, s.MappedProductNorm is null ? "vendor and product match exactly" : "mapped to " + a.Vendor + " / " + a.Product)));
+            // Records whose CNA wrote "n/a" for the vendor but named the product ("n/a" / "BIG-IP"): the product
+            // name is the whole match, so a step below exact.
+            var unvendored = await db.CveAffected.AsNoTracking().Where(a => a.VendorNorm == "" && a.ProductNorm == pn).ToListAsync(ct);
+            result.AddRange(unvendored.Select(a => new ProductMatch(a, a.CveId, MatchConfidence.Likely, "product name matches; the CVE record does not state a vendor")));
         }
         if (s.WatchlistEntryId is not null)
         {

@@ -41,6 +41,64 @@ public class CveParseTests
     }
     """;
 
+    private static string Record(string cnaAffected, string? adpAffected) => """
+    { "dataType": "CVE_RECORD", "dataVersion": "5.1",
+      "cveMetadata": { "cveId": "CVE-2024-46538", "state": "PUBLISHED", "assignerShortName": "mitre", "datePublished": "2024-10-25T00:00:00.000Z" },
+      "containers": { "cna": { "affected":
+    """ + cnaAffected + """
+    , "descriptions": [ { "lang": "en", "value": "A cross-site scripting (XSS) vulnerability in pfsense v2.5.2 allows attackers to execute arbitrary web scripts or HTML via a crafted payload injected into the $pconfig variable at interfaces_groups_edit.php." } ] }
+    """ + (adpAffected is null ? "" : """
+    , "adp": [ { "providerMetadata": { "shortName": "CISA-ADP" }, "affected":
+    """ + adpAffected + " } ]") + " } }";
+
+    [Fact]
+    public void Placeholder_cna_product_falls_back_to_the_cisa_affected_list()
+    {
+        // A third of the CVE list is filed this way: vendor and product "n/a" in the CNA container, the real names
+        // only in CISA's ADP container. CVE-2024-46538 (pfSense) as published.
+        using var doc = JsonDocument.Parse(Record(
+            """[ { "vendor": "n/a", "product": "n/a", "versions": [ { "version": "n/a", "status": "affected" } ] } ]""",
+            """[ { "vendor": "pfsense", "product": "pfsense", "cpes": [ "cpe:2.3:a:pfsense:pfsense:2.5.2:*:*:*:*:*:*:*" ], "defaultStatus": "unknown", "versions": [ { "version": "2.5.2", "status": "affected" } ] } ]"""));
+        var cve = CveListFeed.Parse(doc.RootElement, DateTime.UtcNow, "test")!;
+        var row = Assert.Single(cve.Affected);
+        Assert.Equal("pfsense", row.VendorNorm);
+        Assert.Equal("pfsense", row.ProductNorm);
+        Assert.Contains("2.5.2", row.VersionsJson);
+    }
+
+    [Fact]
+    public void Placeholder_product_with_no_cisa_data_yields_no_affected_rows()
+    {
+        using var doc = JsonDocument.Parse(Record("""[ { "vendor": "N/A", "product": "N/A", "versions": [ { "version": "n/a", "status": "affected" } ] } ]""", null));
+        var cve = CveListFeed.Parse(doc.RootElement, DateTime.UtcNow, "test")!;
+        Assert.Empty(cve.Affected);
+    }
+
+    [Fact]
+    public void Placeholder_vendor_with_a_real_product_is_kept_without_a_vendor()
+    {
+        using var doc = JsonDocument.Parse(Record("""[ { "vendor": "n/a", "product": "BIG-IP", "versions": [ { "version": "16.1.0", "status": "affected", "lessThan": "16.1.4" } ] } ]""", null));
+        var cve = CveListFeed.Parse(doc.RootElement, DateTime.UtcNow, "test")!;
+        var row = Assert.Single(cve.Affected);
+        Assert.Equal("", row.Vendor);
+        Assert.Equal("", row.VendorNorm);
+        Assert.Equal("bigip", row.ProductNorm);
+    }
+
+    [Theory]
+    [InlineData("n/a", true)] [InlineData("N/A", true)] [InlineData("-", true)] [InlineData("unknown", true)] [InlineData("", true)] [InlineData(null, true)]
+    [InlineData("pfSense", false)] [InlineData("Nagios", false)] [InlineData("nano", false)]
+    public void Placeholder_detection(string? name, bool placeholder) => Assert.Equal(placeholder, CveListFeed.IsPlaceholder(name));
+
+    [Fact]
+    public void A_cursor_from_an_older_parser_forces_a_full_reload()
+    {
+        Assert.False(CveListFeed.CursorIsCurrent(null));
+        Assert.False(CveListFeed.CursorIsCurrent("tag=cve_2026-09-24_0900Z"));                 // written before parser versions existed
+        Assert.False(CveListFeed.CursorIsCurrent("tag=cve_2026-09-24_0900Z;parser=1"));
+        Assert.True(CveListFeed.CursorIsCurrent("tag=cve_2026-09-24_0900Z;parser=" + CveListFeed.ParserVersion));
+    }
+
     [Fact]
     public void Parses_cna_and_adp_containers()
     {

@@ -32,7 +32,10 @@ public sealed class CveListFeed : IFeed
         var dir = Path.Combine(ctx.DataDir, "cvelist");
         Directory.CreateDirectory(dir);
 
-        var cursorTag = ParseCursor(ctx.Cursor);
+        // A cursor from an older parser forces one full reload: deltas only re-read records that changed upstream,
+        // so a parser improvement (section 9.2: "n/a" placeholders now fall back to the CISA data) would otherwise
+        // never reach the records already in the database.
+        var cursorTag = CursorIsCurrent(ctx.Cursor) ? ParseCursor(ctx.Cursor) : null;
         var releases = await ListReleasesAsync(ctx, cursorTag, ct);
         if (releases.Count == 0) throw new InvalidOperationException("No releases returned by GitHub");
 
@@ -41,6 +44,7 @@ public sealed class CveListFeed : IFeed
 
         if (cursorTag is null || !releases.Any(r => r.Tag == cursorTag))
         {
+            if (ctx.Cursor is not null && !CursorIsCurrent(ctx.Cursor)) ctx.Progress("Reloading the CVE list: the record parser changed since this data was loaded");
             // baseline: the latest release always carries the midnight snapshot of its own day
             var asset = latest.Assets.FirstOrDefault(a => a.Name.EndsWith("_all_CVEs_at_midnight.zip.zip", StringComparison.OrdinalIgnoreCase));
             if (asset.Name is null) throw new InvalidOperationException("Latest release has no all_CVEs_at_midnight asset");
@@ -63,7 +67,7 @@ public sealed class CveListFeed : IFeed
 
             ctx.Progress("Rebuilding product catalogue");
             await RebuildCatalogueAsync(ctx.Db, ct);
-            return new FeedResult(total, "tag=" + latest.Tag, "baseline " + baselineDate);
+            return new FeedResult(total, Cursor(latest.Tag), "baseline " + baselineDate);
         }
 
         var pending = releases.Where(r => string.CompareOrdinal(r.Tag, cursorTag) > 0).OrderBy(r => r.Tag).ToList();
@@ -71,14 +75,24 @@ public sealed class CveListFeed : IFeed
         foreach (var rel in pending)
             total += await ApplyDeltaAsync(ctx, rel, dir, ct, touched);
         if (touched.Count > 0) await UpdateCatalogueAsync(ctx.Db, touched, ct);
-        return new FeedResult(total, "tag=" + (pending.LastOrDefault()?.Tag ?? cursorTag), pending.Count + " delta releases");
+        return new FeedResult(total, Cursor(pending.LastOrDefault()?.Tag ?? cursorTag), pending.Count + " delta releases");
     }
 
-    private static string? ParseCursor(string? cursor)
+    /// <summary>Bump when a change to <see cref="Parse"/> should be applied to records already loaded.</summary>
+    public const int ParserVersion = 2;
+
+    private static string Cursor(string tag) => "tag=" + tag + ";parser=" + ParserVersion;
+
+    /// <summary>True when the cursor was written by this parser version; anything older means a full reload.</summary>
+    public static bool CursorIsCurrent(string? cursor) => CursorPart(cursor, "parser=") == ParserVersion.ToString();
+
+    private static string? ParseCursor(string? cursor) => CursorPart(cursor, "tag=");
+
+    private static string? CursorPart(string? cursor, string prefix)
     {
         if (string.IsNullOrWhiteSpace(cursor)) return null;
         foreach (var part in cursor.Split(';'))
-            if (part.StartsWith("tag=")) return part[4..];
+            if (part.StartsWith(prefix, StringComparison.Ordinal)) return part[prefix.Length..];
         return null;
     }
 
@@ -336,6 +350,15 @@ public sealed class CveListFeed : IFeed
         }
     }
 
+    /// <summary>
+    /// Values CNAs write when they are not naming anything: "n/a" above all (a third of the whole CVE list has
+    /// vendor and product "n/a"), plus the other ways of saying so. Compared in normalised form, so "N/A", "n/a"
+    /// and "-" are all placeholders.
+    /// </summary>
+    private static readonly HashSet<string> Placeholders = new(StringComparer.Ordinal) { "", "na", "notapplicable", "unknown", "unspecified", "none", "null", "tbd", "various" };
+
+    public static bool IsPlaceholder(string? name) => Placeholders.Contains(Normalizer.Norm(name));
+
     private static void ReadAffected(JsonElement container, Cve cve)
     {
         if (!container.TryGetProperty("affected", out var affected) || affected.ValueKind != JsonValueKind.Array) return;
@@ -344,7 +367,12 @@ public sealed class CveListFeed : IFeed
             var vendor = Str(a, "vendor", 200) ?? "";
             var product = Str(a, "product", 200) ?? "";
             if (product == "" && a.TryGetProperty("packageName", out var pn)) product = Trunc(pn.GetString(), 200) ?? "";
-            if (product == "") continue;
+            // A placeholder product names nothing: skip the row, so the CISA ADP container's affected list (which
+            // often carries the real vendor and product for exactly these records) is read instead.
+            if (IsPlaceholder(product)) continue;
+            // A placeholder vendor with a real product ("n/a" / "BIG-IP") is stored with no vendor at all, which the
+            // evaluator reads as "vendor not stated" rather than as a vendor called "n/a".
+            if (IsPlaceholder(vendor)) vendor = "";
             var row = new CveAffected
             {
                 Vendor = vendor,

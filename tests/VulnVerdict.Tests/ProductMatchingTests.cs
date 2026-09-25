@@ -38,6 +38,8 @@ public class ProductMatchingTests : IDisposable
             Add(db, "CVE-2099-0012", "Fortinet", "Fortinet FortiOS, FortiProxy", "7.2.6");         // a list naming it
             Add(db, "CVE-2099-0013", "Fortinet", "FortiOS and FortiProxy", "7.2.6");               // "and" list
             Add(db, "CVE-2099-0014", "Fortinet", "FortiOS-6K7K", "7.2.6");                         // a different product line
+            Add(db, "CVE-2099-0020", "", "BIG-IP", "16.1.4");                                      // CNA wrote vendor "n/a": stored with none
+            Add(db, "CVE-2099-0021", "", "BIG-IQ Centralized Management", "8.3.0");                // a different F5 product, also unvendored
             db.SaveChanges();
         }
         var settings = new SettingsService(_factory, new PassthroughProtectionProvider());
@@ -87,6 +89,16 @@ public class ProductMatchingTests : IDisposable
     {
         var cves = await VerdictsFor("Fortinet", "FortiOS", "7.2.5");
         Assert.Equal(new[] { "CVE-2099-0010", "CVE-2099-0011", "CVE-2099-0012", "CVE-2099-0013" }, cves);
+    }
+
+    [Fact]
+    public async Task A_record_that_names_the_product_but_no_vendor_matches_a_vendored_entry()
+    {
+        var cves = await VerdictsFor("F5", "BIG-IP", "16.1.2");
+        Assert.Equal(new[] { "CVE-2099-0020" }, cves);
+        await using var db = await _factory.CreateDbContextAsync();
+        var v = await db.Verdicts.SingleAsync(x => x.CveId == "CVE-2099-0020");
+        Assert.Equal(MatchConfidence.Likely, v.Confidence);
     }
 
     [Fact]
