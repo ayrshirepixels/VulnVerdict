@@ -4,3 +4,6 @@ src/VulnVerdict.Web/data/
 *.user
 .vs/
 .claude/worktrees/
+
+# Local tooling: never part of the repository or its source archives
+.claude/

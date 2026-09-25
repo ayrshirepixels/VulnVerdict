@@ -1,0 +1,4 @@
+# Left out of the source archives GitHub attaches to releases
+.github export-ignore
+.claude export-ignore
+.gitattributes export-ignore
