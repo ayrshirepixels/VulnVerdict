@@ -62,7 +62,7 @@ public class TicketAdapterTests
     }
 
     [Fact]
-    public void Adapter_ids_are_unique_and_match_the_brief()
+    public void Adapter_ids_are_unique_and_match_the_documented_contract()
     {
         var ids = AllAdapters().Select(a => ((ITicketAdapter)a[0]).Metadata.Id).ToList();
         Assert.Equal(new[] { "jira", "servicenow", "freshservice", "zendesk", "azure-devops", "halopsa", "autotask" }, ids);
