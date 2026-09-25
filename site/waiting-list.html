@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VulnVerdict waiting list</title>
+  <meta name="description" content="Support plans for VulnVerdict are coming soon. Join the waiting list and we will get in touch when they open.">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="site.css">
+  <style>
+    .form { max-width: 620px; }
+    .form label { display: block; font-weight: 600; font-size: 15px; margin: 18px 0 6px; }
+    .form input, .form select, .form textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+    .form textarea { min-height: 96px; resize: vertical; }
+    .form input:focus, .form select:focus, .form textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; border-color: var(--amber); }
+    .form .hint { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    .form .btns { margin-top: 24px; }
+    .fallback { margin-top: 18px; color: var(--muted); font-size: 15px; }
+    .fallback code { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+    <nav class="nav">
+      <a href="how-it-works.html">How it works</a>
+      <a href="pricing.html">Support plans</a>
+      <a href="index.html#install">Install</a>
+      <a class="cta" href="https://github.com/ayrshirepixels/VulnVerdict">Get it on GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="eyebrow">Coming soon</div>
+    <h1>Join the waiting list.</h1>
+    <p class="lead">Support plans are not on sale yet. The software is free and open source today; the curated feed, tested updates and email support are being set up. Leave your details and we will get in touch when they open. No commitment, and nothing is stored on this site: the form opens an email from you to us.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <form class="form" id="wl" novalidate>
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" autocomplete="name" required>
+
+      <label for="org">Organisation</label>
+      <input id="org" name="org" type="text" autocomplete="organization">
+
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <div class="hint">The address we should reply to.</div>
+
+      <label for="size">Roughly how many devices do you look after?</label>
+      <select id="size" name="size">
+        <option value="">Choose one</option>
+        <option>Under 50</option>
+        <option>50 to 250</option>
+        <option>250 to 500</option>
+        <option>More than 500</option>
+        <option>Several organisations (MSP)</option>
+      </select>
+
+      <label for="edge">What runs at your network edge?</label>
+      <input id="edge" name="edge" type="text" placeholder="FortiGate, Sophos, Meraki, pfSense, something else">
+
+      <label for="notes">Anything else</label>
+      <textarea id="notes" name="notes" placeholder="What you hope it will do for you, or what you would need to see first."></textarea>
+
+      <div class="btns">
+        <button class="btn btn-amber" type="submit">Join the waiting list</button>
+      </div>
+      <p class="fallback">This opens your mail app with the details filled in, addressed to <code>info@pless.uk</code>. If nothing opens, email that address directly and say you would like to join the waiting list.</p>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>Open source under the AGPL-3.0. An Ayrshire Pixels product. <a href="https://github.com/ayrshirepixels/VulnVerdict">GitHub</a> &middot; <a href="mailto:chris@pless.uk">chris@pless.uk</a></p>
+    </div>
+    <p class="attr">VulnVerdict and the logo are trademarks of Ayrshire Pixels. Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation.</p>
+  </div>
+</footer>
+
+<script>
+  // No backend: the visitor's own mail app sends the details to info@pless.uk.
+  document.getElementById('wl').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = e.target, v = function (id) { return (f.elements[id].value || '').trim(); };
+    if (!v('name') || !v('email')) { f.elements[v('name') ? 'email' : 'name'].focus(); return; }
+    var lines = [
+      'Please add me to the VulnVerdict waiting list.', '',
+      'Name: ' + v('name'),
+      'Organisation: ' + (v('org') || '-'),
+      'Email: ' + v('email'),
+      'Devices: ' + (v('size') || '-'),
+      'Network edge: ' + (v('edge') || '-'),
+      '', v('notes')
+    ];
+    window.location.href = 'mailto:info@pless.uk?subject=' + encodeURIComponent('VulnVerdict waiting list: ' + (v('org') || v('name')))
+      + '&body=' + encodeURIComponent(lines.join('\n'));
+  });
+</script>
+</body>
+</html>
