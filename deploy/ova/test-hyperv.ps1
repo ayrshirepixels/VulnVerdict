@@ -117,7 +117,7 @@ echo "machine-id=$(cat /etc/machine-id)";
 echo "hostkeys=$(ls /etc/ssh/ssh_host_*_key 2>/dev/null | wc -l)";
 echo "configured=$(test -f /opt/vulnverdict/.configured && echo yes)";
 echo "nopasswd-sudo=$(test -e /etc/sudoers.d/vulnverdict && echo present || echo removed)";
-echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; cd /opt/vulnverdict && echo "running=$(docker compose ps --status running --services | sort | tr "\n" ,)"'
+echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; cd /opt/vulnverdict && echo "running=$(docker compose ps --status running --services | sort | paste -sd,)"'
 '@ -replace '\$Password', $Password
 # A refused login writes to stderr, which would otherwise end the script under ErrorActionPreference Stop.
 $ErrorActionPreference = 'Continue'
@@ -133,14 +133,16 @@ Pass '.env readable by root only' ($out -match 'env-mode=600') ''
 $running = if ($out -match 'running=([^\s]*)') { $Matches[1] } else { '' }
 Pass 'stack services running' (($running -match '\bweb\b') -and ($running -match '\bworker\b') -and ($running -match '\bdb\b') -and ($running -match '\bproxy\b')) $running
 
-# 5. Survives a reboot: the stack comes back without the wizard.
+# 5. Survives a reboot: the stack comes back without the wizard. The Default Switch's DHCP often
+#    hands out a different address after a restart, so re-read it rather than polling the old one.
 Restart-VM -Name $name -Force
-$health = $null; $deadline = (Get-Date).AddMinutes(6); Start-Sleep 30
+$health = $null; $ip2 = $null; $deadline = (Get-Date).AddMinutes(6); Start-Sleep 30
 while (-not $health -and (Get-Date) -lt $deadline) {
   Start-Sleep 10
-  $h = Http "https://$ip/healthz"; if ($h.code -eq 200) { $health = 200 }
+  $ip2 = (Get-VMNetworkAdapter -VMName $name).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+  if ($ip2) { $h = Http "https://$ip2/healthz"; if ($h.code -eq 200) { $health = 200 } }
 }
-Pass 'console back after a reboot, no wizard' ($health -eq 200) "$health"
+Pass 'console back after a reboot, no wizard' ($health -eq 200) "$ip2 -> $health"
 Save-Shot '4-after-reboot'
 
 $results | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $shots 'results.json')
