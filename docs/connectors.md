@@ -26,6 +26,29 @@ Assets seen by several sources are merged (MAC address first, then hostname, the
 | Discovery sweep | hosts answering on common ports, reverse DNS, service banners | subnets to sweep | Discovery only: no vulnerability scripts, ever. Unclaimed hosts are listed as unknown. |
 | External cross-check | which public names and addresses answer from outside | your DNS names and IP ranges; a Shodan key is optional | Anything answering is tagged internet-facing regardless of what the firewall adapter says. |
 
+## Endpoint management, MDM and RMM
+
+These read the laptops, desktops and servers a management tool already knows about, with their installed software, so a site does not need WinRM or SSH access to every machine. Each is one credential form with a read-only API account. Devices the tool has not heard from for 90 days are left out.
+
+| Connector | Sees | Needs | Notes |
+|---|---|---|---|
+| Microsoft Intune | managed Windows, macOS, iOS/iPadOS and Android devices, the apps Intune detected on each | an Entra ID app registration with the Graph application permission DeviceManagementManagedDevices.Read.All | Windows builds include the update revision, so the OS is matched at its patch level. Detected apps come from Graph's beta endpoint, one call per device. |
+| Microsoft Defender for Endpoint | onboarded machines, the Defender Vulnerability Management software inventory, Defender's CVE findings per machine | an app registration with Machine.Read.All, Software.Read.All and Vulnerability.Read.All; Defender Vulnerability Management licensed | Software arrives as CPE-style names and maps to the CNA names directly. Findings are stored as a second opinion, never as the verdict. |
+| Microsoft Configuration Manager (SCCM) | devices, OS builds with the update revision, installed software | a domain account with the Read-only Analyst role, and the AdminService (ConfigMgr 1810 or later) | Stays on-premises: Windows authentication from the appliance to the SMS Provider over HTTPS. Can be limited to one collection. |
+| Jamf Pro | Macs with macOS version and installed applications; iPhones and iPads with their OS version | an API client whose role has only Read Computers and Read Mobile Devices | Application vendors come from the bundle id. |
+| Kandji | Macs, iPhones, iPads and Apple TVs with OS versions, network addresses and installed apps | an API token limited to Device list, Device details and Device apps | |
+| NinjaOne | managed devices and the estate-wide installed software query | an API Services client application with the Monitoring scope | |
+| Datto RMM | devices and each device's software audit | an API-enabled user with view-only rights | The software audit has no publisher; well-known vendors are recognised from the product name, the rest go to Needs mapping. |
+| N-able N-central | devices and their asset record: OS, network adapters, installed applications | an API-only user with a read-only role, and its JSON Web Token | |
+| Lansweeper | every asset in a Lansweeper site (computers, switches, printers, NAS) with OS and installed software | a personal access token or application token authorised for the site | Uses the Data API (GraphQL); covers on-premises Lansweeper installations synced to Lansweeper Sites. |
+| PDQ Connect | devices, network adapters and installed software | a PDQ Connect API key kept for VulnVerdict alone | PDQ Inventory (on-premises) has no API and is not covered. |
+
+**Windows patch level.** A Windows CVE record lists fixed builds such as 10.0.22631.4169. NinjaOne, Datto RMM and some Lansweeper, N-central and PDQ records report the build without the last part, which would make every Windows CVE of that release look unfixed. Those devices are recorded with their OS, and their installed software is matched as usual, but their OS CVEs are assessed only where a source that knows the patch level sees the same machine: WinRM, Intune, Defender for Endpoint or ConfigMgr. Android devices are handled the same way, since the release number says nothing about the security patch level. The connector's last run lists how many devices this applies to.
+
+**Upgrades close verdicts.** Each installed application keeps the same identity from one collection to the next, whatever its version. When a connector sees a newer version, the next evaluation closes the verdicts that version fixes, as "fixed version observed", with the history kept.
+
+These connectors are built from each vendor's published API documentation and checked against sample responses. They have not yet run against a live tenant of every product; if one does not read your tenant correctly, the connector's error message and an issue report will get it fixed.
+
 ## Firewalls and exposure
 
 Every firewall connector uses the FortiGate's exposure model. A service the firewall itself offers on an internet-facing interface or zone (admin page, SSH, VPN portal or gateway) marks the firewall internet-facing, with the interface and port as evidence. A port forward, virtual server or 1:1 NAT from the internet side to a single internal address marks that address internet-facing, with the rule name as evidence; where the firewall keeps a separate allow rule and the connector can read it (PAN-OS security rules, pfSense filter rules) the rule has to exist too. A rule that only admits named source addresses is recorded as a listener, not as internet exposure. Firmware is reported under the vendor and product names the vendor's own CVE records use, checked against recent records for each family, so it matches without a mapping step. Where a vendor has spelt the same product two ways (Zyxel series and model names, Ubiquiti's model names and "UniFi OS", Check Point's two Spark names) the firmware is recorded under both.
