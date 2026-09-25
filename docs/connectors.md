@@ -47,6 +47,8 @@ These read the laptops, desktops and servers a management tool already knows abo
 
 **Upgrades close verdicts.** Each installed application keeps the same identity from one collection to the next, whatever its version. When a connector sees a newer version, the next evaluation closes the verdicts that version fixes, as "fixed version observed", with the history kept.
 
+**Nothing is deleted when something goes away.** Software a connector stops reporting, software from a deleted connector, assets not seen for 30 days or archived, and CVEs whose record no longer matches all close their verdicts with a reason ("no longer reported by Intune", "asset not seen since 2026-08-01", "no longer matches"), and the history stays. If the software, asset or match comes back while still affected, the same verdict re-opens with a fresh deadline and fresh alerts. Verdicts a person closed stay closed. A device a connector could not read completely in a run keeps its software from the previous run rather than having it marked removed.
+
 These connectors are built from each vendor's published API documentation and checked against sample responses. They have not yet run against a live tenant of every product; if one does not read your tenant correctly, the connector's error message and an issue report will get it fixed.
 
 ## Firewalls and exposure
