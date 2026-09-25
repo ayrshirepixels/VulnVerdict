@@ -4,6 +4,11 @@
 # console URL is printed. Everything unique to this appliance is created here, not at build time.
 set -euo pipefail
 ENV_FILE=/opt/vulnverdict/.env
+# tty1 is also the system console: stop systemd's "[ OK ] Finished ..." lines and kernel messages
+# printing over the questions while the wizard runs, and turn them back on when it is done.
+kill -s SIGRTMIN+21 1 2>/dev/null || true
+dmesg -n 1 2>/dev/null || true
+trap 'kill -s SIGRTMIN+20 1 2>/dev/null || true' EXIT
 clear || true
 cat <<'BANNER'
 

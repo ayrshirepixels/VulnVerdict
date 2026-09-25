@@ -32,15 +32,36 @@ Start-VM -Name $name
 
 $vm = Get-CimInstance -Namespace root\virtualization\v2 -ClassName Msvm_ComputerSystem -Filter "ElementName='$name'"
 $kb = Get-CimAssociatedInstance -InputObject $vm -ResultClassName Msvm_Keyboard
+# The keyboard's TypeText call is unreliable on this host (a whole hostname arrived as one letter, even
+# typed a character at a time), so type PS/2 scancodes like Packer does. Set 1 make codes; a break is
+# the make code with the high bit set. Letters, digits and this punctuation sit on the same keys in the
+# GB layout the appliance uses and in US, so the guest layout does not matter for them.
+$Scan = @{
+  '1'=0x02;'2'=0x03;'3'=0x04;'4'=0x05;'5'=0x06;'6'=0x07;'7'=0x08;'8'=0x09;'9'=0x0A;'0'=0x0B;'-'=0x0C;'='=0x0D
+  'q'=0x10;'w'=0x11;'e'=0x12;'r'=0x13;'t'=0x14;'y'=0x15;'u'=0x16;'i'=0x17;'o'=0x18;'p'=0x19;'['=0x1A;']'=0x1B
+  'a'=0x1E;'s'=0x1F;'d'=0x20;'f'=0x21;'g'=0x22;'h'=0x23;'j'=0x24;'k'=0x25;'l'=0x26;';'=0x27;"'"=0x28
+  'z'=0x2C;'x'=0x2D;'c'=0x2E;'v'=0x2F;'b'=0x30;'n'=0x31;'m'=0x32;','=0x33;'.'=0x34;'/'=0x35;' '=0x39
+}
+$Shifted = @{ '!'='1';'$'='4';'%'='5';'^'='6';'&'='7';'*'='8';'('='9';')'='0';'_'='-';'+'='=';':'=';';'<'=',';'>'='.';'?'='/' }
 function Type-Line([string] $text) {
-  # One character at a time with a pause: TypeText of a whole string dropped most of the first answer
-  # (the hostname arrived as one letter) while the console was still catching up.
+  $codes = New-Object System.Collections.Generic.List[byte]
   foreach ($ch in $text.ToCharArray()) {
-    Invoke-CimMethod -InputObject $kb -MethodName TypeText -Arguments @{ asciiText = [string]$ch } | Out-Null
-    Start-Sleep -Milliseconds 40
+    $s = [string]$ch; $shift = $false
+    if ($Shifted.ContainsKey($s)) { $s = $Shifted[$s]; $shift = $true }
+    elseif ([char]::IsUpper($ch)) { $s = $s.ToLower(); $shift = $true }
+    if (-not $Scan.ContainsKey($s)) { throw "no scancode for '$ch'" }
+    $k = [byte]$Scan[$s]
+    if ($shift) { $codes.Add([byte]0x2A) }
+    $codes.Add($k); $codes.Add([byte]($k -bor 0x80))
+    if ($shift) { $codes.Add([byte]0xAA) }
   }
-  Start-Sleep -Milliseconds 200
-  Invoke-CimMethod -InputObject $kb -MethodName TypeKey -Arguments @{ keyCode = 13 } | Out-Null
+  $codes.Add([byte]0x1C); $codes.Add([byte]0x9C)   # Enter
+  # Small batches, with a pause, so the console keeps up.
+  for ($i = 0; $i -lt $codes.Count; $i += 8) {
+    $chunk = $codes.GetRange($i, [Math]::Min(8, $codes.Count - $i)).ToArray()
+    Invoke-CimMethod -InputObject $kb -MethodName TypeScanCodes -Arguments @{ ScanCodes = $chunk } | Out-Null
+    Start-Sleep -Milliseconds 60
+  }
 }
 function Save-Shot([string] $label) {
   $file = Join-Path $shots "$label.png"
@@ -73,6 +94,11 @@ while (-not $health -and (Get-Date) -lt $deadline) {
   try { $health = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "https://$ip/healthz").StatusCode } catch { }
 }
 Pass 'console /healthz over HTTPS' ($health -eq 200) "https://$ip/healthz -> $health"
+if ($health -ne 200) {
+  # Evidence for the failure: what curl sees by IP (no server name) and with the hostname forced.
+  "curl by IP:   " + ((& curl.exe -sk -m 8 -o NUL -w '%{http_code} %{ssl_verify_result}' "https://$ip/healthz" 2>&1) -join ' ')
+  "curl by name: " + ((& curl.exe -sk -m 8 --resolve "${HostName}:443:$ip" -o NUL -w '%{http_code}' "https://$HostName/healthz" 2>&1) -join ' ')
+}
 try { $setup = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "https://$ip/" ; Pass 'first page is the administrator setup' ($setup.Content -match 'administrator|Create') "$($setup.StatusCode)" } catch { Pass 'first page is the administrator setup' $false $_.Exception.Message }
 Save-Shot '3-done'
 Type-Line ''   # "Press Enter for a login prompt"
@@ -88,7 +114,10 @@ echo "configured=$(test -f /opt/vulnverdict/.configured && echo yes)";
 echo "nopasswd-sudo=$(test -e /etc/sudoers.d/vulnverdict && echo present || echo removed)";
 echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; docker compose -f /opt/vulnverdict/docker-compose.yml ps --format "{{.Service}}={{.State}}"'
 '@ -replace '\$Password', $Password
-$out = & ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip" $remote 2>&1 | Out-String
+# A refused login writes to stderr, which would otherwise end the script under ErrorActionPreference Stop.
+$ErrorActionPreference = 'Continue'
+$out = (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip" $remote 2>&1 | ForEach-Object { "$_" }) -join "`n"
+$ErrorActionPreference = 'Stop'
 $out
 Pass 'SSH works with the new password' ($out -match 'machine-id=') ''
 Pass 'machine ID generated on first boot' ($out -match 'machine-id=[0-9a-f]{32}') ''
