@@ -145,6 +145,20 @@ while (-not $health -and (Get-Date) -lt $deadline) {
   if ($ip2) { $h = Http "https://$ip2/healthz"; if ($h.code -eq 200) { $health = 200 } }
 }
 Pass 'console back after a reboot, no wizard' ($health -eq 200) "$ip2 -> $health"
+if ($health -ne 200) {
+  # Evidence: every address the guest reports, and what the guest itself says over SSH.
+  "adapter addresses: " + (((Get-VMNetworkAdapter -VMName $name).IPAddresses) -join ' ')
+  $diag = @'
+hostname; uptime -p; ip -4 -br addr; systemctl is-active vulnverdict.service vulnverdict-firstboot.service docker.service;
+echo "$Password" | sudo -S -p '' sh -c 'cd /opt/vulnverdict && docker compose ps; ss -ltnp | grep -E ":443|:80 "; journalctl -u vulnverdict.service --no-pager | tail -15; docker compose logs --tail 8 proxy 2>&1 | tail -8'
+'@ -replace '\$Password', $Password
+  foreach ($cand in @($ip, $ip2) | Select-Object -Unique) {
+    "--- ssh diagnostics via $cand"
+    $ErrorActionPreference = 'Continue'
+    (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$cand" $diag 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $ErrorActionPreference = 'Stop'
+  }
+}
 Save-Shot '4-after-reboot'
 
 $results | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $shots 'results.json')
