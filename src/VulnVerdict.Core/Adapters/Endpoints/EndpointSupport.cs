@@ -195,6 +195,9 @@ public static class EpJson
 
     public static JsonElement? At(JsonElement e, string path)
     {
+        // a name that itself contains a dot ("@odata.nextLink") wins over the dotted reading
+        if (e.ValueKind == JsonValueKind.Object && path.Contains('.') && e.TryGetProperty(path, out var literal))
+            return literal.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? null : literal;
         var cur = e;
         foreach (var part in path.Split('.'))
         {
