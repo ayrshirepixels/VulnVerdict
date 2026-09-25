@@ -1,0 +1,110 @@
+# Publishes the container images and a GitHub release for a version tag.
+#
+#   git tag -a v1.0.0 -m "1.0.0" && git push origin v1.0.0
+#
+# Images (linux/amd64), on the GitHub container registry:
+#   ghcr.io/ayrshirepixels/vulnverdict:1.0.0            web + worker image for Docker Compose (also :latest)
+#   ghcr.io/ayrshirepixels/vulnverdict:1.0.0-allinone   Postgres + app + TLS proxy in one container (also :allinone)
+#
+# The appliance (OVA) is built on a Hyper-V or VirtualBox host, not here; upload it to the release by hand:
+#   gh release upload v1.0.0 deploy/ova/output/vulnverdict-1.0.0.ova deploy/ova/output/vulnverdict-1.0.0.sha256
+#
+# The package must be public for the install commands in the docs to work for everyone: after the first
+# publish, check Packages > vulnverdict > Package settings > visibility on GitHub.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.0.0); images only, no GitHub release"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/ayrshirepixels/vulnverdict
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        name: Version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then v="${GITHUB_REF_NAME#v}"; else v="${{ inputs.version }}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: All-in-one image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.allinone
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}-allinone
+            ${{ env.IMAGE }}:allinone
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the all-in-one image
+        run: |
+          docker run -d --name smoke -p 8080:8080 -e VV_TLS=off "$IMAGE:${{ steps.v.outputs.version }}-allinone"
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/healthz && ok=1 && break; sleep 3; done
+          [ "${ok:-}" = 1 ] || { docker logs smoke; exit 1; }
+          curl -fsS http://127.0.0.1:8080/_framework/blazor.web.js -o /dev/null   # the console is interactive
+          docker rm -f smoke
+
+      - name: GitHub release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VulnVerdict ${{ steps.v.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            One container (database, console and TLS inside):
+            ```
+            docker run -d --name vulnverdict --restart unless-stopped \
+              -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \
+              ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}-allinone
+            ```
+            Docker Compose: `deploy/` in this repository, with `VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}` in `.env`.
+
+            Appliance (OVA for VMware, VirtualBox and Proxmox; Hyper-V after a one-line conversion): see the assets below and `docs/install.md`.
