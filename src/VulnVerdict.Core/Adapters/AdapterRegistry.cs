@@ -18,6 +18,17 @@ public static class AdapterRegistry
         // inventory sources
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiClientEmsAdapter>();
         services.AddSingleton<IInventoryAdapter, Windows.WinRmAdapter>();
+        // endpoint management, MDM and RMM: installed software for the laptops and servers they manage
+        services.AddSingleton<IInventoryAdapter, Endpoints.IntuneAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.DefenderEndpointAdapter>();
+        services.AddSingleton<IInventoryAdapter>(sp => new Endpoints.ConfigMgrAdapter(sp.GetService<Microsoft.Extensions.Logging.ILogger<Endpoints.ConfigMgrAdapter>>()));
+        services.AddSingleton<IInventoryAdapter, Endpoints.JamfProAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.KandjiAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.NinjaOneAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.DattoRmmAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.NCentralAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.LansweeperAdapter>();
+        services.AddSingleton<IInventoryAdapter, Endpoints.PdqConnectAdapter>();
         services.AddSingleton<IInventoryAdapter, Fortinet.FortiGateAdapter>();
         // other firewall families, same exposure model as the FortiGate
         services.AddSingleton<IInventoryAdapter, Firewalls.PanOsAdapter>();

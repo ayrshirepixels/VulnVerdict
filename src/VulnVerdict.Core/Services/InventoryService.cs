@@ -275,7 +275,7 @@ public sealed class InventoryService
         var sources = assets.SelectMany(a => a.Sources.Select(s => s.ConnectorId)).Distinct().Count();
         var unknown = assets.Where(a => a.Unknown).OrderBy(a => a.DisplayName).ToList();
         var stale = assets.Count(a => a.LastSeen < now.AddDays(-30));
-        var collectorAdapters = new[] { "winrm", "ssh", "forticlient-ems", "intune", "defender", "sbom" };
+        var collectorAdapters = new[] { "winrm", "ssh", "forticlient-ems", "intune", "defender", "configmgr", "jamf", "kandji", "ninjaone", "datto-rmm", "n-central", "lansweeper", "pdq", "sbom" };
         var uncovered = assets.Where(a => a.Kind == AssetKind.VirtualMachine && !a.Sources.Any(s => collectorAdapters.Any(c => s.AdapterId.StartsWith(c, StringComparison.OrdinalIgnoreCase)))).OrderBy(a => a.DisplayName).ToList();
         return new Coverage(assets.Count, sources, unknown.Count, stale, unknown, uncovered);
     }
