@@ -44,6 +44,24 @@ public class VersionTests
         rows.Select(r => new AffectedVersion { Version = r.version, Status = r.status, LessThan = r.lessThan, LessThanOrEqual = r.lessThanOrEqual }).ToList();
 
     [Fact]
+    public void Fixed_in_is_the_next_unaffected_release_above_the_installed_one()
+    {
+        // CVE-2024-23897 as Jenkins files it: affected by default, with these releases unaffected.
+        var versions = V(("0", "unaffected", "1.606", null), ("2.442", "unaffected", "*", null), ("2.426.3", "unaffected", "2.426.*", null), ("2.440.1", "unaffected", "2.440.*", null));
+
+        var onLts = VersionMatcher.Evaluate("2.440", versions, "affected");
+        Assert.Equal(VersionMatch.Affected, onLts.Match);
+        Assert.Equal("2.440.1", onLts.FixedIn);   // was "0", the start of the "old releases never affected" range
+
+        var onWeekly = VersionMatcher.Evaluate("2.441", versions, "affected");
+        Assert.Equal(VersionMatch.Affected, onWeekly.Match);
+        Assert.Equal("2.442", onWeekly.FixedIn);
+
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("2.440.1", versions, "affected").Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("2.442", versions, "affected").Match);
+    }
+
+    [Fact]
     public void Structured_range_matches_exactly()
     {
         var versions = V(("7.2.0", "affected", "7.2.8", null), ("7.4.0", "affected", "7.4.4", null));

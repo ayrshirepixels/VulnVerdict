@@ -324,8 +324,13 @@
     /// <summary>Open the Done dialog with the fixed version pre-filled when the record gives a plain one.</summary>
     private void OpenDone()
     {
+        // Pre-fill only a plain version above the one the watchlist records: never a phrase such as "a release
+        // later than 7.2.7", and never something that would move the entry backwards.
         var fix = _v?.FixedIn?.Trim();
-        _running = fix is { Length: > 0 } && !fix.Contains(' ') && VersionCompare.IsParseable(fix) ? fix : "";
+        var current = _v?.WatchlistEntry?.Version;
+        var plain = fix is { Length: > 0 } && !fix.Contains(' ') && VersionCompare.IsParseable(fix);
+        var forward = current is null || !VersionCompare.IsParseable(current) || VersionCompare.Compare(fix, current) > 0;
+        _running = plain && forward ? fix! : "";
         _uprev = _v?.WatchlistEntry is not null;
         _dialog = Dialog.Done;
     }

@@ -127,6 +127,19 @@ public static partial class VersionMatcher
 {
     private static readonly string[] Wildcards = { "*", "all", "any", "-", "n/a", "unspecified", "unknown", "", "0" };
 
+    [GeneratedRegex(@"^\s*0+(?:\.0+)*\s*$")] private static partial Regex AllZeros();
+
+    /// <summary>"2.440.*" or "2.440.x" becomes "2.441", the first release after that line; anything else, null.</summary>
+    private static string? BranchCeiling(string? top)
+    {
+        var t = top?.Trim();
+        if (t is null || t.Length < 3 || !(t.EndsWith(".*") || t.EndsWith(".x", StringComparison.OrdinalIgnoreCase))) return null;
+        var parts = t[..^2].Split('.');
+        if (parts.Any(p => p.Length == 0 || !p.All(char.IsAsciiDigit)) || !long.TryParse(parts[^1], out var last)) return null;
+        parts[^1] = (last + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return string.Join('.', parts);
+    }
+
     [GeneratedRegex(@"^\s*(?<a>[\w.\-]+)\s*(?:-|to|through|thru|~)\s*(?<b>[\w.\-]+)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex RangeAtoB();
     [GeneratedRegex(@"^\s*(?:<|<=|prior to|before|earlier than|up to|through|below)\s*(?<b>[\w.\-]+)\s*$", RegexOptions.IgnoreCase)]
@@ -163,6 +176,10 @@ public static partial class VersionMatcher
         {
             var top = !string.IsNullOrWhiteSpace(v.LessThan) ? v.LessThan : v.LessThanOrEqual;
             var incl = string.IsNullOrWhiteSpace(v.LessThan);
+            // A branch bound such as "2.440.*" (Jenkins, Maven-style records) means the whole 2.440 line: the range
+            // ends just before 2.441. Without this, "2.440.1 to 2.440.*" could not be read and a patched LTS
+            // release was reported as affected.
+            if (BranchCeiling(top) is { } ceiling) { top = ceiling; incl = false; }
             var from = IsWild(v.Version) ? null : v.Version;
             var to = IsWild(top) ? null : top;
             var conf = (from is null || VersionCompare.IsParseable(from)) && (to is null || VersionCompare.IsParseable(to))
@@ -248,9 +265,21 @@ public static partial class VersionMatcher
     {
         installed = installed?.Trim();
         var ranges = versions.SelectMany(Expand).ToList();
-        var fixedIn = versions.Where(v => (v.Status ?? "").Equals("unaffected", StringComparison.OrdinalIgnoreCase) && VersionCompare.IsParseable(v.Version))
-                              .Select(v => v.Version).FirstOrDefault()
-                      ?? ranges.Where(r => r.Affected && r.To is not null && !r.ToInclusive).Select(r => r.To).FirstOrDefault();
+        // Where the record lists unaffected releases, the fix is the lowest of them above the installed version:
+        // Jenkins files "unaffected: 0 to 1.606, 2.426.3 to 2.426.*, 2.440.1 to 2.440.*, 2.442 onwards", and for 2.440
+        // the answer is 2.440.1, not the first entry listed. A start of "0" only says old releases were never
+        // affected, so it is never a fix.
+        var unaffectedStarts = versions.Where(v => (v.Status ?? "").Equals("unaffected", StringComparison.OrdinalIgnoreCase)
+                                                   && VersionCompare.IsParseable(v.Version) && !AllZeros().IsMatch(v.Version!))
+                                       .Select(v => v.Version!).ToList();
+        string? fixedIn = null;
+        if (!string.IsNullOrEmpty(installed) && VersionCompare.IsParseable(installed))
+        {
+            foreach (var u in unaffectedStarts)
+                if (VersionCompare.Compare(u, installed) > 0 && (fixedIn is null || VersionCompare.Compare(u, fixedIn) < 0)) fixedIn = u;
+        }
+        fixedIn ??= unaffectedStarts.FirstOrDefault()
+                    ?? ranges.Where(r => r.Affected && r.To is not null && !r.ToInclusive).Select(r => r.To).FirstOrDefault();
 
         if (string.IsNullOrEmpty(installed) || !VersionCompare.IsParseable(installed))
         {
