@@ -211,7 +211,7 @@ public class FortinetAdapterTests
     }
 
     [Fact]
-    public void FortiGate_metadata_matches_the_brief()
+    public void FortiGate_metadata_matches_the_documented_contract()
     {
         var m = new FortiGateAdapter((_, _) => Task.FromResult("{}")).Metadata;
         Assert.Equal("fortigate", m.Id);
@@ -350,7 +350,7 @@ public class FortinetAdapterTests
     }
 
     [Fact]
-    public void Ems_metadata_matches_the_brief()
+    public void Ems_metadata_matches_the_documented_contract()
     {
         var m = new FortiClientEmsAdapter((_, _) => Task.FromResult("{}")).Metadata;
         Assert.Equal("forticlient-ems", m.Id);

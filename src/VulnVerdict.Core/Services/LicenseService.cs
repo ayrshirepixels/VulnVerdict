@@ -23,10 +23,10 @@ public sealed class LicenceClaims
 
 public sealed record LicenseInfo(bool Present, bool Valid, string? Customer, string? Tier, int? AssetCap, DateTime? Expires, string? TenantToken, string Reason)
 {
-    public static readonly LicenseInfo Unlicensed = new(false, false, null, null, null, null, null, "Internal build (unlicensed): no asset cap, no central service.");
+    public static readonly LicenseInfo Unlicensed = new(false, false, null, null, null, null, null, "Community (unlicensed): no asset cap, no central service.");
     /// <summary>Genuine key whose expiry date has passed (as of the time it was parsed).</summary>
     public bool Expired { get; init; }
-    public string TierName => Tier switch { "starter" => "Starter", "business" => "Business", "msp" => "MSP", null => "Internal build", var t => t };
+    public string TierName => Tier switch { "starter" => "Starter", "business" => "Business", "msp" => "MSP", null => "Community", var t => t };
     /// <summary>Cap to enforce: the parsed cap when the signature is genuine (even if expired), otherwise none.</summary>
     public int? EnforcedCap => AssetCap is > 0 ? AssetCap : null;
 }

@@ -31,7 +31,7 @@ public class DecisionTableTests
     [InlineData(15, Exploitation.None, true, Exposure.Internal, Criticality.Standard, VerdictTier.IgnoreTracked)]
     [InlineData(15, Exploitation.None, false, Exposure.Internal, Criticality.Critical, VerdictTier.IgnoreTracked)]
     [InlineData(16, Exploitation.None, true, Exposure.Isolated, Criticality.Critical, VerdictTier.IgnoreTracked)]
-    public void Every_rule_matches_the_brief(int rule, Exploitation ex, bool auto, Exposure exp, Criticality crit, VerdictTier expected)
+    public void Every_rule_matches_the_documented_contract(int rule, Exploitation ex, bool auto, Exposure exp, Criticality crit, VerdictTier expected)
     {
         var d = Eval(ex, auto, exp, crit);
         Assert.Equal(expected, d.Tier);

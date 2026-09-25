@@ -289,7 +289,7 @@ public class BundleAndLicenceTests
         var none = LicenseService.Parse("", pub, now);
         Assert.False(none.Present);
         Assert.Null(none.EnforcedCap);
-        Assert.Equal("Internal build", none.TierName);
+        Assert.Equal("Community", none.TierName);
 
         // MSP keys carry the tenant token; starter defaults
         var msp = LicenseService.Parse(TestLicence.Issue(new LicenceClaims { Customer = "Client A", Tier = LicenseService.Msp, AssetCap = 80, Expires = now.AddMonths(1), TenantToken = "tok-0123456789abcdef" }, key), pub, now);
