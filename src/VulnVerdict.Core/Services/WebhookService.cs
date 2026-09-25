@@ -11,7 +11,7 @@ using VulnVerdict.Core.Digest;
 namespace VulnVerdict.Core.Services;
 
 /// <summary>
-/// Section 11.4: webhooks for verdict created, promoted and closed. One POST per event to Settings.WebhookUrl with the
+/// Webhooks for verdict created, promoted and closed. One POST per event to Settings.WebhookUrl with the
 /// verdict as JSON, an HMAC-SHA256 signature of the exact body in X-VulnVerdict-Signature ("sha256=&lt;hex&gt;") and the
 /// event name in X-VulnVerdict-Event. Every attempt is written to WebhookDelivery. A failed delivery is retried once,
 /// no sooner than <see cref="RetryDelay"/> later, by the next <see cref="FlushPendingAsync"/>.

@@ -32,7 +32,7 @@ public sealed record WinRmSettings(string Username, string Password, string Tran
 }
 
 /// <summary>
-/// Section 9.2 step 3 and 5: Windows servers (and Hyper-V hosts) over WinRM, or OpenSSH where that is what the estate
+/// Windows servers (and Hyper-V hosts) over WinRM, or OpenSSH where that is what the estate
 /// has. One PowerShell collector per host; roles, features and listeners decide reachability, which is why this adds
 /// value even where an endpoint agent already lists software. Read-only, never writes to the host, never logs credentials.
 /// </summary>

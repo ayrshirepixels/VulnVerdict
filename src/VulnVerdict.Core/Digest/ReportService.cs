@@ -7,7 +7,7 @@ using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Core.Digest;
 
-/// <summary>Section 11.2 item 8: weekly management summary (new, affecting us, actioned, overdue, dismissed) as HTML and CSV.</summary>
+/// <summary>Weekly management summary (new, affecting us, actioned, overdue, dismissed) as HTML and CSV.</summary>
 public sealed class ReportService
 {
     private readonly IDbContextFactory<VvDbContext> _factory;

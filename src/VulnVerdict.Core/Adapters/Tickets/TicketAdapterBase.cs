@@ -10,7 +10,7 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.Tickets;
 
 /// <summary>
-/// Section 11.3: shared plumbing for the native helpdesk adapters. Every adapter is one credential form with a
+/// Shared plumbing for the native helpdesk adapters. Every adapter is one credential form with a
 /// "verify TLS" switch, puts the correlation key at the front of the title ("[VV:CVE-...:xxxxxxxx] ..."), stores it in
 /// a vendor field where one exists (label, tag, correlation id), puts the verdict URL in the body, and searches by the
 /// key before creating so a re-run never raises a duplicate for an open ticket.

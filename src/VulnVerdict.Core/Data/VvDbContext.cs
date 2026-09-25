@@ -26,7 +26,7 @@ public class VvDbContext : DbContext
     public DbSet<ProductAlias> Aliases => Set<ProductAlias>();
     public DbSet<Narrative> Narratives => Set<Narrative>();
 
-    // phase 3 inventory
+    // inventory
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetSource> AssetSources => Set<AssetSource>();
     public DbSet<SoftwareInstance> Software => Set<SoftwareInstance>();

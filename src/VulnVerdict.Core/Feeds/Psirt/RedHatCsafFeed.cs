@@ -7,7 +7,7 @@ using VulnVerdict.Core.Engine;
 namespace VulnVerdict.Core.Feeds.Psirt;
 
 /// <summary>
-/// Section 7: Red Hat Security Data API (https://access.redhat.com/hydra/rest/securitydata/cve.json?after=YYYY-MM-DD,
+/// Red Hat Security Data API (https://access.redhat.com/hydra/rest/securitydata/cve.json?after=YYYY-MM-DD,
 /// per_page/page). One Advisory per CVE; affected_packages ("openssl-1:1.1.1k-14.el8_6") become rows of package name and
 /// fixed NEVR. Cursor: yyyy-MM-dd of the newest public_date stored (re-queried from one day earlier; upsert is idempotent).
 /// First run covers the last InitialDays days.

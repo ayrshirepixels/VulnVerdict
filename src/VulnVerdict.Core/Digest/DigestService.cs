@@ -10,7 +10,7 @@ namespace VulnVerdict.Core.Digest;
 
 public sealed record DigestItem(Guid VerdictId, string CveId, string Sentence, VerdictTier Tier, MatchConfidence Confidence, DateTime? SlaDue, string? Reason);
 
-/// <summary>Section 11.1: the digest email is the product. This is its content, rendered to HTML and text.</summary>
+/// <summary>The digest email is the product. This is its content, rendered to HTML and text.</summary>
 public sealed class DigestContent
 {
     public string Headline { get; init; } = "";
@@ -171,7 +171,7 @@ public sealed class DigestService
         return run;
     }
 
-    /// <summary>Section 6.4: Fix today is always emailed immediately as well. One email per batch of new items.</summary>
+    /// <summary>Fix today is always emailed immediately as well. One email per batch of new items.</summary>
     public async Task<int> SendImmediateAsync(CancellationToken ct = default)
     {
         var s = await _settings.LoadAsync(ct);
@@ -200,7 +200,7 @@ public sealed class DigestService
         return pending.Count;
     }
 
-    /// <summary>Section 11.3: one email per Fix today / Fix this week verdict to the helpdesk intake address with a stable correlation key.</summary>
+    /// <summary>One email per Fix today / Fix this week verdict to the helpdesk intake address with a stable correlation key.</summary>
     public async Task<int> SendTicketsAsync(CancellationToken ct = default)
     {
         var s = await _settings.LoadAsync(ct);

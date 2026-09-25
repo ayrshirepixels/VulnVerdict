@@ -12,7 +12,7 @@ public sealed record CvssVector(
     string? AttackRequirements, // v4 only: N / P
     string Raw)
 {
-    /// <summary>Section 6.2 B: Network AND Low complexity AND no privileges AND no user interaction.</summary>
+    /// <summary>Automatable: Network AND Low complexity AND no privileges AND no user interaction.</summary>
     public bool Automatable =>
         AttackVector == AttackVector.Network && AttackComplexity == "L" && PrivilegesRequired == "N" && UserInteraction == "N";
 
@@ -48,7 +48,7 @@ public sealed record CvssVector(
             v);
     }
 
-    /// <summary>Plain-English decoding for the Explain page (section 11.2, item 10).</summary>
+    /// <summary>Plain-English decoding for the Explain page.</summary>
     public IEnumerable<(string Metric, string Value, string Meaning)> Decode()
     {
         yield return ("Attack Vector", AttackVector.ToString(), AttackVector.Plain());

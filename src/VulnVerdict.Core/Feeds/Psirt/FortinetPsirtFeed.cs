@@ -28,7 +28,7 @@ public sealed class FortinetAdvisoryPage
 }
 
 /// <summary>
-/// Section 7: Fortinet PSIRT. RSS index (https://www.fortiguard.com/rss/ir.xml, 50 most recent advisories) then each advisory page
+/// Fortinet PSIRT. RSS index (https://www.fortiguard.com/rss/ir.xml, 50 most recent advisories) then each advisory page
 /// for the "Version / Affected / Solution" table, severity, CVE ids and the exploited-in-the-wild statement.
 /// Cursor: yyyy-MM-dd of the newest item date seen; items dated on or after it are (re)fetched, at most MaxPagesPerRun per run.
 /// </summary>

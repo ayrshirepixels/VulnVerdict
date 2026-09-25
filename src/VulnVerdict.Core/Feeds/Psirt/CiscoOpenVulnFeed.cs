@@ -8,7 +8,7 @@ using VulnVerdict.Core.Engine;
 namespace VulnVerdict.Core.Feeds.Psirt;
 
 /// <summary>
-/// Section 7: Cisco PSIRT openVuln API (OAuth2 client credentials). Optional: credentials are read from the AppSetting rows
+/// Cisco PSIRT openVuln API (OAuth2 client credentials). Optional: credentials are read from the AppSetting rows
 /// "psirt:cisco:clientId" and "psirt:cisco:clientSecret" (plain values); when either is missing the feed reports
 /// "not configured" without error. Advisories last updated between the cursor date and today are fetched via
 /// /all/lastpublished?startDate=&amp;endDate=. Cursor: yyyy-MM-dd of the newest lastUpdated seen.

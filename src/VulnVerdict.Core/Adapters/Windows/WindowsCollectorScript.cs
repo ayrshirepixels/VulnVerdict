@@ -3,7 +3,7 @@ using System.Text;
 namespace VulnVerdict.Core.Adapters.Windows;
 
 /// <summary>
-/// Section 9.2 step 3 (and step 5 for Hyper-V): the one PowerShell collector that runs on the target and prints a
+/// The one PowerShell collector that runs on the target and prints a
 /// single JSON object to stdout. It must work on Windows PowerShell 5.1 and PowerShell 7, reads only (registry,
 /// CIM, cmdlets), needs no module that might be missing (ServerManager, WebAdministration, Hyper-V and the SMB
 /// cmdlets are each guarded) and never writes to the target. Sections that fail are reported in "warnings" and the

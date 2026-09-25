@@ -33,7 +33,7 @@ public sealed class CveListFeed : IFeed
         Directory.CreateDirectory(dir);
 
         // A cursor from an older parser forces one full reload: deltas only re-read records that changed upstream,
-        // so a parser improvement (section 9.2: "n/a" placeholders now fall back to the CISA data) would otherwise
+        // so a parser improvement ("n/a" placeholders now fall back to the CISA data, for example) would otherwise
         // never reach the records already in the database.
         var cursorTag = CursorIsCurrent(ctx.Cursor) ? ParseCursor(ctx.Cursor) : null;
         var releases = await ListReleasesAsync(ctx, cursorTag, ct);

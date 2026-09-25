@@ -8,8 +8,9 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Services;
 
 /// <summary>
-/// Section 10.2: the signed, versioned feed bundle published by the central service and pulled (or uploaded) by the
-/// console. This file holds the on-the-wire shapes shared by the writer (Central, tests) and the applier (console).
+/// The signed, versioned feed bundle published by the central service and pulled (or uploaded) by the
+/// console. This file holds the on-the-wire shapes shared by the writer (the central service, or the tests' own
+/// throwaway signer) and the applier (the console).
 /// </summary>
 public static class BundleFiles
 {

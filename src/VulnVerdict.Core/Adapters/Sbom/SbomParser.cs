@@ -9,7 +9,7 @@ public sealed record ParsedPurl(string Type, string? Namespace, string Name, str
 public sealed record SbomParseResult(string Format, string? ApplicationName, string? ApplicationVersion, IReadOnlyList<SoftwareRecord> Software, IReadOnlyList<string> Warnings);
 
 /// <summary>
-/// Section 9.2 step 7: CycloneDX (1.4 to 1.6) and SPDX (2.2, 2.3) JSON documents to software records. The
+/// CycloneDX (1.4 to 1.6) and SPDX (2.2, 2.3) JSON documents to software records. The
 /// described application becomes one Application record; every component a Library (or Package for OS purls)
 /// with its purl and OSV ecosystem, so package CVEs come through the package source rather than CNA names.
 /// </summary>

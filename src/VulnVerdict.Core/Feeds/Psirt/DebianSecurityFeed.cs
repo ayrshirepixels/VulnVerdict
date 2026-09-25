@@ -85,7 +85,7 @@ public static class DebianTrackerParser
 }
 
 /// <summary>
-/// Section 7: Debian security tracker (https://security-tracker.debian.org/tracker/data/json). One Advisory per CVE and
+/// Debian security tracker (https://security-tracker.debian.org/tracker/data/json). One Advisory per CVE and
 /// source package (AdvisoryId = "CVE:package") with a row per release: "open" releases are affected, "resolved" releases carry
 /// fixed_version. Releases resolved with fixed_version "0" (never affected) are skipped, and CVEs with no remaining release
 /// are not stored. The whole vendor set is replaced in one transaction. Cursor: the file's Last-Modified header, sent back as

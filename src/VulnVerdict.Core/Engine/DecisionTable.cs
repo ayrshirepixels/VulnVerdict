@@ -5,7 +5,7 @@ namespace VulnVerdict.Core.Engine;
 public sealed record DecisionInputs(Exploitation Exploitation, bool Automatable, AttackVector AttackVector, Exposure DeclaredExposure, Criticality Criticality)
 {
     /// <summary>
-    /// Section 6.2 C: exposure is capped by attack vector. A Local or Physical attack vector on an
+    /// Exposure is capped by attack vector. A Local or Physical attack vector on an
     /// Internet-exposed asset is treated as Internal, because network exposure does not help that attacker.
     /// </summary>
     public Exposure EffectiveExposure =>
@@ -18,7 +18,7 @@ public sealed record DecisionInputs(Exploitation Exploitation, bool Automatable,
 
 public sealed record Decision(VerdictTier Tier, int Rule);
 
-/// <summary>Section 6.3. Evaluated top to bottom, first match wins. Deterministic; no tuning.</summary>
+/// <summary>The decision table. Evaluated top to bottom, first match wins. Deterministic; no tuning.</summary>
 public static class DecisionTable
 {
     public static Decision Evaluate(DecisionInputs i)
@@ -56,7 +56,7 @@ public static class DecisionTable
         return new(VerdictTier.IgnoreTracked, 16); // Isolated
     }
 
-    /// <summary>Section 6.4 default SLA in days. Null means no SLA.</summary>
+    /// <summary>Default SLA in days per tier. Null means no SLA.</summary>
     public static int? DefaultSlaDays(VerdictTier tier) => tier switch
     {
         VerdictTier.FixToday => 2,

@@ -175,7 +175,7 @@ public sealed class InventoryService
         return new ApplySummary(extToAsset.Count, softwareCount, findings, exposures, unmapped);
     }
 
-    // ------------------------------------------------------------------ mapping (section 9.3 step 1)
+    // ------------------------------------------------------------------ mapping
 
     private static async Task ResolveMappingAsync(VvDbContext db, SoftwareInstance s, List<ProductAlias> aliases, CancellationToken ct)
     {
@@ -254,7 +254,7 @@ public sealed class InventoryService
 
     // ------------------------------------------------------------------ housekeeping and coverage
 
-    /// <summary>Section 9.1: not seen for 30 days is stale (excluded from digests), 90 days is archived.</summary>
+    /// <summary>Not seen for 30 days is stale (excluded from digests), 90 days is archived.</summary>
     public async Task<(int Stale, int Archived)> HousekeepAsync(CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
@@ -266,7 +266,7 @@ public sealed class InventoryService
 
     public sealed record Coverage(int Assets, int Sources, int Unknown, int Stale, List<Asset> UnknownHosts, List<Asset> UncoveredVms);
 
-    /// <summary>Section 9.2 step 5: VMs the hypervisor lists that no server collector has seen, plus discovery-only hosts.</summary>
+    /// <summary>Coverage: VMs the hypervisor lists that no server collector has seen, plus discovery-only hosts.</summary>
     public async Task<Coverage> CoverageAsync(CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);

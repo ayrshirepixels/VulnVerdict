@@ -6,7 +6,7 @@ using VulnVerdict.Core.Engine;
 namespace VulnVerdict.Core.Feeds.Psirt;
 
 /// <summary>
-/// Section 7: Ubuntu security tracker CVE API (https://ubuntu.com/security/cves.json). Pages newest-updated first
+/// Ubuntu security tracker CVE API (https://ubuntu.com/security/cves.json). Pages newest-updated first
 /// (sort_by=updated, order=descending) for critical, high and medium priority CVEs until a page reaches the cursor.
 /// Each package status per release becomes one affected row: "released" carries the fixed version.
 /// Cursor: ISO 8601 of the newest updated_at stored. At most MaxRecords per run.

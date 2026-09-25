@@ -7,7 +7,7 @@ using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Tests;
 
-/// <summary>Section 10.2: signed feed bundles and licence keys, end to end against in-memory SQLite.</summary>
+/// <summary>Signed feed bundles and licence keys, end to end against in-memory SQLite.</summary>
 public class BundleAndLicenceTests
 {
     private sealed class Db : IDisposable

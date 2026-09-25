@@ -7,7 +7,7 @@ using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Tests;
 
-/// <summary>Section 8 and 9.3: merging assets across sources, mapping software to CNA names, exposure evidence, coverage.</summary>
+/// <summary>Merging assets across sources, mapping software to CNA names, exposure evidence, coverage.</summary>
 public class InventoryServiceTests : IDisposable
 {
     private readonly SqliteConnection _conn;
