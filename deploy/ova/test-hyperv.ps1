@@ -102,7 +102,7 @@ while (-not $health -and (Get-Date) -lt $deadline) {
   $h = Http "https://$ip/healthz"; if ($h.code -eq 200) { $health = 200 }
 }
 Pass 'console /healthz over HTTPS by IP' ($health -eq 200) "https://$ip/healthz -> $health"
-$byName = & curl.exe -sk -m 10 --resolve "${HostName}:443:$ip" -o NUL -w '%{http_code}' "https://$HostName/healthz" 2>$null
+$byName = & curl.exe -sk -m 10 --resolve "${HostName}:443:$ip" -o "$env:TEMPv-curl.out" -w '%{http_code}' "https://$HostName/healthz" 2>$null
 Pass 'console /healthz over HTTPS by hostname' ("$byName" -eq '200') "https://$HostName/healthz -> $byName"
 $setup = Http "https://$ip/setup"
 Pass 'first page is the administrator setup' ($setup.body -match 'Create the local administrator account') "$($setup.code)"
