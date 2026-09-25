@@ -7,7 +7,9 @@
 	# (with a name warning until the hostname is used or the root certificate is imported).
 	default_sni {$VV_HOSTNAME}
 }
-{$VV_HOSTNAME} {
+# The hostname, plus a catch-all so a request by IP address (whose Host header is the address, not
+# the name) reaches the console rather than an empty reply. The certificate is the hostname's.
+{$VV_HOSTNAME}, https:// {
 	tls internal
 	encode gzip
 	reverse_proxy web:8080

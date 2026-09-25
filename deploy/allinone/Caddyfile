@@ -3,7 +3,8 @@
 	# Connections by IP address carry no server name; without a default Caddy refuses them.
 	default_sni __HOST__
 }
-__HOST__ {
+# The hostname plus a catch-all, so a request by IP address reaches the console too.
+__HOST__, https:// {
 	__TLS__
 	encode gzip
 	reverse_proxy 127.0.0.1:8080
