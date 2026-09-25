@@ -56,6 +56,9 @@ cd /opt/vulnverdict
 docker compose up -d
 touch /opt/vulnverdict/.configured
 systemctl enable vulnverdict.service >/dev/null 2>&1 || true
+# Everything the stack just created (the database's first files above all) reaches the disk now, so a
+# power cut or reset straight after setup leaves a working appliance.
+sync
 
 # Caddy creates its internal CA on first start; keep a copy of the root to import into browsers.
 for _ in $(seq 1 15); do

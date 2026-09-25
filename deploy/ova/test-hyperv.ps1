@@ -7,7 +7,8 @@ param(
   [string] $Switch = 'Default Switch',
   [string] $Password = 'Test-Appliance-2026!',
   [string] $HostName = 'vulnverdict.test',
-  [switch] $Keep
+  [switch] $Keep,
+  [switch] $HardReset
 )
 $ErrorActionPreference = 'Stop'
 Import-Module Hyper-V
@@ -133,11 +134,17 @@ Pass '.env readable by root only' ($out -match 'env-mode=600') ''
 $running = if ($out -match 'running=([^\s]*)') { $Matches[1] } else { '' }
 Pass 'stack services running' (($running -match '\bweb\b') -and ($running -match '\bworker\b') -and ($running -match '\bdb\b') -and ($running -match '\bproxy\b')) $running
 
-# 5. Survives a reboot: the stack comes back without the wizard. The Default Switch's DHCP often
-#    hands out a different address after a restart, so re-read it rather than polling the old one.
-#    Allow a long while: a graceful reboot soon after first boot waits for Ubuntu's unattended
-#    security-update run, and one test saw the stack still starting six minutes in.
-Restart-VM -Name $name -Force
+# 5. Survives a reboot: the stack comes back without the wizard. A real reboot from inside the guest;
+#    Hyper-V's Restart-VM is a hard reset, which is the separate -HardReset test (a reset within a minute
+#    of first boot lost the freshly initialised database's access rules once). The Default Switch's DHCP
+#    often hands out a different address after a restart, so re-read it rather than polling the old one.
+#    Allow a long while: a reboot soon after first boot waits for Ubuntu's unattended security-update run.
+if ($HardReset) { Restart-VM -Name $name -Force }
+else {
+  $ErrorActionPreference = 'Continue'
+  & ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip" "echo '$Password' | sudo -S -p '' systemctl reboot" 2>&1 | Out-Null
+  $ErrorActionPreference = 'Stop'
+}
 $health = $null; $ip2 = $null; $deadline = (Get-Date).AddMinutes(15); Start-Sleep 30
 while (-not $health -and (Get-Date) -lt $deadline) {
   Start-Sleep 10
