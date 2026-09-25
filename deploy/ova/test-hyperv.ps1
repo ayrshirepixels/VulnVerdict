@@ -152,6 +152,12 @@ while (-not $health -and (Get-Date) -lt $deadline) {
   if ($ip2) { $h = Http "https://$ip2/healthz"; if ($h.code -eq 200) { $health = 200 } }
 }
 Pass 'console back after a reboot, no wizard' ($health -eq 200) "$ip2 -> $health"
+# SSH must come back on its own too: the socket is enabled by the wizard, and a systemd ordering cycle once
+# dropped it from the second boot, which nothing before the reboot could catch.
+$ErrorActionPreference = 'Continue'
+$sshBack = (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip2" 'systemctl is-active ssh.socket vulnverdict.service' 2>&1 | ForEach-Object { "$_" }) -join ' '
+$ErrorActionPreference = 'Stop'
+Pass 'SSH and the stack service are active after the reboot' ($sshBack -match 'active active') $sshBack
 if ($health -ne 200) {
   # Evidence: every address the guest reports, and what the guest itself says over SSH.
   "adapter addresses: " + (((Get-VMNetworkAdapter -VMName $name).IPAddresses) -join ' ')
