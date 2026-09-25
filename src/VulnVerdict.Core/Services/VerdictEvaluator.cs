@@ -465,7 +465,8 @@ public sealed partial class VerdictEvaluator
             var reason = c.InKev && !v.InKev ? "now in CISA KEV"
                 : c.Inputs.Exploitation > v.Exploitation ? "public exploit published"
                 : c.Inputs.Exploitation < v.Exploitation ? "exploit evidence withdrawn"
-                : c.Decision.Tier == VerdictTier.NotAffected && c.Inputs.DeclaredExposure == Exposure.NotInstalled ? "fixed version observed: " + (s.Version ?? "?")
+                : c.Decision.Tier == VerdictTier.NotAffected && c.Inputs.DeclaredExposure == Exposure.NotInstalled
+                    ? (s.SoftwareInstanceId is not null ? "fixed version observed: " : "watchlist now records: ") + (s.Version ?? "?")
                 : c.Inputs.DeclaredExposure != v.DeclaredExposure ? "exposure changed to " + c.Inputs.DeclaredExposure.Plain().ToLowerInvariant()
                 : c.Inputs.Criticality != v.Criticality ? "criticality changed to " + c.Inputs.Criticality
                 : c.Inputs.Automatable != v.Automatable ? "attack path re-assessed"
