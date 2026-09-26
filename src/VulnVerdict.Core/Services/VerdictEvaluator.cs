@@ -37,11 +37,12 @@ public sealed partial class VerdictEvaluator
         await using var db = await _factory.CreateDbContextAsync(ct);
         var settings = await _settings.LoadAsync(ct);
         var subjects = await LoadSubjectsAsync(db, null, ct);
+        var timeline = new TimelineHolder();
         int cand = 0, created = 0, changed = 0, removed = 0;
         foreach (var s in subjects)
         {
             ct.ThrowIfCancellationRequested();
-            var r = await EvaluateSubjectAsync(db, s, settings, ct);
+            var r = await EvaluateSubjectAsync(db, s, settings, timeline, ct);
             cand += r.Candidates; created += r.Created; changed += r.Changed; removed += r.Removed;
         }
         removed += await CloseGoneAsync(db, ct);
@@ -58,10 +59,11 @@ public sealed partial class VerdictEvaluator
         await using var db = await _factory.CreateDbContextAsync(ct);
         var settings = await _settings.LoadAsync(ct);
         var subjects = await LoadSubjectsAsync(db, entryId, ct);
+        var timeline = new TimelineHolder();
         var total = new EvaluationSummary(subjects.Count, 0, 0, 0, 0, TimeSpan.Zero);
         foreach (var s in subjects)
         {
-            var r = await EvaluateSubjectAsync(db, s, settings, ct);
+            var r = await EvaluateSubjectAsync(db, s, settings, timeline, ct);
             total = total with { Candidates = total.Candidates + r.Candidates, Created = total.Created + r.Created, Changed = total.Changed + r.Changed, Removed = total.Removed + r.Removed };
         }
         if (subjects.Count == 0) await db.Verdicts.Where(v => v.WatchlistEntryId == entryId).ExecuteDeleteAsync(ct);
@@ -195,7 +197,7 @@ public sealed partial class VerdictEvaluator
 
     // ------------------------------------------------------------------ evaluation
 
-    private async Task<EvaluationSummary> EvaluateSubjectAsync(VvDbContext db, Subject s, AppSettings settings, CancellationToken ct)
+    private async Task<EvaluationSummary> EvaluateSubjectAsync(VvDbContext db, Subject s, AppSettings settings, TimelineHolder timelineHolder, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         int created = 0, changed = 0, removed = 0;
@@ -244,6 +246,7 @@ public sealed partial class VerdictEvaluator
                     if (idSet.Contains(id)) (advisories.TryGetValue(id, out var l) ? l : advisories[id] = new()).Add(a);
         }
 
+        var windowsTimeline = await TimelineAsync(db, timelineHolder, s, ct);
         var rules = await db.Suppressions.AsNoTracking().ToListAsync(ct);
         var controls = await db.Controls.AsNoTracking()
             .Where(c => (c.Expiry == null || c.Expiry > now) && ((s.AssetId != null && c.AssetId == s.AssetId) || (s.WatchlistEntryId != null && c.WatchlistEntryId == s.WatchlistEntryId)))
@@ -259,7 +262,7 @@ public sealed partial class VerdictEvaluator
             if (cve is null && productMatches.All(m => m.Package is null)) continue;
             seen.Add(cveId);
 
-            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now);
+            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now, windowsTimeline);
 
             if (existing.TryGetValue(cveId, out var v))
             {
@@ -344,7 +347,51 @@ public sealed partial class VerdictEvaluator
         return true;
     }
 
-    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now)
+    /// <summary>Microsoft's Windows build history, read once per evaluation run and only when a Windows subject needs it.</summary>
+    private sealed class TimelineHolder { public bool Loaded; public WindowsBuildTimeline? Value; }
+
+    private static async Task<WindowsBuildTimeline?> TimelineAsync(VvDbContext db, TimelineHolder holder, Subject s, CancellationToken ct)
+    {
+        if (!s.ProductNorm.StartsWith("windows", StringComparison.Ordinal) || AdvisoryVendor(s) != "microsoft") return null;
+        if (!holder.Loaded)
+        {
+            holder.Loaded = true;
+            var rows = await db.Advisories.AsNoTracking()
+                .Where(a => a.Vendor == "microsoft" && a.AffectedJson != null && a.AffectedJson.Contains("\"fixedIn\":\"10.0."))
+                .Select(a => new { a.Published, a.AffectedJson }).ToListAsync(ct);
+            holder.Value = WindowsBuildTimeline.From(rows.Select(r => (r.Published, r.AffectedJson)));
+        }
+        return holder.Value;
+    }
+
+    /// <summary>
+    /// The date Microsoft's advisory for this CVE says the subject's Windows edition was fixed by an update (a KB or a
+    /// build is named for it), or null when Microsoft does not list the edition as fixed by an update. Opt-in fixes and
+    /// records Microsoft never published an update for stay unresolved rather than being called patched.
+    /// </summary>
+    private static DateTime? WindowsFixDate(List<Advisory> advisories, Subject s)
+    {
+        foreach (var adv in advisories.Where(a => a.Vendor == "microsoft" && a.Published is not null && a.AffectedJson is not null))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(adv.AffectedJson!);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    var pn = Normalizer.Norm(item.TryGetProperty("product", out var p) ? p.GetString() : null);
+                    var fix = item.TryGetProperty("fixedIn", out var f) ? f.GetString() : null;
+                    if (pn.StartsWith(s.ProductNorm, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(fix)
+                        && (fix.TrimStart().StartsWith("KB", StringComparison.OrdinalIgnoreCase) || char.IsDigit(fix.TrimStart()[0])))
+                        return adv.Published;
+                }
+            }
+            catch (JsonException) { }
+        }
+        return null;
+    }
+
+    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now, WindowsBuildTimeline? windowsTimeline = null)
     {
         var ev = new List<EvidenceClaim>();
         var retrieved = cve?.RetrievedAt ?? now;
@@ -392,6 +439,18 @@ public sealed partial class VerdictEvaluator
                     + " for " + vendorFix.Product + ", and " + s.Version + (cmp < 0 ? " is older" : " is that build or later"));
                 versionSource = "Microsoft Security Response Center (CVRF)";
             }
+        }
+        // Older advisories name only a KB. Windows updates are cumulative, so a build at least as new as one Microsoft
+        // shipped on or after the fix date contains the fix. This only ever clears a verdict; it never calls one affected.
+        if (overall == VersionMatch.Unknown && best.Package is null && windowsTimeline is not null && s.Version is { } installed
+            && WindowsFixDate(advisories, s) is { } fixDate && windowsTimeline.FirstBuildOnOrAfter(installed, fixDate) is { } later
+            && VersionCompare.Compare(installed, later.Build) is >= 0)
+        {
+            overall = VersionMatch.NotAffected;
+            versionConfidence = MatchConfidence.Likely;
+            explanations.Insert(0, "Windows updates are cumulative: Microsoft fixed this in the " + fixDate.ToString("MMMM yyyy") + " updates, build "
+                + later.Build + " (" + later.Date.ToString("MMMM yyyy") + ") already includes that fix, and " + installed + " is that build or later");
+            versionSource = "Microsoft Security Response Center (CVRF)";
         }
         ev.Add(new EvidenceClaim("Version check: " + explanations.First(), versionSource, retrieved, best.Row?.VersionsJson is { Length: < 400 } vj ? vj : null));
         ev.Add(new EvidenceClaim((s.AssetName ?? s.Product) + " runs " + s.ProductText + " " + (s.Version ?? "(version not recorded)") + (s.FeatureDisabled ? " (disabled)" : ""), subjectSource, s.DeclaredAt == default ? now : s.DeclaredAt));
