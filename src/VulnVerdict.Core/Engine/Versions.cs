@@ -166,6 +166,7 @@ public static partial class VersionMatcher
     private sealed record Range(string? From, string? To, bool ToInclusive, bool Affected, MatchConfidence Confidence, string Text);
 
     [GeneratedRegex(@"\d+(?:\.\d+)+")] private static partial Regex DottedToken();
+    [GeneratedRegex(@"\b(before|prior|earlier|later|through|thru|since|up to|below|above|older|newer|and|or|to|from|until)\b|[<>=,]", RegexOptions.IgnoreCase)] private static partial Regex RangeWords();
     [GeneratedRegex(@"^\s*(?<v>\d+(?:\.\d+)+)\s*(?:\(\s*(?:x64|x86|amd64|arm64|64-bit|32-bit)\s*\)|(?:32|64)[ -]?bit|x64|x86)\s*$", RegexOptions.IgnoreCase)] private static partial Regex ArchSuffixed();
 
     /// <summary>
@@ -245,12 +246,6 @@ public static partial class VersionMatcher
             yield return new Range(m0.Groups["v"].Value, m0.Groups["v"].Value, true, affected, MatchConfidence.Likely, original);
             yield break;
         }
-        // "Catalina 10.15.3": one release, written with its name (Apple)
-        if (char.IsLetter(original[0]) && NamedVersion(original) is { } single)
-        {
-            yield return new Range(single, single, true, affected, MatchConfidence.Likely, original);
-            yield break;
-        }
         Match m;
         if ((m = RangeAtoB().Match(ver)).Success && VersionCompare.IsParseable(m.Groups["a"].Value) && VersionCompare.IsParseable(m.Groups["b"].Value))
         { yield return new Range(m.Groups["a"].Value, m.Groups["b"].Value, true, affected, MatchConfidence.Likely, ver); yield break; }
@@ -262,6 +257,13 @@ public static partial class VersionMatcher
         {
             var b = m.Groups["b"].Success && VersionCompare.IsParseable(m.Groups["b"].Value) ? m.Groups["b"].Value : null;
             yield return new Range(m.Groups["a"].Value, b, Inclusive(ver), affected, MatchConfidence.Likely, ver);
+            yield break;
+        }
+        // "Catalina 10.15.3": one release, written with its name (Apple). Checked after the range wordings above, and
+        // never when the text reads like a range ("prior to 2.0"), so only a plain name plus one version gets here.
+        if (char.IsLetter(original[0]) && !RangeWords().IsMatch(original) && NamedVersion(original) is { } single)
+        {
+            yield return new Range(single, single, true, affected, MatchConfidence.Likely, original);
             yield break;
         }
         yield return new Range(null, null, true, affected, MatchConfidence.Possible, ver + " (unparsed)");
