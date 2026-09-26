@@ -27,7 +27,12 @@ Implement `IFeed` under `src/VulnVerdict.Core/Feeds/Psirt/`, store rows in the `
 
 ## Reporting bugs
 
-Open an issue with the console version (Licence and updates page), the connector or feed involved, and the evidence chain of the verdict in question if there is one. Never paste credentials or your asset list.
+The console has two shortcuts that fill an issue in for you, in your own browser, with nothing sent until you submit it:
+
+- **A wrong verdict**: "Report it on GitHub" under the evidence chain on the verdict page opens the *Wrong verdict* form with the CVE, product, version, rule and evidence filled in, and asset names and addresses left out. Say what is actually true.
+- **A connector problem**: "Report a problem" next to the connector opens the *Connector problem* form. An administrator can also download **Diagnostics** there: one collection run that changes nothing, saved with what the system's API returned and with credentials, device names, users, serial numbers and addresses replaced by placeholders. Look through it, then attach it.
+
+Anything else: open an issue with the console version (Licence and updates page) and what happened. Never paste credentials or your asset list. Security problems in VulnVerdict itself go by email, as SECURITY.md describes.
 
 ## Support
 

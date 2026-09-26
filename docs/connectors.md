@@ -51,6 +51,10 @@ These read the laptops, desktops and servers a management tool already knows abo
 
 These connectors are built from each vendor's published API documentation and checked against sample responses. They have not yet run against a live tenant of every product; if one does not read your tenant correctly, the connector's error message and an issue report will get it fixed.
 
+## When a connector gets it wrong
+
+Most connectors are built from the vendor's API documentation and sample responses; a real system can answer differently. On the Connectors page, **Diagnostics** (administrators) runs the connector once without changing anything and downloads what its API returned, with credentials, device names, users, serial numbers and addresses replaced by placeholders such as device-1 and ip-1. **Report a problem** opens a pre-filled GitHub issue to attach it to. Each diagnostics run is recorded in the audit log.
+
 ## Firewalls and exposure
 
 Every firewall connector uses the FortiGate's exposure model. A service the firewall itself offers on an internet-facing interface or zone (admin page, SSH, VPN portal or gateway) marks the firewall internet-facing, with the interface and port as evidence. A port forward, virtual server or 1:1 NAT from the internet side to a single internal address marks that address internet-facing, with the rule name as evidence; where the firewall keeps a separate allow rule and the connector can read it (PAN-OS security rules, pfSense filter rules) the rule has to exist too. A rule that only admits named source addresses is recorded as a listener, not as internet exposure. Firmware is reported under the vendor and product names the vendor's own CVE records use, checked against recent records for each family, so it matches without a mapping step. Where a vendor has spelt the same product two ways (Zyxel series and model names, Ubiquiti's model names and "UniFi OS", Check Point's two Spark names) the firmware is recorded under both.
