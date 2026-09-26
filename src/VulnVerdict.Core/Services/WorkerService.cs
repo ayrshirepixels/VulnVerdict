@@ -202,7 +202,8 @@ public sealed class WorkerService : BackgroundService
             ct.ThrowIfCancellationRequested();
             if (!c.Enabled && !c.RunRequested) continue;
             var due = c.RunRequested || c.LastSuccess is null || now - c.LastSuccess.Value >= TimeSpan.FromMinutes(c.IntervalMinutes);
-            if (c.LastError is not null && c.LastSuccess is not null && c.LastAttempt is not null && now - c.LastAttempt.Value < TimeSpan.FromMinutes(15) && !c.RunRequested) due = false;
+            // back off 15 minutes after a failure (LastError also carries warnings from successful runs, so the failure count decides)
+            if (c.ConsecutiveFailures > 0 && c.LastAttempt is not null && now - c.LastAttempt.Value < TimeSpan.FromMinutes(15) && !c.RunRequested) due = false;
             if (!due) continue;
             var before = c.ConsecutiveFailures;
             _activity = "collecting from " + c.DisplayName;

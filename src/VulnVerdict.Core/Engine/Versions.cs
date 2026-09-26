@@ -166,6 +166,7 @@ public static partial class VersionMatcher
     private sealed record Range(string? From, string? To, bool ToInclusive, bool Affected, MatchConfidence Confidence, string Text);
 
     [GeneratedRegex(@"\d+(?:\.\d+)+")] private static partial Regex DottedToken();
+    [GeneratedRegex(@"^\s*(?<v>\d+(?:\.\d+)+)\s*(?:\(\s*(?:x64|x86|amd64|arm64|64-bit|32-bit)\s*\)|(?:32|64)[ -]?bit|x64|x86)\s*$", RegexOptions.IgnoreCase)] private static partial Regex ArchSuffixed();
 
     /// <summary>
     /// "macOS Mojave 10.14.3" to "10.14.3", "iOS 12.1.3" to "12.1.3", "iTunes 12.9.3 for Windows" to "12.9.3": the one
@@ -230,11 +231,24 @@ public static partial class VersionMatcher
         }
 
         // lenient text forms produced by some CNAs
+        Match m0;
         var original = ver;
         ver = NormaliseText(ver);
         if (ver != original && VersionCompare.IsParseable(ver) && !ver.Contains(' ') && !ver.Contains('<') && !ver.Contains('>'))
         {
             yield return new Range(ver, ver, true, affected, MatchConfidence.Likely, original);
+            yield break;
+        }
+        // "24.08 (x64)", "7.11 (64-bit)", "5.61 32 Bit": one release, written with its architecture (7-Zip, WinRAR records)
+        if ((m0 = ArchSuffixed().Match(original)).Success)
+        {
+            yield return new Range(m0.Groups["v"].Value, m0.Groups["v"].Value, true, affected, MatchConfidence.Likely, original);
+            yield break;
+        }
+        // "Catalina 10.15.3": one release, written with its name (Apple)
+        if (char.IsLetter(original[0]) && NamedVersion(original) is { } single)
+        {
+            yield return new Range(single, single, true, affected, MatchConfidence.Likely, original);
             yield break;
         }
         Match m;

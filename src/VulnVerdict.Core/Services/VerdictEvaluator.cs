@@ -306,6 +306,44 @@ public sealed partial class VerdictEvaluator
         return null;
     }
 
+    /// <summary>
+    /// The fixed build Microsoft's security update data gives for this subject's product ("10.0.14393.7070 (KB5041773)"
+    /// for "Windows Server 2016"), or null. Only a build on the same release line counts: a Windows build is compared
+    /// only with builds of the same release (10.0.14393.x), anything else only when the major version agrees.
+    /// </summary>
+    public static (string Product, string Build)? VendorFixedBuild(List<Advisory> advisories, Subject s)
+    {
+        if (s.Version is null || !VersionCompare.IsParseable(s.Version) || s.ProductNorm.Length < 4) return null;
+        foreach (var adv in advisories.Where(a => a.Vendor == "microsoft" && a.AffectedJson is not null).OrderByDescending(a => a.Updated ?? a.Published))
+        {
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(adv.AffectedJson!); } catch (JsonException) { continue; }
+            using (doc)
+            {
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    var product = item.TryGetProperty("product", out var p) ? p.GetString() ?? "" : "";
+                    var pn = Normalizer.Norm(product);
+                    if (pn.Length == 0 || !pn.StartsWith(s.ProductNorm, StringComparison.Ordinal)) continue;
+                    var fix = item.TryGetProperty("fixedIn", out var f) ? f.GetString() : null;
+                    var m = fix is null ? null : System.Text.RegularExpressions.Regex.Match(fix, @"^\s*\d+(?:\.\d+){2,}");
+                    if (m is null || !m.Success || !SameReleaseLine(s.Version, m.Value.Trim())) continue;
+                    return (product, m.Value.Trim());
+                }
+            }
+        }
+        return null;
+    }
+
+    private static bool SameReleaseLine(string installed, string build)
+    {
+        var a = installed.Split('.'); var b = build.Split('.');
+        if (a[0] != b[0]) return false;
+        if (a.Length >= 3 && b.Length >= 3 && a[0] == "10" && a[1] == "0") return b[1] == "0" && a[2] == b[2];
+        return true;
+    }
+
     private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now)
     {
         var ev = new List<EvidenceClaim>();
@@ -339,7 +377,23 @@ public sealed partial class VerdictEvaluator
                 if (r.Match == VersionMatch.Unknown) { overall = VersionMatch.Unknown; versionConfidence = MatchConfidence.Possible; }
             }
         }
-        ev.Add(new EvidenceClaim("Version check: " + explanations.First(), best.Package is null ? cnaSource : "OSV.dev", retrieved, best.Row?.VersionsJson is { Length: < 400 } vj ? vj : null));
+        // Microsoft often writes "10.0.0 < publication", or a web link, where the fixed build belongs. Its own security
+        // update data names the fixed build for each product; when the CVE record cannot answer, that decides.
+        var versionSource = best.Package is null ? cnaSource : "OSV.dev";
+        if (overall == VersionMatch.Unknown && best.Package is null && VendorFixedBuild(advisories, s) is { } vendorFix)
+        {
+            var cmp = VersionCompare.Compare(s.Version, vendorFix.Build);
+            if (cmp is not null)
+            {
+                overall = cmp < 0 ? VersionMatch.Affected : VersionMatch.NotAffected;
+                versionConfidence = MatchConfidence.Likely;
+                fixedIn = vendorFix.Build;
+                explanations.Insert(0, "the CVE record gives no usable version range; Microsoft's security update data gives fixed build " + vendorFix.Build
+                    + " for " + vendorFix.Product + ", and " + s.Version + (cmp < 0 ? " is older" : " is that build or later"));
+                versionSource = "Microsoft Security Response Center (CVRF)";
+            }
+        }
+        ev.Add(new EvidenceClaim("Version check: " + explanations.First(), versionSource, retrieved, best.Row?.VersionsJson is { Length: < 400 } vj ? vj : null));
         ev.Add(new EvidenceClaim((s.AssetName ?? s.Product) + " runs " + s.ProductText + " " + (s.Version ?? "(version not recorded)") + (s.FeatureDisabled ? " (disabled)" : ""), subjectSource, s.DeclaredAt == default ? now : s.DeclaredAt));
 
         var confidence = (MatchConfidence)Math.Min((int)productConfidence, (int)versionConfidence);

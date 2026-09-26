@@ -190,6 +190,16 @@ public static class CoreServices
         ("Google Chrome", "Google", "Chrome"),
         ("Mozilla Firefox", "Mozilla", "Firefox"),
         ("Microsoft Edge", "Microsoft", "Microsoft Edge (Chromium-based)"),
+        ("Edge Chromium", "Microsoft", "Microsoft Edge (Chromium-based)"),        // Defender for Endpoint's name
+        // everyday endpoint software whose installed name or publisher differs from the CNA's
+        ("PuTTY release", "PuTTY", "PuTTY"),                                      // "PuTTY release 0.80 (64-bit)"
+        ("AnyDesk", "AnyDesk", "AnyDesk"),
+        ("Wireshark", "The Wireshark Foundation", "Wireshark"),
+        ("Zoom Workplace", "Zoom Communications, Inc", "Zoom Workplace Apps"),
+        ("zoom.us", "Zoom Communications, Inc", "Zoom Workplace Apps"),         // the macOS app bundle
+        ("KeePass Password Safe", "Keepass", "KeePass Password Safe"),
+        ("FileZilla", "FileZilla", "FileZilla"),
+        ("TeamViewer", "TeamViewer", "TeamViewer"),
         ("Ubiquiti UniFi", "Ubiquiti", "UniFi Network Application"),
         ("UniFi", "Ubiquiti", "UniFi Network Application"),
         ("Synology DSM", "Synology", "DiskStation Manager (DSM)"),

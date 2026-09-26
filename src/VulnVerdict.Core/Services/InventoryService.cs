@@ -195,10 +195,18 @@ public sealed class InventoryService
                 if (await db.CnaProducts.AnyAsync(p => p.VendorNorm == vn && p.ProductNorm == pn, ct)) { Set(s, MappingStatus.Exact, vn, pn); return; }
             }
         }
-        // 2. exact
+        // 2. an alias that names this vendor and product, or redirects within the same vendor, wins over an exact
+        //    catalogue name: "Microsoft Edge" is also the retired EdgeHTML product's CNA name, and every Edge still
+        //    installed is Chromium-based, so the curated alias must decide, not the coincidence of names
+        var alias = aliases.FirstOrDefault(a => a.AliasNorm == s.VendorNorm + s.ProductNorm)
+                    ?? aliases.FirstOrDefault(a => a.AliasNorm == s.ProductNorm && s.VendorNorm != "" && a.VendorNorm == s.VendorNorm);
+        // only when the alias points at a name the catalogue actually has, so a stale alias never displaces a real match
+        if (alias is not null && await db.CnaProducts.AnyAsync(p => p.VendorNorm == alias.VendorNorm && p.ProductNorm == alias.ProductNorm, ct))
+        { Set(s, MappingStatus.Alias, alias.VendorNorm, alias.ProductNorm); return; }
+        // 3. exact
         if (s.VendorNorm != "" && await db.CnaProducts.AnyAsync(p => p.VendorNorm == s.VendorNorm && p.ProductNorm == s.ProductNorm, ct)) { Set(s, MappingStatus.Exact, s.VendorNorm, s.ProductNorm); return; }
-        // 3. alias table
-        var alias = aliases.FirstOrDefault(a => a.AliasNorm == s.VendorNorm + s.ProductNorm) ?? aliases.FirstOrDefault(a => a.AliasNorm == s.ProductNorm);
+        // 3b. alias by product name alone (the publisher is spelt differently, or missing)
+        alias = aliases.FirstOrDefault(a => a.AliasNorm == s.ProductNorm);
         if (alias is not null) { Set(s, MappingStatus.Alias, alias.VendorNorm, alias.ProductNorm); return; }
         // 4. one unambiguous fuzzy candidate from the same vendor
         if (s.VendorNorm != "" && s.ProductNorm.Length >= 5)
