@@ -127,10 +127,7 @@ section.dark .muted { color: var(--muted-on-dark); }
 .logos { display: flex; flex-wrap: wrap; gap: 10px; }
 .logos span { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 600; color: var(--slate); }
 
-/* pricing */
-.price { font-family: var(--head); font-weight: 700; font-size: 40px; }
-.price small { font-size: 15px; color: var(--muted); font-weight: 600; }
-.tier.featured { border: 2px solid var(--amber); box-shadow: 0 12px 40px rgba(255,159,10,.15); }
+/* comparison table */
 table.compare { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 table.compare th, table.compare td { padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
 table.compare th { background: #f7f8fa; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-top: 0; }

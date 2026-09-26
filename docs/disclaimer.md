@@ -10,7 +10,7 @@ What a verdict is, and what it is not. This text also appears in the console at 
 
 **Decisions about patching, and their consequences, remain yours.** Applying, delaying or declining a fix is an operational decision for the people who run the systems.
 
-**No warranty, no liability.** VulnVerdict is provided "as is", without warranty of any kind, and its authors and distributors accept no liability for any loss arising from its use or from reliance on its output, to the fullest extent permitted by law. The software licence (GNU AGPL-3.0, sections 15 and 16) says the same in longer words. Support subscriptions cover the services described in the subscription agreement and nothing else.
+**No warranty, no liability.** VulnVerdict is provided "as is", without warranty of any kind, and its authors and distributors accept no liability for any loss arising from its use or from reliance on its output, to the fullest extent permitted by law. The software licence (GNU AGPL-3.0, sections 15 and 16) says the same in longer words.
 
 The short form, as printed on digests:
 

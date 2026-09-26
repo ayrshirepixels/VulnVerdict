@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VulnVerdict FAQ</title>
+  <meta name="description" content="Straight answers about VulnVerdict: what it costs (nothing), what leaves your network (nothing about your estate), what it needs to run, and how to get involved.">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+    <nav class="nav">
+      <a href="how-it-works.html">How it works</a>
+      <a href="faq.html">FAQ</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#contribute">Get involved</a>
+      <a class="cta" href="https://github.com/ayrshirepixels/VulnVerdict">Get it on GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="eyebrow">FAQ</div>
+    <h1>Straight answers.<br><span class="tag">Free, open source, and yours to run.</span></h1>
+    <p class="lead">What it costs, what it needs, what leaves your network, and how to help. If your question is not here, email <a href="mailto:hello@ayrshirepixels.co.uk">hello@ayrshirepixels.co.uk</a>.</p>
+  </div>
+</section>
+
+<section class="alt faq">
+  <div class="wrap">
+    <div class="qa-list">
+      <details class="qa" open>
+        <summary>How much does it cost?</summary>
+        <p>Nothing. At the moment VulnVerdict is offered completely free and without warranty: the whole console, every connector and every feed, with no asset cap and no registration. If you would like to get involved, by testing it on a real network, writing a connector, or telling us what it gets wrong, please get in touch at <a href="mailto:hello@ayrshirepixels.co.uk">hello@ayrshirepixels.co.uk</a>.</p>
+      </details>
+      <details class="qa">
+        <summary>Where do I get help?</summary>
+        <p>On GitHub. The console has a "Report it on GitHub" link on every verdict and a diagnostics download for connectors, both with your device names and addresses taken out, so a problem report takes a minute. Help is best effort, from the people who build it.</p>
+      </details>
+      <details class="qa">
+        <summary>Does my inventory leave my network?</summary>
+        <p>No. The console runs in your network, in a container or on a VM. It pulls feeds in; nothing about your assets goes out.</p>
+      </details>
+      <details class="qa">
+        <summary>Which licence?</summary>
+        <p>AGPL-3.0. Run it, change it, redistribute it. If you offer it as a service to others you publish your changes. The VulnVerdict name and logo are trademarks, so a fork needs its own name. Contributions are welcome under the same licence.</p>
+      </details>
+      <details class="qa">
+        <summary>What are you liable for if a verdict is wrong?</summary>
+        <p>Nothing: the software is provided without warranty. A verdict is advice worked out from public data and what your connectors report; no tool can fully know your environment, which is why every verdict shows its evidence for a person to check. Patching decisions, and their consequences, stay with the people who run the systems. The full <a href="disclaimer.html">advisory notice</a> says this properly.</p>
+      </details>
+      <details class="qa">
+        <summary>Is it a scanner?</summary>
+        <p>No. It reads your scanner's findings as a second opinion and matches vendor data against what your connectors report. The only network activity of its own is an optional host discovery sweep, which never runs vulnerability checks.</p>
+      </details>
+      <details class="qa">
+        <summary>Does it need an internet connection?</summary>
+        <p>Outbound HTTPS to the public feeds and vendor advisories; nothing needs to reach it from outside. The first start downloads about 2 GB of history over half an hour, then each feed takes seconds to minutes to update.</p>
+      </details>
+      <details class="qa">
+        <summary>What is BYOM?</summary>
+        <p>Bring your own model. The AI explanations are optional, and you choose the model: paste your own Anthropic or OpenAI key, or point the console at a local model such as one running in Ollama, so nothing leaves the building. We never see your prompts. The model explains a verdict in plain English and describes how an attacker would go about it. It never decides a verdict, and it never sees a hostname or an address.</p>
+      </details>
+      <details class="qa">
+        <summary>Does it run in a container or on a VM?</summary>
+        <p>Either. Run the single container on any Docker host with one command and one volume, use Docker Compose if you already run Docker, or import the ready-built VM appliance (OVA) into VMware or VirtualBox, or into Hyper-V after a one-line disk conversion. Two virtual CPUs, 4 GB of memory and 40 GB of disk is plenty, and only HTTPS needs to be reachable (port 80 just redirects to it).</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Compare</div>
+    <h2>Where this sits.</h2>
+    <table class="compare" style="margin-top:20px">
+      <thead><tr><th></th><th>Your RMM's patch module</th><th>Enterprise vulnerability management</th><th>VulnVerdict</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Sees</strong></td><td>Endpoints it manages</td><td>Everything, with a team to run it</td><td>Servers, network gear, hypervisors, endpoints, SBOMs</td></tr>
+        <tr><td><strong>Ranks by</strong></td><td>CVSS score</td><td>Proprietary risk score</td><td>Whether it can reach you, in four plain words</td></tr>
+        <tr><td><strong>Knows what faces the internet</strong></td><td>No</td><td>With configuration</td><td>Yes, from the firewall and an outside check</td></tr>
+        <tr><td><strong>Needs</strong></td><td>Agents</td><td>An analyst and a project</td><td>Fifteen minutes and read-only credentials</td></tr>
+        <tr><td><strong>You can read the code</strong></td><td>No</td><td>No</td><td>Yes, all of it</td></tr>
+        <tr><td><strong>Costs</strong></td><td>Bundled</td><td>A subscription, plus people</td><td>Free</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:14px">Keep your RMM for patching. VulnVerdict is the layer above it that tells you which patches matter this week.</p>
+  </div>
+</section>
+
+<section class="dark center">
+  <div class="wrap">
+    <h2>Cut the noise. Know your risk.</h2>
+    <p class="muted narrow">Free to run. Fifteen minutes to set up. Help us make it better.</p>
+    <div class="btns" style="justify-content:center"><a class="btn btn-amber" href="https://github.com/ayrshirepixels/VulnVerdict">Get it on GitHub</a><a class="btn btn-ghost" href="index.html#contribute">Get involved</a></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>Open source under the AGPL-3.0. An Ayrshire Pixels product. <a href="https://github.com/ayrshirepixels/VulnVerdict">GitHub</a> &middot; <a href="mailto:hello@ayrshirepixels.co.uk">hello@ayrshirepixels.co.uk</a></p>
+    </div>
+    <p class="attr"><strong>Advisory notice.</strong> Verdicts are worked out from public data and what your connectors report; no automated assessment can fully account for your environment. Check the evidence before you act; patching decisions remain yours. Provided without warranty and without liability for loss arising from its use. <a href="disclaimer.html">Full notice</a>.</p>
+    <p class="attr">VulnVerdict and the logo are trademarks of Ayrshire Pixels. Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation.</p>
+  </div>
+</footer>
+</body>
+</html>

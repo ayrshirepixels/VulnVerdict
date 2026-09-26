@@ -36,7 +36,7 @@ Anything else: open an issue with the console version (Licence and updates page)
 
 ## Support
 
-Issues here are answered on a best-effort basis by the maintainers and the community. Paid subscriptions include email support with a response time, the signed feed bundle and the tested update channel; see the website for details.
+Issues here are answered on a best-effort basis by the maintainers and the community. VulnVerdict is offered free and without warranty. For anything that does not fit an issue, or to get involved beyond one, email hello@ayrshirepixels.co.uk.
 
 ## Licence
 
