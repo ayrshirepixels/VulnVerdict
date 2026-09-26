@@ -199,3 +199,19 @@ public class BundleState
     [MaxLength(64)] public string Source { get; set; } = "";
     [MaxLength(128)] public string? Signer { get; set; }
 }
+
+/// <summary>
+/// One Microsoft 365 Apps release: which build of which version shipped on which channel and date, from Microsoft's
+/// update history. Settles Office CVEs whose record gives a link instead of a fixed build.
+/// </summary>
+public class OfficeRelease
+{
+    public long Id { get; set; }
+    [System.ComponentModel.DataAnnotations.MaxLength(64)] public string Channel { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.MaxLength(8)] public string Version { get; set; } = "";
+    /// <summary>The third part of "16.0.17726.20160": one per version.</summary>
+    public int Build { get; set; }
+    /// <summary>The fourth part: rises with every update of that version.</summary>
+    public int Revision { get; set; }
+    public DateTime Released { get; set; }
+}

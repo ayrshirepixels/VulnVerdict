@@ -247,6 +247,7 @@ public sealed partial class VerdictEvaluator
         }
 
         var windowsTimeline = await TimelineAsync(db, timelineHolder, s, ct);
+        var officeTimeline = await OfficeTimelineAsync(db, timelineHolder, s, ct);
         var rules = await db.Suppressions.AsNoTracking().ToListAsync(ct);
         var controls = await db.Controls.AsNoTracking()
             .Where(c => (c.Expiry == null || c.Expiry > now) && ((s.AssetId != null && c.AssetId == s.AssetId) || (s.WatchlistEntryId != null && c.WatchlistEntryId == s.WatchlistEntryId)))
@@ -262,7 +263,7 @@ public sealed partial class VerdictEvaluator
             if (cve is null && productMatches.All(m => m.Package is null)) continue;
             seen.Add(cveId);
 
-            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now, windowsTimeline);
+            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now, windowsTimeline, officeTimeline);
 
             if (existing.TryGetValue(cveId, out var v))
             {
@@ -348,7 +349,19 @@ public sealed partial class VerdictEvaluator
     }
 
     /// <summary>Microsoft's Windows build history, read once per evaluation run and only when a Windows subject needs it.</summary>
-    private sealed class TimelineHolder { public bool Loaded; public WindowsBuildTimeline? Value; }
+    private sealed class TimelineHolder { public bool Loaded; public WindowsBuildTimeline? Value; public bool OfficeLoaded; public OfficeBuildTimeline? Office; }
+
+    private static async Task<OfficeBuildTimeline?> OfficeTimelineAsync(VvDbContext db, TimelineHolder holder, Subject s, CancellationToken ct)
+    {
+        if (!s.ProductNorm.StartsWith("microsoft365apps", StringComparison.Ordinal)) return null;
+        if (!holder.OfficeLoaded)
+        {
+            holder.OfficeLoaded = true;
+            var rows = await db.OfficeReleases.AsNoTracking().Select(r => new { r.Build, r.Revision, r.Version, r.Released }).ToListAsync(ct);
+            holder.Office = rows.Count == 0 ? null : OfficeBuildTimeline.From(rows.Select(r => (r.Build, r.Revision, r.Version, r.Released)));
+        }
+        return holder.Office;
+    }
 
     private static async Task<WindowsBuildTimeline?> TimelineAsync(VvDbContext db, TimelineHolder holder, Subject s, CancellationToken ct)
     {
@@ -369,7 +382,7 @@ public sealed partial class VerdictEvaluator
     /// build is named for it), or null when Microsoft does not list the edition as fixed by an update. Opt-in fixes and
     /// records Microsoft never published an update for stay unresolved rather than being called patched.
     /// </summary>
-    private static DateTime? WindowsFixDate(List<Advisory> advisories, Subject s)
+    private static DateTime? WindowsFixDate(List<Advisory> advisories, Subject s, bool anyFix = false)
     {
         foreach (var adv in advisories.Where(a => a.Vendor == "microsoft" && a.Published is not null && a.AffectedJson is not null))
         {
@@ -382,7 +395,7 @@ public sealed partial class VerdictEvaluator
                     var pn = Normalizer.Norm(item.TryGetProperty("product", out var p) ? p.GetString() : null);
                     var fix = item.TryGetProperty("fixedIn", out var f) ? f.GetString() : null;
                     if (pn.StartsWith(s.ProductNorm, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(fix)
-                        && (fix.TrimStart().StartsWith("KB", StringComparison.OrdinalIgnoreCase) || char.IsDigit(fix.TrimStart()[0])))
+                        && (anyFix || fix.TrimStart().StartsWith("KB", StringComparison.OrdinalIgnoreCase) || char.IsDigit(fix.TrimStart()[0])))
                         return adv.Published;
                 }
             }
@@ -391,7 +404,7 @@ public sealed partial class VerdictEvaluator
         return null;
     }
 
-    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now, WindowsBuildTimeline? windowsTimeline = null)
+    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now, WindowsBuildTimeline? windowsTimeline = null, OfficeBuildTimeline? officeTimeline = null)
     {
         var ev = new List<EvidenceClaim>();
         var retrieved = cve?.RetrievedAt ?? now;
@@ -451,6 +464,17 @@ public sealed partial class VerdictEvaluator
             explanations.Insert(0, "Windows updates are cumulative: Microsoft fixed this in the " + fixDate.ToString("MMMM yyyy") + " updates, build "
                 + later.Build + " (" + later.Date.ToString("MMMM yyyy") + ") already includes that fix, and " + installed + " is that build or later");
             versionSource = "Microsoft Security Response Center (CVRF)";
+        }
+        // Microsoft 365 Apps: the record and Microsoft's own data give a link, not a build. The fix date from Microsoft's
+        // advisory and the version's release history decide it, both ways.
+        if (overall == VersionMatch.Unknown && best.Package is null && officeTimeline is not null && s.Version is { } officeInstalled
+            && WindowsFixDate(advisories, s, anyFix: true) is { } officeFix && officeTimeline.Assess(officeInstalled, officeFix) is { } office)
+        {
+            overall = office.Affected ? VersionMatch.Affected : VersionMatch.NotAffected;
+            versionConfidence = MatchConfidence.Likely;
+            fixedIn = office.FixedBuild ?? fixedIn;
+            explanations.Insert(0, office.Explanation);
+            versionSource = "Microsoft Security Response Center and the Microsoft 365 Apps update history";
         }
         ev.Add(new EvidenceClaim("Version check: " + explanations.First(), versionSource, retrieved, best.Row?.VersionsJson is { Length: < 400 } vj ? vj : null));
         ev.Add(new EvidenceClaim((s.AssetName ?? s.Product) + " runs " + s.ProductText + " " + (s.Version ?? "(version not recorded)") + (s.FeatureDisabled ? " (disabled)" : ""), subjectSource, s.DeclaredAt == default ? now : s.DeclaredAt));

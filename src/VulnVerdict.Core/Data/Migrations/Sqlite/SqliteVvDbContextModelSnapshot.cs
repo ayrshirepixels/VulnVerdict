@@ -882,6 +882,38 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.ToTable("Narratives");
                 });
 
+            modelBuilder.Entity("VulnVerdict.Core.Data.OfficeRelease", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Build")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Released")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Build", "Released");
+
+                    b.ToTable("OfficeReleases");
+                });
+
             modelBuilder.Entity("VulnVerdict.Core.Data.PackageVulnCache", b =>
                 {
                     b.Property<string>("Key")

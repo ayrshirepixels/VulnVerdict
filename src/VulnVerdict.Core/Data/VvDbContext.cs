@@ -37,6 +37,7 @@ public class VvDbContext : DbContext
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
     public DbSet<BundleState> Bundles => Set<BundleState>();
     public DbSet<Advisory> Advisories => Set<Advisory>();
+    public DbSet<OfficeRelease> OfficeReleases => Set<OfficeRelease>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -108,6 +109,7 @@ public class VvDbContext : DbContext
         b.Entity<WebhookDelivery>(e => e.HasIndex(x => x.At));
         b.Entity<BundleState>(e => e.HasKey(x => x.Id));
         b.Entity<Advisory>(e => { e.HasIndex(x => new { x.Vendor, x.AdvisoryId }).IsUnique(); e.HasIndex(x => x.Updated); });
+        b.Entity<OfficeRelease>(e => e.HasIndex(x => new { x.Build, x.Released }));
     }
 }
 

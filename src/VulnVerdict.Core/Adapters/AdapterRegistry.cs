@@ -53,6 +53,7 @@ public static class AdapterRegistry
         // vendor PSIRT advisories
         services.AddSingleton<IFeed, FortinetPsirtFeed>();
         services.AddSingleton<IFeed, MsrcFeed>();
+        services.AddSingleton<IFeed, OfficeReleasesFeed>();
         services.AddSingleton<IFeed, CiscoOpenVulnFeed>();
         services.AddSingleton<IFeed, BroadcomVmwareFeed>();
         services.AddSingleton<IFeed, UbuntuSecurityFeed>();
