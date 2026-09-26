@@ -41,7 +41,7 @@ public sealed class HealthNotices
         var okAt = ParseStamp(await _settings.GetStateAsync(SettingsService.Keys.MailLastSuccess, ct));
         if (okAt is not null && okAt >= errorAt) return null;
         var error = await _settings.GetStateAsync(SettingsService.Keys.MailLastError, ct) ?? "unknown error";
-        return new Notice(true, "Mail is not being sent (failing since " + errorAt.Value.ToString("d MMM HH:mm", CultureInfo.InvariantCulture) + " UTC): " + error
+        return new Notice(true, "Mail is not being sent (failing since " + errorAt.Value.ToString("d MMM HH:mm", CultureInfo.InvariantCulture) + " UTC): " + error.TrimEnd().TrimEnd('.') + "."
             + " Digests and alerts will not arrive until this is fixed.", "/settings");
     }
 
