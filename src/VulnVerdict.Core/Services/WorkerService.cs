@@ -152,6 +152,7 @@ public sealed class WorkerService : BackgroundService
                 var result = await feed.RunAsync(ctx, ct);
                 status.LastSuccess = DateTime.UtcNow; status.LastError = null; status.RecordsLastRun = result.Records; status.Cursor = result.Cursor;
                 status.Progress = result.Note;
+                if (result.MoreSoon) status.RunRequested = true;   // more work pending: next pass, not next interval
                 any = true;
                 _log.LogInformation("Feed {Feed} done: {Records} records, cursor {Cursor} {Note}", feed.Name, result.Records, result.Cursor, result.Note);
             }

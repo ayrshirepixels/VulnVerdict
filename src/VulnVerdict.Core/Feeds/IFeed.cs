@@ -3,7 +3,11 @@ using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Feeds;
 
-public sealed record FeedResult(int Records, string? Cursor, string? Note = null);
+/// <summary>
+/// What a feed run produced. <paramref name="MoreSoon"/> asks the worker to run the feed again on its next pass instead of
+/// waiting a whole interval, for work spread over several runs (a first load, or a history backfill).
+/// </summary>
+public sealed record FeedResult(int Records, string? Cursor, string? Note = null, bool MoreSoon = false);
 
 public sealed class FeedContext
 {

@@ -36,7 +36,7 @@ public sealed partial class MsrcFeed : IFeed
         using (var list = await PsirtStore.GetJsonAsync(ctx.Http, UpdatesUrl, ct))
             docs = ParseUpdates(list.RootElement);
 
-        var cursor = PsirtStore.ParseDate(ctx.Cursor);
+        var (cursor, history, historyDone) = ParseCursor(ctx.Cursor);
         string? note;
         List<MsrcUpdateDoc> due;
         if (cursor is null)
@@ -75,10 +75,59 @@ public sealed partial class MsrcFeed : IFeed
                 break;
             }
         }
-        if (due.Count > MaxDocsPerRun - 1 && docs.Count(d => cursor is null ? d.InitialReleaseDate >= now.AddMonths(-InitialMonths) : d.CurrentReleaseDate > cursor) > due.Count)
-            note = (note is null ? "" : note + "; ") + "more documents pending, continuing next run";
-        return new FeedResult(total, (newCursor ?? now).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"), note ?? $"{processed} monthly documents");
+        var forwardPending = due.Count > MaxDocsPerRun - 1 && docs.Count(d => cursor is null ? d.InitialReleaseDate >= now.AddMonths(-InitialMonths) : d.CurrentReleaseDate > cursor) > due.Count;
+        if (forwardPending) note = (note is null ? "" : note + "; ") + "more documents pending, continuing shortly";
+
+        // History: once the recent months are in, walk back through older monthly documents to HistoryFloor. Old Windows
+        // CVE records often say "10.0.0 < publication" instead of a build, and these documents hold the fixed build.
+        var historyProcessed = 0;
+        if (HistoryBackfill && !historyDone && !forwardPending)
+        {
+            history ??= now.AddMonths(-InitialMonths);
+            var older = docs.Where(d => d.InitialReleaseDate is { } ir && ir < history && ir >= HistoryFloor)
+                .OrderByDescending(d => d.InitialReleaseDate).Take(Math.Max(1, MaxDocsPerRun - processed)).ToList();
+            foreach (var doc in older)
+            {
+                ct.ThrowIfCancellationRequested();
+                ctx.Progress($"MSRC history {doc.Id}");
+                try
+                {
+                    using var json = await PsirtStore.GetJsonAsync(ctx.Http, CvrfUrlBase + doc.Id, ct);
+                    total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, Parse(json.RootElement, now), ct);
+                    history = doc.InitialReleaseDate;
+                    historyProcessed++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    ctx.Log.LogWarning(ex, "MSRC history document {Id} failed; will retry next run", doc.Id);
+                    note = (note is null ? "" : note + "; ") + $"history stopped at {doc.Id}: {ex.Message}";
+                    break;
+                }
+            }
+            historyDone = !docs.Any(d => d.InitialReleaseDate is { } ir && ir < history && ir >= HistoryFloor);
+            note = (note is null ? "" : note + "; ") + (historyDone ? "history complete back to " + HistoryFloor.ToString("MMM yyyy") : "history back to " + history!.Value.ToString("MMM yyyy") + ", continuing shortly");
+        }
+        var more = forwardPending || (HistoryBackfill && !historyDone && historyProcessed > 0);
+        return new FeedResult(total, FormatCursor(newCursor ?? now, history, historyDone), note ?? $"{processed} monthly documents", more);
     }
+
+    /// <summary>Walk back through monthly documents older than the first run's window (on by default).</summary>
+    public bool HistoryBackfill { get; init; } = true;
+    /// <summary>The oldest monthly document fetched: April 2016, the first month the CVRF API covers in full.</summary>
+    public static readonly DateTime HistoryFloor = new(2016, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>"2026-09-25T02:43:53Z" or "2026-09-25T02:43:53Z;history=2019-03-12" or "...;history=done".</summary>
+    public static (DateTime? Forward, DateTime? History, bool HistoryDone) ParseCursor(string? cursor)
+    {
+        if (string.IsNullOrWhiteSpace(cursor)) return (null, null, false);
+        var parts = cursor.Split(';');
+        var forward = PsirtStore.ParseDate(parts[0]);
+        var h = parts.Skip(1).FirstOrDefault(p => p.StartsWith("history=", StringComparison.Ordinal))?["history=".Length..];
+        return h == "done" ? (forward, null, true) : (forward, PsirtStore.ParseDate(h), false);
+    }
+
+    public static string FormatCursor(DateTime forward, DateTime? history, bool historyDone) =>
+        forward.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") + (historyDone ? ";history=done" : history is { } h ? ";history=" + h.ToString("yyyy-MM-dd") : "");
 
     public static List<MsrcUpdateDoc> ParseUpdates(JsonElement root)
     {
