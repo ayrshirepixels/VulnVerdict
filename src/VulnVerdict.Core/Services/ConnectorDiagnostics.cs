@@ -151,7 +151,16 @@ public sealed partial class ConnectorDiagnostics
             "macaddress", "macaddresses", "mac", "wifimacaddress", "ethernetmacaddress", "altmacaddress", "bluetoothmacaddress", "uri", "phonenumber", "imei",
         };
 
-        public void Secret(string? value) { if (!string.IsNullOrEmpty(value) && value.Trim().Length >= 4) _secrets.Add(value.Trim()); }
+        public void Secret(string? value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Trim().Length < 4) return;
+            var v = value.Trim();
+            _secrets.Add(v);
+            // a URL or host:port credential also appears as its bare host in errors ("acme.api.kandji.io:443"); that
+            // host usually names the customer, so it goes too
+            var candidate = v.Contains("://", StringComparison.Ordinal) ? v : "https://" + v;
+            if (Uri.TryCreate(candidate, UriKind.Absolute, out var u) && u.Host.Contains('.') && u.Host.Length >= 4 && !_secrets.Contains(u.Host)) _secrets.Add(u.Host);
+        }
         public void Known(string? value, string kind) { if (!string.IsNullOrWhiteSpace(value) && value.Trim().Length >= 3) Map(value.Trim(), kind); }
 
         public string Map(string value, string kind)
