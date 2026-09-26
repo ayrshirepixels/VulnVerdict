@@ -22,13 +22,13 @@ public sealed record BundleCheck(BundleOutcome Outcome, string? Version, string 
 public sealed class BundleService
 {
     /// <summary>
-    /// Public half of the central service's signing key. Replace with the production key before release; the dev key
-    /// pair is generated with "dotnet run --project src/VulnVerdict.Central -- keygen".
+    /// Public half of the production signing key (ECDSA P-256, from release 1.1.0). Feed bundles and licence keys are
+    /// accepted only when signed by the matching private key, which lives on the central service and nowhere public.
     /// </summary>
     public const string PublicKeyPem = """
         -----BEGIN PUBLIC KEY-----
-        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEE6gzWfGIjSdr/BRsZuCVRYu+wZR0
-        qc2wOEvYFKLQ2IKDTQJlHF3jD/kZyd3vCzFEF2AXIeIqnFi2SuxR6pbfcQ==
+        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMl9NpZjjxcyperZiwjRrfENfqr3o
+        4jCRuvcKzfWd1YMOT2obF0sOghuNC88JTkx2/isL/Qru8GUf2eNPD9WwPg==
         -----END PUBLIC KEY-----
         """;
 
