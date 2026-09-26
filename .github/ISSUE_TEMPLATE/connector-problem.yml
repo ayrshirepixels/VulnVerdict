@@ -1,0 +1,38 @@
+name: Connector problem
+description: A connector that fails, finds nothing, or reads something wrongly from a real system.
+title: "Connector: "
+labels: ["connector"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most connectors were built from vendor documentation and sample data, so reports from real systems are exactly what is needed. **Attach the diagnostics file** (Connectors page, **Diagnostics** next to the connector): it holds what the system's API returned, with credentials, device names, users and addresses removed. Please look through it before attaching.
+  - type: input
+    id: connector
+    attributes:
+      label: Connector
+      placeholder: intune
+    validations:
+      required: true
+  - type: input
+    id: product-version
+    attributes:
+      label: Product and version on your side
+      placeholder: Jamf Pro 11.9 (cloud), FortiOS 7.4.3, N-central 2024.6
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The error or warning shown, or what was missing or wrong (for example "finds 0 devices", "every app has an empty version").
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Drag the diagnostics file here, or paste the relevant part.
+  - type: input
+    id: console-version
+    attributes:
+      label: Console version
+      placeholder: "1.1.1"

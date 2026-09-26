@@ -171,7 +171,8 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
         return api;
     }
 
-    private static HttpClient DefaultClient(IReadOnlyDictionary<string, string> creds)
+    /// <summary>The Windows-authenticated handler for a connector's credentials (connector diagnostics wrap it to record responses).</summary>
+    public static HttpMessageHandler CreateHandler(IReadOnlyDictionary<string, string> creds)
     {
         var user = EpCreds.Get(creds, "username");
         var password = EpCreds.Secret(creds, "password");
@@ -179,7 +180,12 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
         var handler = new HttpClientHandler { UseDefaultCredentials = false, PreAuthenticate = true, AllowAutoRedirect = false, UseCookies = false,
             Credentials = WsManClient.ToNetworkCredential(user, password) };
         if (!EpCreds.Bool(creds, "verifyTls", true)) handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-        var client = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromMinutes(5) };
+        return handler;
+    }
+
+    private static HttpClient DefaultClient(IReadOnlyDictionary<string, string> creds)
+    {
+        var client = new HttpClient(CreateHandler(creds), disposeHandler: true) { Timeout = TimeSpan.FromMinutes(5) };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
         return client;
     }

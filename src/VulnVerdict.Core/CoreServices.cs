@@ -68,6 +68,7 @@ public static class CoreServices
         services.AddSingleton<ReportService>();
         services.AddSingleton<LlmService>();
         services.AddSingleton<InventoryService>();
+        services.AddSingleton<ConnectorDiagnostics>();
         services.AddSingleton<ConnectorService>();
         // signed bundles, licence, telemetry, MSP reporting
         services.AddSingleton<BundleService>();

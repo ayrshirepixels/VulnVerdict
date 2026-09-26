@@ -1,0 +1,35 @@
+name: Install problem
+description: The container, Compose stack or appliance does not install, start or upgrade.
+title: "Install: "
+labels: ["install"]
+body:
+  - type: dropdown
+    id: route
+    attributes:
+      label: How you installed
+      options:
+        - One container (all-in-one image)
+        - Docker Compose
+        - Appliance (OVA) on VMware, VirtualBox or Proxmox
+        - Appliance on Hyper-V (converted disk)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or image tag
+      placeholder: "1.1.1-allinone"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`docker logs vulnverdict` (one container) or `docker compose logs web worker` (Compose). Check them for anything private first."
+      render: text

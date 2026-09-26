@@ -49,7 +49,18 @@ To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: P
 2. **Watchlist**: add what you run that no connector will see (or import `watchlist.example.json`). Verdicts appear immediately.
 3. **Connectors**: add the sources you have, in the order they pay off: endpoint management, Windows servers (WinRM), your firewall, hypervisor, Linux (SSH), SBOMs from CI, SNMP for the management network, a discovery sweep, the external cross-check. Each needs a hostname and a read-only account; the form tells you the minimum permission.
 4. Check **Needs mapping** once the first collections land: anything a connector reported that could not be tied to a vendor's CVE naming is listed there for a one-click mapping.
-5. **Sources** shows feed health. The first CVE baseline is about 600 MB and takes 10 to 20 minutes.
+5. **Sources** shows feed health and what each feed is doing.
+
+### What the first hour looks like
+
+The first start downloads what later runs only update, so give it about half an hour on a normal office line before judging the verdicts:
+
+- **CVE List**: the full baseline, about 600 MB, 10 to 20 minutes. Verdicts start appearing as soon as it lands.
+- **Debian, Ubuntu and Red Hat trackers**: about 100 MB between them, only used for Linux packages.
+- **Microsoft security updates**: the last three months first, then the history back to 2016, about a year of it per run and roughly 1 GB in all, over 15 to 30 minutes. Old Windows CVEs whose records say "publication" instead of a version settle as this history arrives, so expect some Windows verdicts to close on their own during that time.
+- **Microsoft 365 Apps update history**: one page, a few seconds.
+
+Nothing is wrong if verdicts move during the first hour; the Sources page shows which feed is still loading. After that each feed runs on its own schedule (hourly for the CVE List, daily for most others) and takes seconds to minutes. A site that cannot reach the internet can load a signed feed bundle instead (Licence and updates page).
 
 ## TLS
 

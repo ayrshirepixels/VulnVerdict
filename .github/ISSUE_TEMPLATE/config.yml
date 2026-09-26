@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem in VulnVerdict itself
+    url: https://github.com/ayrshirepixels/VulnVerdict/blob/main/SECURITY.md
+    about: Please report vulnerabilities in VulnVerdict privately, as SECURITY.md describes, not in a public issue.
+  - name: Get involved, or a question that is not a bug
+    url: https://ayrshirepixels.github.io/vulnverdict-site/index.html#contribute
+    about: Testing on a real network, writing a connector, or anything else.

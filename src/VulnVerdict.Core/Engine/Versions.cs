@@ -166,6 +166,7 @@ public static partial class VersionMatcher
     private sealed record Range(string? From, string? To, bool ToInclusive, bool Affected, MatchConfidence Confidence, string Text);
 
     [GeneratedRegex(@"\d+(?:\.\d+)+")] private static partial Regex DottedToken();
+    [GeneratedRegex(@"^(?<p>(?:\d+\.)+)(?<d>\d{1,12})x$", RegexOptions.IgnoreCase)] private static partial Regex DigitRunX();
     [GeneratedRegex(@"\b(before|prior|earlier|later|through|thru|since|up to|below|above|older|newer|and|or|to|from|until)\b|[<>=,]", RegexOptions.IgnoreCase)] private static partial Regex RangeWords();
     [GeneratedRegex(@"^\s*(?<v>\d+(?:\.\d+)+)\s*(?:\(\s*(?:x64|x86|amd64|arm64|64-bit|32-bit)\s*\)|(?:32|64)[ -]?bit|x64|x86)\s*$", RegexOptions.IgnoreCase)] private static partial Regex ArchSuffixed();
 
@@ -194,7 +195,13 @@ public static partial class VersionMatcher
             // ends just before 2.441. Without this, "2.440.1 to 2.440.*" could not be read and a patched LTS
             // release was reported as affected.
             if (BranchCeiling(top) is { } ceiling) { top = ceiling; incl = false; }
+            // Adobe writes a run of builds as "20.005.3031x" (30310 to 30319): the range ends just before 20.005.30320
+            if (top is not null && DigitRunX().Match(top.Trim()) is { Success: true } xm)
+            {
+                top = xm.Groups["p"].Value + (long.Parse(xm.Groups["d"].Value) + 1) + "0"; incl = false;
+            }
             var from = IsWild(v.Version) ? null : v.Version;
+            if (from is not null && DigitRunX().Match(from.Trim()) is { Success: true } fm) from = fm.Groups["p"].Value + fm.Groups["d"].Value + "0";
             var to = IsWild(top) ? null : top;
             // Apple writes bounds with the product name in them ("macOS Mojave 10.14.3", "iOS 12.1.3"). Unread, every
             // old Apple CVE came out as an unresolved "check this" at the top tier on current devices.

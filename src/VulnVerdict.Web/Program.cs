@@ -216,6 +216,21 @@ app.MapGet("/digests/{id:guid}/html", async (Guid id, VvDbContext db) =>
 });
 app.MapGet("/digests/preview/html", async (DigestService digest) => Results.Content((await digest.BuildAsync()).Html, "text/html"));
 app.MapGet("/reports/weekly.html", async (ReportService reports, int? weeks) => Results.Content((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Html, "text/html"));
+// Connector diagnostics for a bug report: one collection run, nothing applied to the inventory, identifying values replaced.
+// Administrators only (it runs the connector with its stored credentials), and audited.
+app.MapGet("/connectors/{id:guid}/diagnostics", async (Guid id, HttpContext http, IDbContextFactory<VvDbContext> factory, ConnectorService connectors, ConnectorDiagnostics diagnostics, CancellationToken ct) =>
+{
+    await using var db = await factory.CreateDbContextAsync(ct);
+    var c = await db.Connectors.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+    var adapter = c is null ? null : connectors.Adapters.FirstOrDefault(a => a.Metadata.Id.Equals(c.AdapterId, StringComparison.OrdinalIgnoreCase));
+    if (c is null || adapter is null) return Results.NotFound();
+    db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = http.User.Identity?.Name ?? "?", Action = "connector.diagnostics", Target = c.DisplayName });
+    await db.SaveChangesAsync(ct);
+    var bytes = await diagnostics.RunAsync(adapter, connectors.Decrypt(c), ct);
+    http.Response.Headers.CacheControl = "no-store";
+    return Results.File(bytes, "application/json", "vulnverdict-diagnostics-" + adapter.Metadata.Id + "-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmm") + ".json");
+}).RequireAuthorization(p => p.RequireRole("Administrator"));
+
 app.MapGet("/reports/weekly.csv", async (ReportService reports, int? weeks) =>
     Results.File(System.Text.Encoding.UTF8.GetBytes((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Csv), "text/csv", "vulnverdict-weekly-" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ".csv"));
 

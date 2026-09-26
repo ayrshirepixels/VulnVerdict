@@ -112,6 +112,10 @@
                     </li>
                 }
             </ol>
+            @if (_reportUrl is not null)
+            {
+                <p class="muted" style="margin:12px 0 0">Is this verdict wrong? <a href="@_reportUrl" target="_blank" rel="noopener noreferrer">Report it on GitHub</a>. The issue opens pre-filled in your browser for you to check before you submit it; asset names and addresses are left out.</p>
+            }
         </div>
 
         <div class="card">
@@ -256,6 +260,21 @@
     private List<ExploitSignal> _signals = new();
     private List<VerdictHistory> _history = new();
     private List<EvidenceClaim> _evidence = new();
+    private string? _reportUrl;
+
+    /// <summary>A pre-filled "Wrong verdict" GitHub issue with the asset names and addresses taken out; nothing is sent until the person submits it.</summary>
+    private static string ReportUrl(Verdict v, List<EvidenceClaim> evidence)
+    {
+        static IEnumerable<string> Json(string? j) { try { return string.IsNullOrEmpty(j) ? Array.Empty<string>() : JsonSerializer.Deserialize<List<string>>(j) ?? new(); } catch (JsonException) { return Array.Empty<string>(); } }
+        var names = new List<string?> { v.Asset?.DisplayName, v.Asset?.Owner, v.WatchlistEntry?.AssetName };
+        if (v.Asset is not null) { names.AddRange(Json(v.Asset.HostnamesJson)); names.AddRange(Json(v.Asset.IpAddressesJson)); names.AddRange(Json(v.Asset.MacAddressesJson)); }
+        string product; string? version;
+        if (v.SoftwareInstance is { } sw) { product = (sw.Vendor + " " + sw.Product).Trim(); version = sw.Version.Length > 0 ? sw.Version : null; }
+        else if (v.WatchlistEntry is { } w) { product = (w.Vendor + " " + w.Product).Trim(); version = w.Version; }
+        else { var on = v.Subject.LastIndexOf(" on ", StringComparison.Ordinal); product = on > 0 ? v.Subject[..on] : v.Subject; version = null; }
+        var verdict = v.Tier.Plain() + ", rule " + v.RuleNumber + ", " + v.Confidence.Plain().ToLowerInvariant() + " match, " + v.State.Plain().ToLowerInvariant();
+        return IssueLinks.WrongVerdict(v.CveId, product, version, verdict, evidence, names, AppVersion.Current);
+    }
     private List<string> _refs = new();
     private TimeZoneInfo _tz = TimeZoneInfo.Utc;
     private bool _loaded;
@@ -290,7 +309,7 @@
     private async Task LoadAsync()
     {
         await using var db = await Db.CreateDbContextAsync();
-        _v = await db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).FirstOrDefaultAsync(v => v.Id == Id);
+        _v = await db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).Include(v => v.SoftwareInstance).Include(v => v.Asset).FirstOrDefaultAsync(v => v.Id == Id);
         _loaded = true;
         if (_v is null) return;
         _cve = await db.Cves.AsNoTracking().FirstOrDefaultAsync(c => c.Id == _v.CveId);
@@ -300,6 +319,7 @@
         _history = await db.VerdictHistory.AsNoTracking().Where(h => h.VerdictId == Id).OrderByDescending(h => h.At).ToListAsync();
         _cvss = CvssVector.Parse(_cve?.CvssV40Vector) ?? CvssVector.Parse(_cve?.CvssV31Vector);
         try { _evidence = JsonSerializer.Deserialize<List<EvidenceClaim>>(_v.EvidenceJson) ?? new(); } catch { _evidence = new(); }
+        _reportUrl = ReportUrl(_v, _evidence);
         try { _refs = _cve?.ReferencesJson is null ? new() : JsonSerializer.Deserialize<List<string>>(_cve.ReferencesJson) ?? new(); } catch { _refs = new(); }
         _llm = await Llm.IsConfiguredAsync();
         if (_llm)

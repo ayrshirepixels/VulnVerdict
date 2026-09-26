@@ -1,0 +1,51 @@
+name: Wrong verdict
+description: A verdict that is wrong, or matched the wrong product or version. The console's "Report on GitHub" button fills most of this in.
+title: "Wrong verdict: "
+labels: ["wrong verdict"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A wrong verdict with its evidence is the most useful report there is. **Check the fields below before you submit:** nothing from your console is sent until you do, and you can remove anything you would rather not share (asset names are left out unless you add them).
+  - type: input
+    id: cve
+    attributes:
+      label: CVE
+      placeholder: CVE-2024-12345
+    validations:
+      required: true
+  - type: input
+    id: product
+    attributes:
+      label: Product as VulnVerdict recorded it
+      placeholder: Fortinet FortiOS
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version as VulnVerdict recorded it
+      placeholder: 7.2.5
+  - type: input
+    id: verdict
+    attributes:
+      label: Verdict it gave
+      placeholder: Fix today, rule 3, exact match
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is actually true
+      description: For example "7.2.5 is not affected, the fix was backported", "this is a different product with the same name", or "this version does not exist".
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence chain
+      description: As the console showed it.
+      render: text
+  - type: input
+    id: console-version
+    attributes:
+      label: Console version
+      placeholder: "1.1.1"
