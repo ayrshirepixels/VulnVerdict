@@ -79,5 +79,5 @@ public sealed class HealthNotices
         DateTime.TryParseExact((s ?? "").Trim(), new[] { "yyyy-MM-dd", "d/M/yyyy", "dd/MM/yyyy" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.Date : null;
 
     private static DateTime? ParseStamp(string? s) =>
-        DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal, out var d) ? d : null;
+        DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var d) ? d.ToUniversalTime() : null;
 }
