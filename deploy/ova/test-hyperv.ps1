@@ -118,7 +118,7 @@ echo "machine-id=$(cat /etc/machine-id)";
 echo "hostkeys=$(ls /etc/ssh/ssh_host_*_key 2>/dev/null | wc -l)";
 echo "configured=$(test -f /opt/vulnverdict/.configured && echo yes)";
 echo "nopasswd-sudo=$(test -e /etc/sudoers.d/vulnverdict && echo present || echo removed)";
-echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; cd /opt/vulnverdict && echo "running=$(docker compose ps --status running --services | sort | paste -sd,)"'
+echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vulnverdict/.env; stat -c "env-mode=%a" /opt/vulnverdict/.env; cd /opt/vulnverdict && echo "running=$(docker compose ps --status running --services | sort | paste -sd,)"; echo "images=$(docker compose config --images | sort | paste -sd,)"; echo "dbuser=$(docker compose exec -T db id -un)"'
 '@ -replace '\$Password', $Password
 # A refused login writes to stderr, which would otherwise end the script under ErrorActionPreference Stop.
 $ErrorActionPreference = 'Continue'
@@ -133,6 +133,8 @@ Pass 'database password generated (placeholder gone)' ($out -match '(?m)^0\s*$')
 Pass '.env readable by root only' ($out -match 'env-mode=600') ''
 $running = if ($out -match 'running=([^\s]*)') { $Matches[1] } else { '' }
 Pass 'stack services running' (($running -match '\bweb\b') -and ($running -match '\bworker\b') -and ($running -match '\bdb\b') -and ($running -match '\bproxy\b')) $running
+$images = if ($out -match 'images=([^\s]*)') { $Matches[1] } else { '' }
+Pass 'database and proxy are the release images, database not root' (($images -match '-db\b') -and ($images -match '-proxy\b') -and ($out -match 'dbuser=postgres')) $images
 
 # 5. Survives a reboot: the stack comes back without the wizard. A real reboot from inside the guest;
 #    Hyper-V's Restart-VM is a hard reset, which is the separate -HardReset test (a reset within a minute
