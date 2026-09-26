@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Runs as root inside the build VM (build.pkr.hcl). Installs Docker and the VulnVerdict stack, then
 # strips everything that must be unique per appliance so each imported copy gets its own identity.
-# Env: VV_IMAGE (tag the stack runs), VV_VERSION.
+# Env: VV_IMAGE (tag the stack runs; its database and proxy images are the same tag with -db and -proxy), VV_VERSION.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 : "${VV_IMAGE:?}" "${VV_VERSION:?}"
+VV_DB_IMAGE="${VV_IMAGE}-db"
+VV_PROXY_IMAGE="${VV_IMAGE}-proxy"
 
 # ── Docker ────────────────────────────────────────────────────────────────
 apt-get update
@@ -32,11 +34,10 @@ tars=(/tmp/vv/images/*.tar.gz /tmp/vv/images/*.tar)
 if (( ${#tars[@]} )); then
   for t in "${tars[@]}"; do echo "loading $t"; docker load -i "$t"; done
 else
-  docker pull "$VV_IMAGE"
+  for i in "$VV_IMAGE" "$VV_DB_IMAGE" "$VV_PROXY_IMAGE"; do docker pull "$i"; done
 fi
-docker image inspect "$VV_IMAGE" >/dev/null   # fail the build if the tag the stack needs is missing
-docker pull postgres:16-alpine
-docker pull caddy:2-alpine
+# fail the build if an image the stack needs is missing
+docker image inspect "$VV_IMAGE" "$VV_DB_IMAGE" "$VV_PROXY_IMAGE" >/dev/null
 
 install -m 0755 /tmp/vv/firstboot.sh /usr/local/sbin/vulnverdict-firstboot
 

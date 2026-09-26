@@ -10,6 +10,19 @@ export PGDATA
 
 log() { echo "[vulnverdict] $*"; }
 
+# Run a command as another user. setpriv (util-linux, part of the base image) replaces gosu, whose old Go build
+# was the image's only critical and high scanner findings.
+as_user() {
+  local u="$1"; shift
+  HOME="$(getent passwd "$u" | cut -d: -f6)" setpriv --reuid="$u" --regid="$u" --init-groups -- "$@"
+}
+# The same for a background process (`exec_as_user ... &`): the subshell that & forks becomes the process, so $! is its
+# PID and the shutdown trap signals and waits for the process itself rather than a shell around it.
+exec_as_user() {
+  local u="$1"; shift
+  HOME="$(getent passwd "$u" | cut -d: -f6)" exec setpriv --reuid="$u" --regid="$u" --init-groups -- "$@"
+}
+
 mkdir -p "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
 chown -R vulnverdict:vulnverdict "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
 
@@ -20,15 +33,15 @@ case "${VV_DB:-embedded}" in
     touch "$DATA/postgres.log" && chown postgres:postgres "$DATA/postgres.log"
     if [ ! -s "$PGDATA/PG_VERSION" ]; then
       log "Initialising embedded PostgreSQL ${PG_MAJOR} in $PGDATA"
-      gosu postgres "$PG_BIN/initdb" -D "$PGDATA" --auth=trust --encoding=UTF8 --locale=C.UTF-8 >/dev/null
+      as_user postgres "$PG_BIN/initdb" -D "$PGDATA" --auth=trust --encoding=UTF8 --locale=C.UTF-8 >/dev/null
       # local socket only; nothing listens on a network port
       printf "listen_addresses = ''\nunix_socket_directories = '/var/run/postgresql'\nshared_buffers = 256MB\nwork_mem = 16MB\nmaintenance_work_mem = 128MB\nwal_level = minimal\nmax_wal_senders = 0\n" >> "$PGDATA/postgresql.conf"
     fi
     mkdir -p /var/run/postgresql && chown postgres:postgres /var/run/postgresql
-    gosu postgres "$PG_BIN/pg_ctl" -D "$PGDATA" -w -t 60 -l "$DATA/postgres.log" start
-    if ! gosu postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='vulnverdict'" | grep -q 1; then
-      gosu postgres createuser vulnverdict
-      gosu postgres createdb -O vulnverdict vulnverdict
+    as_user postgres "$PG_BIN/pg_ctl" -D "$PGDATA" -w -t 60 -l "$DATA/postgres.log" start
+    if ! as_user postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='vulnverdict'" | grep -q 1; then
+      as_user postgres createuser vulnverdict
+      as_user postgres createdb -O vulnverdict vulnverdict
     fi
     export Database__Provider=postgres
     export Database__ConnectionString="Host=/var/run/postgresql;Database=vulnverdict;Username=vulnverdict"
@@ -54,7 +67,7 @@ if [ "${VV_TLS:-internal}" != "off" ]; then
   chown vulnverdict:vulnverdict "$DATA/caddy/Caddyfile"
   # caddy needs to bind 443/80: grant the capability to the binary instead of running as root
   setcap 'cap_net_bind_service=+ep' /usr/bin/caddy 2>/dev/null || true
-  XDG_DATA_HOME="$DATA/caddy" XDG_CONFIG_HOME="$DATA/caddy" gosu vulnverdict caddy run --config "$DATA/caddy/Caddyfile" --adapter caddyfile >"$DATA/caddy.log" 2>&1 &
+  XDG_DATA_HOME="$DATA/caddy" XDG_CONFIG_HOME="$DATA/caddy" exec_as_user vulnverdict caddy run --config "$DATA/caddy/Caddyfile" --adapter caddyfile >"$DATA/caddy.log" 2>&1 &
   CADDY_PID=$!
   log "Caddy started for https://$HOST/ (${VV_TLS} certificate)"
   # export the internal root certificate so it can be imported on clients
@@ -67,7 +80,7 @@ shutdown() {
   [ -n "${APP_PID:-}" ] && kill -TERM "$APP_PID" 2>/dev/null || true
   [ -n "$CADDY_PID" ] && kill -TERM "$CADDY_PID" 2>/dev/null || true
   wait "${APP_PID:-}" 2>/dev/null || true
-  if [ "${VV_DB:-embedded}" = "embedded" ]; then gosu postgres "$PG_BIN/pg_ctl" -D "$PGDATA" -m fast -w stop || true; fi
+  if [ "${VV_DB:-embedded}" = "embedded" ]; then as_user postgres "$PG_BIN/pg_ctl" -D "$PGDATA" -m fast -w stop || true; fi
   exit 0
 }
 trap shutdown TERM INT
@@ -78,7 +91,7 @@ export Worker__CveMinYear="${CVE_MIN_YEAR:-0}"
 # on the container's interface or the published port 8080 reaches nothing.
 if [ "${VV_TLS:-internal}" = "off" ]; then export ASPNETCORE_URLS="http://0.0.0.0:8080"; fi
 cd /app
-gosu vulnverdict dotnet VulnVerdict.Web.dll &
+exec_as_user vulnverdict dotnet VulnVerdict.Web.dll &
 APP_PID=$!
 log "VulnVerdict started (role ${Role:-all}, database ${VV_DB:-embedded})"
 wait "$APP_PID"

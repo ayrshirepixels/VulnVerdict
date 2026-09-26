@@ -7,6 +7,6 @@ cd "$(dirname "$0")"
 IMAGE_BASE="${VV_IMAGE_BASE:-ghcr.io/ayrshirepixels/vulnverdict}"
 PREV="$(cat .rollback-image 2>/dev/null || echo "${IMAGE_BASE}:rollback")"
 echo "Rolling back to ${PREV}"
-VV_IMAGE="${PREV}" docker compose up -d --no-build web worker
+VV_IMAGE="${PREV}" docker compose up -d --no-build --no-deps web worker
 sed -i "s|^VV_IMAGE=.*|VV_IMAGE=${PREV}|" .env 2>/dev/null || echo "VV_IMAGE=${PREV}" >> .env
 echo "Done. The console is back on ${PREV}."

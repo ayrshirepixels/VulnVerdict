@@ -23,20 +23,28 @@ COPY src/ src/
 # can see the .razor files, which the csproj-only restore above cannot. Without it the console is not interactive.
 RUN dotnet publish src/VulnVerdict.Web/VulnVerdict.Web.csproj -c Release -o /app
 
-FROM caddy:2-alpine AS caddy
+# Caddy built from source by the current Go release, with its dependencies raised to their latest releases: the
+# official Caddy image can lag behind Go and dependency security fixes
+FROM golang:1.26-alpine AS caddy
+ARG CADDY_VERSION=v2.11.4
+COPY deploy/images/caddy-build.sh /usr/local/bin/caddy-build
+RUN sh /usr/local/bin/caddy-build "${CADDY_VERSION}" /go/bin/caddy
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ARG PG_MAJOR=16
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata gosu \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
     && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends postgresql-${PG_MAJOR} \
     && rm -rf /var/lib/apt/lists/* \
+    # the ssl-cert package's snakeoil key would be the same in every copy of the image; Postgres here listens on a
+    # Unix socket only and never uses it
+    && rm -f /etc/ssl/private/ssl-cert-snakeoil.key /etc/ssl/certs/ssl-cert-snakeoil.pem \
     && useradd --system --uid 10001 --create-home vulnverdict \
     && mkdir -p /data && chown vulnverdict /data
-COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
+COPY --from=caddy /go/bin/caddy /usr/bin/caddy
 COPY --from=build /app /app
 COPY deploy/allinone/entrypoint.sh /usr/local/bin/vulnverdict-entrypoint
 COPY deploy/allinone/Caddyfile /etc/caddy/Caddyfile.template

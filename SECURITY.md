@@ -16,6 +16,7 @@ Out of scope: the third-party feeds themselves, and denial of service by feeding
 
 ## What we do
 
-- Dependencies are checked with `dotnet list package --vulnerable` before every release, and the image's own SBOM is matched through OSV so the console reports its own vulnerabilities in the digest.
+- On every push and release, the NuGet packages (direct and transitive) are checked for known vulnerabilities and every image is scanned with Trivy. A known-vulnerable package, a fixable critical or high vulnerability in an image, or a secret baked into an image fails the build, and a release is not pushed until it passes. The published images are scanned again every week.
+- The images do not run as root. Postgres and the console run as their own users; Caddy runs as the console user with only the capability to bind 443. The Compose stack's database and proxy images are built here rather than taken as published: Postgres without gosu, and Caddy compiled with the current Go release and dependencies.
 - Fixes ship as an image on the update channel with a changelog; `deploy/update.sh` applies them and `deploy/rollback.sh` reverts.
 - Credentials are encrypted at rest, adapters are read-only, and nothing customer-identifying is sent to an AI provider or the central service. See `docs/security.md`.

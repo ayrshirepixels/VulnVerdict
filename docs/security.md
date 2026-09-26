@@ -29,7 +29,11 @@ The central service signs each bundle manifest (ECDSA P-256) and every file in i
 
 ## Supply chain
 
-The console tracks its own components (`dotnet list package --vulnerable` in CI, and an SBOM of the image) and matches them against OSV like any other SBOM, so its own vulnerabilities appear in your digest. Image updates are opt-in with a changelog and a one-command rollback.
+Every push and release checks the NuGet packages, direct and transitive, for known vulnerabilities, and scans all four images (console, all-in-one, database, proxy) with Trivy. A known-vulnerable package, a fixable critical or high vulnerability, or a secret baked into an image fails the build, and a release is not pushed until it passes. The published images are scanned again every week, so a vulnerability disclosed after a release is caught and fixed with a patch release.
+
+Nothing runs as root inside the containers. Postgres and the console run as their own users; Caddy runs as the console user with only the capability to bind 443. The Compose database image is Postgres 16 without gosu, running as postgres from the start, and the proxy image is Caddy compiled with the current Go release and dependencies, because the published Postgres and Caddy images can lag behind Go security fixes.
+
+Image updates are opt-in with a changelog and a one-command rollback; `deploy/update.sh` moves the database and proxy images along with the console.
 
 ## Reporting a vulnerability in VulnVerdict
 

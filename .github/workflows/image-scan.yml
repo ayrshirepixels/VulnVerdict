@@ -1,0 +1,30 @@
+# Scans the published images every week, so a vulnerability disclosed after a release is noticed: a failed run
+# emails the repository owner. Fix by cutting a patch release, which rebuilds on current bases.
+name: Published image scan
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  IMAGE: ghcr.io/ayrshirepixels/vulnverdict
+  # Trivy 0.74.0, pinned by digest
+  TRIVY: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: [latest, allinone, db, proxy]
+    steps:
+      - name: Scan ${{ matrix.tag }}
+        run: |
+          docker run --rm "$TRIVY" image --no-progress --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 \
+            "$IMAGE:${{ matrix.tag }}"

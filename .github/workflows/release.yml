@@ -5,6 +5,11 @@
 # Images (linux/amd64), on the GitHub container registry:
 #   ghcr.io/ayrshirepixels/vulnverdict:1.0.0            web + worker image for Docker Compose (also :latest)
 #   ghcr.io/ayrshirepixels/vulnverdict:1.0.0-allinone   Postgres + app + TLS proxy in one container (also :allinone)
+#   ghcr.io/ayrshirepixels/vulnverdict:1.0.0-db         the Compose stack's Postgres, without gosu (also :db)
+#   ghcr.io/ayrshirepixels/vulnverdict:1.0.0-proxy      the Compose stack's Caddy, built with the current Go (also :proxy)
+#
+# Every image is scanned by Trivy before anything is pushed: a fixable critical or high vulnerability, or a secret
+# baked into an image, stops the release.
 #
 # The appliance (OVA) is built on a Hyper-V or VirtualBox host, not here; upload it to the release by hand:
 #   gh release upload v1.0.0 deploy/ova/output/vulnverdict-1.0.0.ova deploy/ova/output/vulnverdict-1.0.0.sha256
@@ -28,6 +33,8 @@ permissions:
 
 env:
   IMAGE: ghcr.io/ayrshirepixels/vulnverdict
+  # Trivy 0.74.0, pinned by digest
+  TRIVY: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 
 jobs:
   publish:
@@ -53,11 +60,9 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          push: true
+          load: true
           platforms: linux/amd64
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
-            ${{ env.IMAGE }}:latest
+          tags: vv-release/web
           build-args: |
             VV_VERSION=${{ steps.v.outputs.version }}
           labels: |
@@ -72,11 +77,9 @@ jobs:
         with:
           context: .
           file: Dockerfile.allinone
-          push: true
+          load: true
           platforms: linux/amd64
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}-allinone
-            ${{ env.IMAGE }}:allinone
+          tags: vv-release/allinone
           build-args: |
             VV_VERSION=${{ steps.v.outputs.version }}
           labels: |
@@ -86,13 +89,59 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Database image
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/images
+          file: deploy/images/db.Dockerfile
+          load: true
+          pull: true
+          platforms: linux/amd64
+          tags: vv-release/db
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+
+      - name: Proxy image
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/images
+          file: deploy/images/proxy.Dockerfile
+          load: true
+          pull: true
+          platforms: linux/amd64
+          tags: vv-release/proxy
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+
+      - name: Scan the images
+        run: |
+          for i in web allinone db proxy; do
+            echo "::group::vv-release/$i"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --no-progress \
+              --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 "vv-release/$i"
+            echo "::endgroup::"
+          done
+
       - name: Smoke test the all-in-one image
         run: |
-          docker run -d --name smoke -p 8080:8080 -e VV_TLS=off "$IMAGE:${{ steps.v.outputs.version }}-allinone"
-          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/healthz && ok=1 && break; sleep 3; done
+          docker run -d --name smoke -p 8080:8080 -e VV_TLS=off vv-release/allinone
+          for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/healthz && ok=1 && break; sleep 3; done
           [ "${ok:-}" = 1 ] || { docker logs smoke; exit 1; }
           curl -fsS http://127.0.0.1:8080/_framework/blazor.web.js -o /dev/null   # the console is interactive
-          docker rm -f smoke
+          docker stop -t 30 smoke && docker rm smoke
+
+      - name: Push the images
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          push() { docker tag "vv-release/$1" "$IMAGE:$2" && docker push "$IMAGE:$2"; }
+          push web "$v";               push web latest
+          push allinone "$v-allinone"; push allinone allinone
+          push db "$v-db";             push db db
+          push proxy "$v-proxy";       push proxy proxy
 
       - name: GitHub release
         if: github.event_name == 'push'
@@ -109,6 +158,6 @@ jobs:
               -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \
               ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}-allinone
             ```
-            Docker Compose: `deploy/` in this repository, with `VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}` in `.env`.
+            Docker Compose: `deploy/` in this repository, with `VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}` in `.env`; `deploy/update.sh` moves the database and proxy images along with it.
 
             Appliance (OVA for VMware, VirtualBox and Proxmox; Hyper-V after a one-line conversion): see the assets below and `docs/install.md`.

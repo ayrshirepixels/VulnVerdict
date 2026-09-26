@@ -20,6 +20,10 @@ jobs:
         with:
           dotnet-version: "10.0.x"
       - run: dotnet restore
+      - name: No known-vulnerable packages
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee packages.txt
+          ! grep -q "has the following vulnerable packages" packages.txt
       - run: dotnet build --no-restore -c Release
       - run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
       - uses: actions/upload-artifact@v4
@@ -30,8 +34,12 @@ jobs:
           if-no-files-found: ignore
 
   image:
-    # The two Docker images must at least build; publishing is the release workflow's job.
+    # The images must build, and carry no fixable critical or high vulnerability and no secret; publishing is the
+    # release workflow's job.
     runs-on: ubuntu-latest
+    env:
+      # Trivy 0.74.0, pinned by digest
+      TRIVY: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -39,13 +47,35 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          push: false
+          load: true
+          tags: vv-ci/web
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.allinone
-          push: false
+          load: true
+          tags: vv-ci/allinone
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/images
+          file: deploy/images/db.Dockerfile
+          load: true
+          tags: vv-ci/db
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/images
+          file: deploy/images/proxy.Dockerfile
+          load: true
+          tags: vv-ci/proxy
+      - name: Scan the images
+        run: |
+          for i in web allinone db proxy; do
+            echo "::group::vv-ci/$i"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --no-progress \
+              --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 "vv-ci/$i"
+            echo "::endgroup::"
+          done

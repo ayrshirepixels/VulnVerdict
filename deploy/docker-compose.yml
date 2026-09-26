@@ -2,7 +2,8 @@
 # Then open https://<host>/ and create the administrator account.
 services:
   db:
-    image: postgres:16-alpine
+    # Postgres 16 without gosu, running as postgres (deploy/images/db.Dockerfile); postgres:16-alpine also works
+    image: ${VV_DB_IMAGE:-ghcr.io/ayrshirepixels/vulnverdict:db}
     restart: unless-stopped
     environment:
       POSTGRES_DB: vulnverdict
@@ -50,7 +51,8 @@ services:
       - data:/data
 
   proxy:
-    image: caddy:2-alpine
+    # Caddy built with the current Go release (deploy/images/proxy.Dockerfile); caddy:2-alpine also works
+    image: ${VV_PROXY_IMAGE:-ghcr.io/ayrshirepixels/vulnverdict:proxy}
     restart: unless-stopped
     depends_on:
       - web
