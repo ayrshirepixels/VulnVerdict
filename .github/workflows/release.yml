@@ -143,11 +143,16 @@ jobs:
           push db "$v-db";             push db db
           push proxy "$v-proxy";       push proxy proxy
 
+      - name: Compose bundle
+        if: github.event_name == 'push'
+        run: bash deploy/make-compose-bundle.sh "${{ steps.v.outputs.version }}" dist
+
       - name: GitHub release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           name: VulnVerdict ${{ steps.v.outputs.version }}
+          files: dist/vulnverdict-compose.tar.gz
           generate_release_notes: true
           body: |
             ## Install
@@ -158,6 +163,11 @@ jobs:
               -p 443:443 -p 80:80 -v vulnverdict:/data -e VV_HOSTNAME=vulnverdict.internal \
               ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}-allinone
             ```
-            Docker Compose: `deploy/` in this repository, with `VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${{ steps.v.outputs.version }}` in `.env`; `deploy/update.sh` moves the database and proxy images along with it.
+            Docker Compose (`vulnverdict-compose.tar.gz` below holds the compose file and `.env.example` set to this release):
+            ```
+            curl -fsSL https://github.com/ayrshirepixels/VulnVerdict/releases/download/v${{ steps.v.outputs.version }}/vulnverdict-compose.tar.gz | tar -xz
+            cd vulnverdict && cp .env.example .env   # set DB_PASSWORD and VV_HOSTNAME
+            docker compose up -d
+            ```
 
             Appliance (OVA for VMware, VirtualBox and Proxmox; Hyper-V after a one-line conversion): see the assets below and `docs/install.md`.

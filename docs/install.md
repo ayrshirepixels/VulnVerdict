@@ -7,13 +7,15 @@ Fifteen minutes: run one command or import one OVA, sign in, paste read-only cre
 Requirements: a Linux VM with Docker Engine and the Compose plugin. 2 vCPU, 4 GB RAM, 40 GB disk is plenty for 250 assets.
 
 ```bash
-git clone https://github.com/ayrshirepixels/VulnVerdict.git
-cd VulnVerdict/deploy
+curl -fsSL https://github.com/ayrshirepixels/VulnVerdict/releases/latest/download/vulnverdict-compose.tar.gz | tar -xz
+cd vulnverdict
 cp .env.example .env        # set DB_PASSWORD and VV_HOSTNAME
-docker compose up -d --build
+docker compose up -d
 ```
 
-Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account.
+That downloads the latest release's Compose files (the compose file, Caddyfile, `.env.example` set to that release's images, and the update and rollback scripts) and runs the published, scanned images. Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account.
+
+To build from source instead: clone the repository, `cd deploy`, comment out `VV_IMAGE` in `.env`, and run `docker compose up -d --build`.
 
 What runs: `web` (the console), `worker` (feeds, connectors, verdicts, digests), `db` (PostgreSQL 16), `proxy` (Caddy, TLS). Only ports 443 and 80 are published. The worker needs outbound HTTPS to the public feeds (or to your central bundle URL); nothing else needs the internet.
 
@@ -33,9 +35,11 @@ Build it with `docker build -f Dockerfile.allinone -t vulnverdict:allinone .`. O
 
 A ready-built Ubuntu 24.04 LTS VM with Docker and the stack inside. 2 vCPU, 4 GB RAM, 40 GB disk, BIOS boot, DHCP on its first network card.
 
-- **VMware (ESXi, Workstation) or VirtualBox:** import `vulnverdict-<version>.ova`.
+Download `vulnverdict-<version>.ova` and its `.sha256` from the [latest release](https://github.com/ayrshirepixels/VulnVerdict/releases/latest).
+
+- **VMware (ESXi, Workstation) or VirtualBox:** import the OVA.
 - **Proxmox:** `qm importovf <vmid> vulnverdict-<version>.ovf <storage>` after unpacking the OVA with `tar -xf`.
-- **Hyper-V:** use `vulnverdict-<version>-hyperv.vhdx` with a **generation 1** VM (2 vCPU, 4096 MB static memory, one network adapter). To make it yourself from the OVA: `tar -xf vulnverdict-<version>.ova`, then `qemu-img convert -O vhdx -o subformat=dynamic vulnverdict-<version>-disk1.vmdk vulnverdict.vhdx`.
+- **Hyper-V:** convert the OVA's disk (the Hyper-V disk is too large to attach to a release): `tar -xf vulnverdict-<version>.ova`, then `qemu-img convert -O vhdx -o subformat=dynamic vulnverdict-<version>-disk1.vmdk vulnverdict.vhdx`. Attach it to a **generation 1** VM with 2 vCPU, 4096 MB static memory and one network adapter.
 
 Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL. SSH is off until the wizard has run, so the build's default password is never reachable over the network.
 
@@ -68,7 +72,7 @@ Caddy issues a certificate from its internal CA for an internal hostname (import
 
 ## Updating and rolling back
 
-Updates are opt-in. `deploy/update.sh [tag]` pulls the new image, keeps the previous one, restarts web and worker, and rolls back automatically if the console does not answer within a minute. `deploy/rollback.sh` returns to the previous image. Database migrations are additive, so an older image runs against a newer schema.
+Updates are opt-in. `./update.sh [tag]` (in the Compose folder, or `/opt/vulnverdict` on the appliance) pulls the new image, keeps the previous one, moves the database and proxy to the images released with it, restarts web and worker, and rolls back automatically if the console does not answer within a minute. `./rollback.sh` returns the console to the previous image. Database migrations are additive, so an older image runs against a newer schema. The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume.
 
 ## Air-gapped sites
 

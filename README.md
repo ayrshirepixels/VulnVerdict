@@ -31,10 +31,13 @@ This repository holds the whole console: the feeds, watchlist, decision table an
 Requirements: a Linux VM with Docker (2 vCPU, 4 GB RAM, 40 GB disk is plenty).
 
 ```bash
-cd deploy
-cp .env.example .env      # set DB_PASSWORD and VV_HOSTNAME
-docker compose up -d --build
+curl -fsSL https://github.com/ayrshirepixels/VulnVerdict/releases/latest/download/vulnverdict-compose.tar.gz | tar -xz
+cd vulnverdict
+cp .env.example .env        # set DB_PASSWORD and VV_HOSTNAME
+docker compose up -d
 ```
+
+That fetches the latest release's Compose files and runs its published images; the appliance (OVA) and the single all-in-one container are the other routes, see [docs/install.md](docs/install.md). To build from source, run `docker compose up -d --build` in `deploy/` with `VV_IMAGE` commented out of `.env`.
 
 Open `https://<VV_HOSTNAME>/`, create the administrator account, set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
 
