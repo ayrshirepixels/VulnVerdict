@@ -22,4 +22,7 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
 USER vulnverdict
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD curl -fsS http://localhost:8080/healthz || exit 1
+# the release pipeline passes the tag; the console shows it and puts it in reports and issue links
+ARG VV_VERSION=dev
+ENV VV_VERSION=${VV_VERSION}
 ENTRYPOINT ["dotnet", "VulnVerdict.Web.dll"]

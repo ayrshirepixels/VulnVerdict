@@ -53,4 +53,7 @@ ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}" \
 VOLUME ["/data"]
 EXPOSE 443 80 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+# the release pipeline passes the tag; the console shows it and puts it in reports and issue links
+ARG VV_VERSION=dev
+ENV VV_VERSION=${VV_VERSION}
 ENTRYPOINT ["/usr/local/bin/vulnverdict-entrypoint"]
