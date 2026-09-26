@@ -44,10 +44,12 @@ public sealed class DigestService
     private readonly ConnectorService _connectors;
     private readonly ILogger<DigestService> _log;
 
-    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ConnectorService connectors, ILogger<DigestService> log)
+    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ConnectorService connectors, HealthNotices notices, ILogger<DigestService> log)
     {
-        _factory = factory; _settings = settings; _email = email; _connectors = connectors; _log = log;
+        _factory = factory; _settings = settings; _email = email; _connectors = connectors; _notices = notices; _log = log;
     }
+
+    private readonly HealthNotices _notices;
 
     // ------------------------------------------------------------------ build
 
@@ -109,7 +111,11 @@ public sealed class DigestService
         var unknownCount = await db.Assets.CountAsync(a => !a.Archived && a.Unknown, ct);
         var coverage = (assetCount > 0 ? "Seeing " + assetCount + " asset" + (assetCount == 1 ? "" : "s") + " from " + sourceCount + " source" + (sourceCount == 1 ? "" : "s") + (unknownCount > 0 ? ", " + unknownCount + " unknown host" + (unknownCount == 1 ? "" : "s") : "") + ". " : "")
             + "Watching " + entries + " product" + (entries == 1 ? "" : "s") + " on the watchlist. Feeds current as of " + (feedsAsOf == default ? "never" : TimeZoneInfo.ConvertTimeFromUtc(feedsAsOf, tz).ToString("d MMM HH:mm")) + ".";
-        var warning = stale.Count > 0 ? "Feeds overdue (not updated on schedule): " + string.Join(", ", stale) + "." : null;
+        var warnings = new List<string>();
+        if (stale.Count > 0) warnings.Add("Feeds overdue (not updated on schedule): " + string.Join(", ", stale) + ".");
+        // client secrets about to expire: the digest is the one place an administrator reliably sees a month ahead
+        warnings.AddRange((await _notices.SecretsAsync(now, ct)).Select(n => n.Text));
+        var warning = warnings.Count > 0 ? string.Join(" ", warnings) : null;
 
         var headline = fixToday.Count + " to fix today, " + fixWeek.Count + " this week. " + dismissedSinceMonday + " CVE" + (dismissedSinceMonday == 1 ? "" : "s") + " since Monday you did not need to read.";
         var subject = "VulnVerdict" + (string.IsNullOrWhiteSpace(s.OrganisationName) ? "" : " for " + s.OrganisationName) + ": " + headline;

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using VulnVerdict.Core.Data;
+using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Core.Adapters.Endpoints;
 
@@ -41,6 +42,7 @@ public sealed class IntuneAdapter : IInventoryAdapter
             new CredentialField("tenantId", "Tenant ID", CredentialTypes.Text, "Directory (tenant) ID from the app registration's overview page."),
             new CredentialField("clientId", "Application (client) ID", CredentialTypes.Text),
             new CredentialField("clientSecret", "Client secret", CredentialTypes.Password, "A client secret value (not its ID) from Certificates & secrets."),
+            new CredentialField(HealthNotices.SecretExpiresKey, "Client secret expires on", CredentialTypes.Date, "Optional. The console warns 30 days before, on screen and in the digest; the setup script prints this date.", Required: false),
             new CredentialField("includeApps", "Read detected apps", CredentialTypes.Bool, "One Graph call per device. Turn off to read devices and OS versions only.", Required: false, Default: "true"),
         },
         MinimumPermission: "an Entra ID app registration with the Microsoft Graph application permission DeviceManagementManagedDevices.Read.All (admin consent granted)",

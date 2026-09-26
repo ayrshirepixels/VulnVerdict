@@ -112,4 +112,6 @@ public static class CredentialTypes
     public const string Number = "number";
     public const string Bool = "bool";
     public const string TextArea = "textarea";
+    /// <summary>A calendar date (yyyy-MM-dd), such as when a client secret expires.</summary>
+    public const string Date = "date";
 }

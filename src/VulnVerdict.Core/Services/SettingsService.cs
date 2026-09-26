@@ -22,6 +22,8 @@ public sealed class AppSettings
     public string M365TenantId { get; set; } = "";
     public string M365ClientId { get; set; } = "";
     public string M365ClientSecret { get; set; } = "";
+    /// <summary>Optional yyyy-MM-dd: the console warns 30 days before the client secret expires.</summary>
+    public string M365SecretExpires { get; set; } = "";
     public string SmtpHost { get; set; } = "";
     public int SmtpPort { get; set; } = 587;
     public string SmtpUsername { get; set; } = "";
@@ -187,5 +189,9 @@ public sealed class SettingsService
         public const string LastWorkerStaleAlert = "state:alert:workerStale";
         public const string EvaluateRequested = "state:evaluate:requested";
         public const string LastEvaluation = "state:evaluate:last";
+        /// <summary>Mail health: when mail last went out, and the last failure (shown as a banner until mail works again).</summary>
+        public const string MailLastSuccess = "state:mail:lastSuccess";
+        public const string MailLastError = "state:mail:lastError";
+        public const string MailLastErrorAt = "state:mail:lastErrorAt";
     }
 }

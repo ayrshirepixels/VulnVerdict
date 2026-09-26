@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using VulnVerdict.Core.Data;
+using VulnVerdict.Core.Services;
 using VulnVerdict.Core.Engine;
 
 namespace VulnVerdict.Core.Adapters.Endpoints;
@@ -45,6 +46,7 @@ public sealed class DefenderEndpointAdapter : IInventoryAdapter
             new CredentialField("tenantId", "Tenant ID", CredentialTypes.Text, "Directory (tenant) ID from the app registration's overview page."),
             new CredentialField("clientId", "Application (client) ID", CredentialTypes.Text),
             new CredentialField("clientSecret", "Client secret", CredentialTypes.Password),
+            new CredentialField(HealthNotices.SecretExpiresKey, "Client secret expires on", CredentialTypes.Date, "Optional. The console warns 30 days before, on screen and in the digest; the setup script prints this date.", Required: false),
             new CredentialField("apiHost", "API host", CredentialTypes.Text, "Leave as is unless you pin a region, e.g. eu.api.security.microsoft.com or uk.api.security.microsoft.com.", Required: false, Default: DefaultApiHost),
             new CredentialField("includeFindings", "Read Defender's CVE findings", CredentialTypes.Bool, "Stored as a second opinion next to the verdict.", Required: false, Default: "true"),
         },

@@ -6,6 +6,7 @@
 @inject ConnectorService ConnectorSvc
 @inject AuthService Auth
 @inject NavigationManager Nav
+@inject HealthNotices Notices
 
 <PageTitle>Settings - VulnVerdict</PageTitle>
 
@@ -57,6 +58,7 @@
                         <div><label>Application (client) ID</label><input type="text" @bind="_s.M365ClientId" /></div>
                     </div>
                     <div><label>Client secret</label><input type="password" @bind="_s.M365ClientSecret" autocomplete="new-password" /><div class="help">Stored encrypted. The app registration needs permission to send as the from mailbox only; <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/mail.md#microsoft-365" target="_blank" rel="noopener noreferrer">how to set it up</a>. Outbound HTTPS to login.microsoftonline.com and graph.microsoft.com is required.</div></div>
+                    <div><label>Client secret expires on (optional)</label><input type="date" value="@_s.M365SecretExpires" @onchange="e => _s.M365SecretExpires = e.Value?.ToString() ?? string.Empty" /><div class="help">The console warns 30 days before, on screen and in the digest. The setup script prints this date.</div></div>
                 }
                 else if (_s.MailTransport == "smtp")
                 {
@@ -75,6 +77,8 @@
                     <div><label>@(_s.MailTransport == "sendgrid" ? "SendGrid API key (Mail Send permission)" : "Brevo API key (v3, transactional email)")</label><input type="password" @bind="_s.MailApiKey" autocomplete="new-password" /><div class="help">Stored encrypted. Outbound HTTPS to @(_s.MailTransport == "sendgrid" ? "api.sendgrid.com" : "api.brevo.com") is required.</div></div>
                 }
                 <div class="btn-row"><button class="btn btn-secondary" @onclick="TestMail" disabled="@_busy">Save and send a test email</button></div>
+                @if (_mailFailure is not null) { <div class="alert alert-error" style="margin-top:10px">@_mailFailure.Text</div> }
+                else if (_mailLastSent is not null) { <p class="muted" style="margin:8px 0 0">Mail last went out @_mailLastSent.</p> }
             </div>
         </div>
 
@@ -188,6 +192,18 @@
     {
         _s = await SettingsSvc.LoadAsync();
         _ticketConnectors = (await ConnectorSvc.ListAsync()).Where(c => ConnectorSvc.IsTicketAdapter(c.AdapterId)).ToList();
+        await LoadMailHealthAsync();
+    }
+
+    private HealthNotices.Notice? _mailFailure;
+    private string? _mailLastSent;
+
+    private async Task LoadMailHealthAsync()
+    {
+        _mailFailure = await Notices.MailFailureAsync();
+        var last = await SettingsSvc.GetStateAsync(SettingsService.Keys.MailLastSuccess);
+        _mailLastSent = DateTime.TryParse(last, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var d)
+            ? Ui.Ago(d.ToUniversalTime()) : null;
     }
 
     private async Task Save()
@@ -231,6 +247,7 @@
             _notice = "Settings saved and a test email was sent to " + to + ".";
         }
         catch (Exception ex) { _error = "Test email failed: " + ex.Message; }
+        await LoadMailHealthAsync();
         _busy = false;
     }
 }

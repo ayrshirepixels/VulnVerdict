@@ -75,7 +75,7 @@ public sealed partial class ConnectorDiagnostics
     public static byte[] Build(string adapterId, bool recorded, IReadOnlyList<Exchange> exchanges, CollectResult? result, string? error, TimeSpan elapsed, IReadOnlyDictionary<string, string> credentials)
     {
         var r = new Redactor();
-        foreach (var v in credentials.Values) r.Secret(v);
+        foreach (var (k, v) in credentials) if (k != HealthNotices.SecretExpiresKey) r.Secret(v);   // a date is not a secret
         if (result is not null)
             foreach (var a in result.Assets)
             {

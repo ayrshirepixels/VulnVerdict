@@ -44,6 +44,28 @@ public sealed class EmailService
 
     public async Task SendAsync(IEnumerable<string> to, string subject, string html, string text, CancellationToken ct = default, IEnumerable<(string Name, string Value)>? headers = null)
     {
+        try
+        {
+            await SendCoreAsync(to, subject, html, text, headers, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // kept for the on-screen banner: the administrator alert would go out over this same broken mail
+            await RecordAsync(SettingsService.Keys.MailLastError, ex.Message.Length > 500 ? ex.Message[..500] : ex.Message);
+            await RecordAsync(SettingsService.Keys.MailLastErrorAt, DateTime.UtcNow.ToString("O"));
+            throw;
+        }
+        await RecordAsync(SettingsService.Keys.MailLastSuccess, DateTime.UtcNow.ToString("O"));
+    }
+
+    private async Task RecordAsync(string key, string value)
+    {
+        try { await _settings.SetStateAsync(key, value, CancellationToken.None); }
+        catch (Exception ex) { _log.LogWarning(ex, "Could not record mail health"); }
+    }
+
+    private async Task SendCoreAsync(IEnumerable<string> to, string subject, string html, string text, IEnumerable<(string Name, string Value)>? headers, CancellationToken ct)
+    {
         var s = await _settings.LoadAsync(ct);
         if (!s.MailConfigured) throw new EmailNotConfiguredException(s.MailTransport.ToLowerInvariant() switch
         {

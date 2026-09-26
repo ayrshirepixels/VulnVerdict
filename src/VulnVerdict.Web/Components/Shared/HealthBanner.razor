@@ -1,0 +1,34 @@
+@using VulnVerdict.Core.Services
+@implements IDisposable
+@inject HealthNotices Notices
+@inject NavigationManager Nav
+
+@* Problems email cannot report: mail that is failing, and client secrets about to expire. Refreshed on every page change. *@
+@foreach (var n in _notices)
+{
+    <div class="alert @(n.Error ? "alert-error" : "alert-warn")" role="alert">@n.Text <a href="@n.Link">Fix it</a></div>
+}
+
+@code {
+    private List<HealthNotices.Notice> _notices = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _notices = await Notices.GetAsync(); }
+        catch { _notices = new(); }   // a notice must never take the page down
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

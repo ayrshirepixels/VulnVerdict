@@ -13,6 +13,17 @@ The console sends the daily digest, immediate Fix-today alerts, ticket emails an
 
 Exchange Online is retiring password sign-in for SMTP, so on Microsoft 365 use this option rather than smtp.office365.com. The console signs in as an app (client credentials) and sends through Microsoft Graph as the from mailbox. Nothing is saved to that mailbox's Sent Items.
 
+**The quick way.** [deploy/entra/New-VulnVerdictApps.ps1](../deploy/entra/New-VulnVerdictApps.ps1) does steps 2 to 4 for you, and also creates a separate read-only app for the Intune and Defender connectors (two apps, so a leaked or expired secret only affects one job):
+
+```powershell
+Install-Module Microsoft.Graph.Authentication, Microsoft.Graph.Applications, ExchangeOnlineManagement -Scope CurrentUser
+.\New-VulnVerdictApps.ps1 -TenantId contoso.onmicrosoft.com -Mailbox vulnverdict@contoso.com
+```
+
+It prints the tenant ID, client ID, secret and the date each secret expires. Enter the expiry date too: the console warns on screen and in the digest 30 days before a secret runs out, and shows a red banner on every page if mail starts failing (the administrator alert cannot reach you over broken mail). Use `-SkipMail` or `-SkipInventory` for one app only, and `-SecretMonths` (1 to 24, default 12) for the secret lifetime.
+
+By hand:
+
 1. **Pick the from mailbox.** A shared mailbox such as vulnverdict@yourdomain works well and needs no licence.
 2. **Register an app.** Entra admin centre > App registrations > New registration, named VulnVerdict, single tenant, no redirect URI. Note the **Directory (tenant) ID** and **Application (client) ID**.
 3. **Create a client secret.** Certificates & secrets > New client secret. Copy its **Value** (not its ID). Note when it expires: mail stops on that date until a new secret is entered.

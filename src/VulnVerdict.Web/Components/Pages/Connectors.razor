@@ -134,7 +134,7 @@
     }
 
     private void SetText(string key, ChangeEventArgs e) => _values[key] = e.Value?.ToString() ?? string.Empty;
-    private static string InputType(CredentialField f) => f.Type == CredentialTypes.Password ? "password" : f.Type == CredentialTypes.Number ? "number" : "text";
+    private static string InputType(CredentialField f) => f.Type == CredentialTypes.Password ? "password" : f.Type == CredentialTypes.Number ? "number" : f.Type == CredentialTypes.Date ? "date" : "text";
     private void SetBool(string key, ChangeEventArgs e) => _values[key] = e.Value is bool b && b ? "true" : "false";
 
     private void Reset() { _editId = null; _metaId = ""; _meta = null; _name = ""; _values = new(); _testResult = null; _enabled = true; }
