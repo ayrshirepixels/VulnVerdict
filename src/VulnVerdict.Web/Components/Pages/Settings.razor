@@ -44,15 +44,24 @@
                     <div><label>Send mail through</label>
                         <select @bind="_s.MailTransport">
                             <option value="smtp">SMTP server</option>
+                            <option value="m365">Microsoft 365 (Microsoft Graph)</option>
                             <option value="sendgrid">SendGrid API</option>
                             <option value="brevo">Brevo API</option>
                         </select></div>
-                    <div><label>From address</label><input type="email" @bind="_s.SmtpFrom" placeholder="vulnverdict@example.co.uk" /><div class="help">Must be a verified sender on SendGrid or Brevo.</div></div>
+                    <div><label>From address</label><input type="email" @bind="_s.SmtpFrom" placeholder="vulnverdict@example.co.uk" /><div class="help">@(_s.MailTransport switch { "m365" => "A mailbox in your Microsoft 365 tenant that the app registration may send as. A shared mailbox works and needs no licence.", "sendgrid" or "brevo" => "Must be a verified sender on " + (_s.MailTransport == "sendgrid" ? "SendGrid." : "Brevo."), _ => "The address mail comes from; your SMTP server must allow it." })</div></div>
                 </div>
-                @if (_s.MailTransport == "smtp")
+                @if (_s.MailTransport == "m365")
+                {
+                    <div class="row">
+                        <div><label>Tenant ID</label><input type="text" @bind="_s.M365TenantId" placeholder="00000000-0000-0000-0000-000000000000" /><div class="help">Directory (tenant) ID from the app registration's overview page.</div></div>
+                        <div><label>Application (client) ID</label><input type="text" @bind="_s.M365ClientId" /></div>
+                    </div>
+                    <div><label>Client secret</label><input type="password" @bind="_s.M365ClientSecret" autocomplete="new-password" /><div class="help">Stored encrypted. The app registration needs permission to send as the from mailbox only; <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/mail.md#microsoft-365" target="_blank" rel="noopener noreferrer">how to set it up</a>. Outbound HTTPS to login.microsoftonline.com and graph.microsoft.com is required.</div></div>
+                }
+                else if (_s.MailTransport == "smtp")
                 {
                     <div class="row-3">
-                        <div><label>SMTP host</label><input type="text" @bind="_s.SmtpHost" placeholder="smtp.office365.com" /></div>
+                        <div><label>SMTP host</label><input type="text" @bind="_s.SmtpHost" placeholder="smtp.example.co.uk" /><div class="help">On Microsoft 365, choose Microsoft 365 above instead: Exchange Online is retiring password sign-in for SMTP.</div></div>
                         <div><label>Port</label><input type="number" @bind="_s.SmtpPort" /></div>
                         <div><label>Security</label><select @bind="_s.SmtpSecurity"><option value="auto">Auto</option><option value="starttls">STARTTLS</option><option value="ssl">SSL on connect</option><option value="none">None</option></select></div>
                     </div>

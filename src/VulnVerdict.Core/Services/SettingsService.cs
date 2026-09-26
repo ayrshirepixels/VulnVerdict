@@ -18,6 +18,10 @@ public sealed class AppSettings
     // email transport: smtp | sendgrid | brevo
     public string MailTransport { get; set; } = "smtp";
     public string MailApiKey { get; set; } = "";
+    /// <summary>Microsoft 365 through Microsoft Graph: an Entra app registration allowed to send as the From mailbox.</summary>
+    public string M365TenantId { get; set; } = "";
+    public string M365ClientId { get; set; } = "";
+    public string M365ClientSecret { get; set; } = "";
     public string SmtpHost { get; set; } = "";
     public int SmtpPort { get; set; } = 587;
     public string SmtpUsername { get; set; } = "";
@@ -76,9 +80,12 @@ public sealed class AppSettings
         && (LlmProvider.Equals("openai-compatible", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(LlmApiKey));
 
     public IEnumerable<string> Recipients => DigestRecipients.Split(new[] { ',', ';', '\n', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    public bool MailConfigured => !string.IsNullOrWhiteSpace(SmtpFrom) && (MailTransport.Equals("smtp", StringComparison.OrdinalIgnoreCase)
-        ? !string.IsNullOrWhiteSpace(SmtpHost)
-        : !string.IsNullOrWhiteSpace(MailApiKey));
+    public bool MailConfigured => !string.IsNullOrWhiteSpace(SmtpFrom) && MailTransport.ToLowerInvariant() switch
+    {
+        "smtp" => !string.IsNullOrWhiteSpace(SmtpHost),
+        "m365" => !string.IsNullOrWhiteSpace(M365TenantId) && !string.IsNullOrWhiteSpace(M365ClientId) && !string.IsNullOrWhiteSpace(M365ClientSecret),
+        _ => !string.IsNullOrWhiteSpace(MailApiKey),
+    };
     public bool SmtpConfigured => MailConfigured;
 
     public TimeZoneInfo ResolveTimeZone()
@@ -90,7 +97,7 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken) };
+    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken) };
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 

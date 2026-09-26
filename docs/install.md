@@ -45,7 +45,7 @@ To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: P
 
 ## First ten minutes in the console
 
-1. **Settings**: mail (SMTP, SendGrid or Brevo), digest recipients, the console address used in email links, helpdesk intake address if you want tickets by email.
+1. **Settings**: mail (SMTP, Microsoft 365, SendGrid or Brevo; see [mail](mail.md)), digest recipients, the console address used in email links, helpdesk intake address if you want tickets by email.
 2. **Watchlist**: add what you run that no connector will see (or import `watchlist.example.json`). Verdicts appear immediately.
 3. **Connectors**: add the sources you have, in the order they pay off: endpoint management, Windows servers (WinRM), your firewall, hypervisor, Linux (SSH), SBOMs from CI, SNMP for the management network, a discovery sweep, the external cross-check. Each needs a hostname and a read-only account; the form tells you the minimum permission.
 4. Check **Needs mapping** once the first collections land: anything a connector reported that could not be tied to a vendor's CVE naming is listed there for a one-click mapping.
