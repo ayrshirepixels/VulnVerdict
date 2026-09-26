@@ -124,8 +124,10 @@ public sealed class WorkerService : BackgroundService
         var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("feeds");
         var now = DateTime.UtcNow;
 
-        // KEV and the exploit indexes are small; run them before the CVE list so the first evaluation has exploit data
-        foreach (var feed in feeds.OrderBy(f => f.Name == FeedNames.CveList ? 1 : 0))
+        // KEV, EPSS and the exploit indexes are small: first, so the first evaluation has exploit data. Then the CVE list,
+        // which every verdict needs. Vendor feeds last: their first loads (Ubuntu, Debian, Microsoft history) take many
+        // minutes and only refine verdicts, so a new install should not wait for them before seeing any.
+        foreach (var feed in feeds.OrderBy(f => FeedOrder(f.Name)))
         {
             ct.ThrowIfCancellationRequested();
             await using var statusDb = await factory.CreateDbContextAsync(ct);
@@ -282,6 +284,14 @@ public sealed class WorkerService : BackgroundService
         var sent = await scope.ServiceProvider.GetRequiredService<Digest.ReportService>().SendIfDueAsync(ct);
         if (sent) _log.LogInformation("Weekly management report sent");
     }
+
+    /// <summary>Run order within a pass: small exploit signals, then the CVE list, then everything else.</summary>
+    public static int FeedOrder(string name) => name switch
+    {
+        FeedNames.Kev or FeedNames.Epss or FeedNames.ExploitDb or FeedNames.Metasploit or FeedNames.Nuclei => 0,
+        FeedNames.CveList => 1,
+        _ => 2,
+    };
 
     /// <summary>A feed overdue by its own schedule (see <see cref="Feeds.FeedHealth"/>) triggers the administrator alert (at most once a day).</summary>
     private async Task FeedHealthAlertAsync(CancellationToken ct)
