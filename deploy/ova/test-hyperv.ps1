@@ -122,7 +122,7 @@ echo "$Password" | sudo -S -p '' sh -c 'grep -c "__SET_AT_FIRST_BOOT__" /opt/vul
 '@ -replace '\$Password', $Password
 # A refused login writes to stderr, which would otherwise end the script under ErrorActionPreference Stop.
 $ErrorActionPreference = 'Continue'
-$out = (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip" $remote 2>&1 | ForEach-Object { "$_" }) -join "`n"
+$out = (& ssh.exe -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$work\known_hosts" -o ConnectTimeout=15 "vulnverdict@$ip" $remote 2>&1 | ForEach-Object { "$_" }) -join "`n"
 $ErrorActionPreference = 'Stop'
 $out
 Pass 'SSH works with the new password' ($out -match 'machine-id=') ''
@@ -144,7 +144,7 @@ Pass 'database and proxy are the release images, database not root' (($images -m
 if ($HardReset) { Restart-VM -Name $name -Force }
 else {
   $ErrorActionPreference = 'Continue'
-  & ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip" "echo '$Password' | sudo -S -p '' systemctl reboot" 2>&1 | Out-Null
+  & ssh.exe -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$work\known_hosts" -o ConnectTimeout=15 "vulnverdict@$ip" "echo '$Password' | sudo -S -p '' systemctl reboot" 2>&1 | Out-Null
   $ErrorActionPreference = 'Stop'
 }
 $health = $null; $ip2 = $null; $deadline = (Get-Date).AddMinutes(15); Start-Sleep 30
@@ -157,7 +157,7 @@ Pass 'console back after a reboot, no wizard' ($health -eq 200) "$ip2 -> $health
 # SSH must come back on its own too: the socket is enabled by the wizard, and a systemd ordering cycle once
 # dropped it from the second boot, which nothing before the reboot could catch.
 $ErrorActionPreference = 'Continue'
-$sshBack = (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$ip2" 'systemctl is-active ssh.socket vulnverdict.service' 2>&1 | ForEach-Object { "$_" }) -join ' '
+$sshBack = (& ssh.exe -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$work\known_hosts" -o ConnectTimeout=15 "vulnverdict@$ip2" 'systemctl is-active ssh.socket vulnverdict.service' 2>&1 | ForEach-Object { "$_" }) -join ' '
 $ErrorActionPreference = 'Stop'
 Pass 'SSH and the stack service are active after the reboot' ($sshBack -match 'active active') $sshBack
 if ($health -ne 200) {
@@ -170,7 +170,7 @@ echo "$Password" | sudo -S -p '' sh -c 'cd /opt/vulnverdict && docker compose ps
   foreach ($cand in @($ip, $ip2) | Select-Object -Unique) {
     "--- ssh diagnostics via $cand"
     $ErrorActionPreference = 'Continue'
-    (& ssh.exe -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=15 "vulnverdict@$cand" $diag 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    (& ssh.exe -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$work\known_hosts" -o ConnectTimeout=15 "vulnverdict@$cand" $diag 2>&1 | ForEach-Object { "$_" }) -join "`n"
     $ErrorActionPreference = 'Stop'
   }
 }
