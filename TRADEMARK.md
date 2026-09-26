@@ -14,4 +14,4 @@ You may not:
 - Offer VulnVerdict as a hosted or managed service under the name without a written agreement.
 - Use the name or logo in a way that suggests endorsement by Ayrshire Pixels.
 
-If you fork and change the software, please rename it. Questions: chris@pless.uk.
+If you fork and change the software, please rename it. Questions: hello@ayrshirepixels.co.uk.

@@ -25,6 +25,6 @@ if [ "${1:-}" = "--dry-run" ]; then git status --short; exit 0; fi
 if [ -z "$(git status --porcelain)" ]; then echo "site is up to date"; exit 0; fi
 git add -A
 src="$(git -C "$here/.." rev-parse --short HEAD 2>/dev/null || echo unknown)"
-git -c user.name="Ayrshire Pixels" -c user.email="chris@pless.uk" commit -q -m "Site as of VulnVerdict $src"
+git -c user.name="Ayrshire Pixels" -c user.email="hello@ayrshirepixels.co.uk" commit -q -m "Site as of VulnVerdict $src"
 git push -q origin HEAD
 echo "published: https://ayrshirepixels.github.io/vulnverdict-site/"

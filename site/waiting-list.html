@@ -75,7 +75,7 @@
       <div class="btns">
         <button class="btn btn-amber" type="submit">Join the waiting list</button>
       </div>
-      <p class="fallback">This opens your mail app with the details filled in, addressed to <code>info@pless.uk</code>. If nothing opens, email that address directly and say you would like to join the waiting list.</p>
+      <p class="fallback">This opens your mail app with the details filled in, addressed to <code>hello@ayrshirepixels.co.uk</code>. If nothing opens, email that address directly and say you would like to join the waiting list.</p>
     </form>
   </div>
 </section>
@@ -84,14 +84,14 @@
   <div class="wrap">
     <div>
       <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span class="word"><em>VULN</em>VERDICT</span></a>
-      <p style="margin-top:10px">Cut the noise. Know your risk.<br>Open source under the AGPL-3.0. An Ayrshire Pixels product. <a href="https://github.com/ayrshirepixels/VulnVerdict">GitHub</a> &middot; <a href="mailto:chris@pless.uk">chris@pless.uk</a></p>
+      <p style="margin-top:10px">Cut the noise. Know your risk.<br>Open source under the AGPL-3.0. An Ayrshire Pixels product. <a href="https://github.com/ayrshirepixels/VulnVerdict">GitHub</a> &middot; <a href="mailto:hello@ayrshirepixels.co.uk">hello@ayrshirepixels.co.uk</a></p>
     </div>
     <p class="attr">VulnVerdict and the logo are trademarks of Ayrshire Pixels. Exploit probability scores are EPSS, provided by FIRST. Exploitation status uses the CISA Known Exploited Vulnerabilities catalogue. CVE data from the CVE Program; CVE is a registered trademark of The MITRE Corporation.</p>
   </div>
 </footer>
 
 <script>
-  // No backend: the visitor's own mail app sends the details to info@pless.uk.
+  // No backend: the visitor's own mail app sends the details to hello@ayrshirepixels.co.uk.
   document.getElementById('wl').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target, v = function (id) { return (f.elements[id].value || '').trim(); };
@@ -105,7 +105,7 @@
       'Network edge: ' + (v('edge') || '-'),
       '', v('notes')
     ];
-    window.location.href = 'mailto:info@pless.uk?subject=' + encodeURIComponent('VulnVerdict waiting list: ' + (v('org') || v('name')))
+    window.location.href = 'mailto:hello@ayrshirepixels.co.uk?subject=' + encodeURIComponent('VulnVerdict waiting list: ' + (v('org') || v('name')))
       + '&body=' + encodeURIComponent(lines.join('\n'));
   });
 </script>
