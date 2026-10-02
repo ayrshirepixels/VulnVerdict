@@ -67,6 +67,8 @@ public sealed class CollectResult
     public HashSet<string> IncompleteSoftware { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>False for adapters that only add to what they saw last time (deltas); true means software not in this run was removed from the source.</summary>
     public bool FullSnapshot { get; set; } = true;
+    /// <summary>A findings read failed part-way: findings not seen this run are kept, not purged as resolved.</summary>
+    public bool FindingsIncomplete { get; set; }
 }
 
 public sealed record TestResult(bool Ok, string Message);

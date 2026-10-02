@@ -66,9 +66,29 @@ public sealed class SbomUrlAdapter : IInventoryAdapter
         if (!string.IsNullOrWhiteSpace(token)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
         using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!resp.IsSuccessStatusCode) throw new HttpRequestException("SBOM URL answered " + (int)resp.StatusCode + " " + resp.ReasonPhrase);
-        if (resp.Content.Headers.ContentLength is > 64 * 1024 * 1024) throw new InvalidOperationException("SBOM is larger than 64 MB.");
-        var json = await resp.Content.ReadAsStringAsync(ct);
+        if (resp.Content.Headers.ContentLength is > MaxBytes) throw new InvalidOperationException("SBOM is larger than 64 MB.");
+        // the header is advisory (absent when chunked, or wrong): the limit is enforced on the bytes actually read
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        var json = await ReadBoundedAsync(stream, MaxBytes, ct);
         _log.LogDebug("Fetched SBOM for {Asset} ({Bytes} bytes)", asset, json.Length);
         return (json, asset);
+    }
+
+    private const int MaxBytes = 64 * 1024 * 1024;
+
+    /// <summary>Reads at most max bytes as UTF-8, throwing as soon as the stream goes past it.</summary>
+    public static async Task<string> ReadBoundedAsync(Stream stream, int max, CancellationToken ct)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int n;
+        while ((n = await stream.ReadAsync(chunk, ct)) > 0)
+        {
+            if (buffer.Length + n > max) throw new InvalidOperationException("SBOM is larger than " + max / (1024 * 1024) + " MB.");
+            buffer.Write(chunk, 0, n);
+        }
+        buffer.Position = 0;
+        using var reader = new StreamReader(buffer, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(ct);
     }
 }

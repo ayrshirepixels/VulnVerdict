@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
+using VulnVerdict.Core.Adapters.Linux;
 
 namespace VulnVerdict.Core.Adapters.Windows;
 
@@ -20,23 +21,30 @@ public sealed class WindowsSshShell : IWindowsShell
         _host = host; _port = port; _user = username; _password = password; _timeout = timeout; _log = log;
     }
 
+    /// <summary>The host as typed in the form: the key of its Known host keys line.</summary>
+    public string? Name { get; init; }
+    /// <summary>Pinned SHA256 fingerprint; without one the host is refused unless AcceptAnyHostKey is set.</summary>
+    public string? ExpectedFingerprint { get; init; }
+    public bool AcceptAnyHostKey { get; init; }
+
     public string Target => _host + ":" + _port + " (ssh)";
 
     public async Task<ShellResult> RunPowerShellAsync(string script, CancellationToken ct)
     {
         var info = new ConnectionInfo(_host, _port, _user, new PasswordAuthenticationMethod(_user, _password)) { Timeout = TimeSpan.FromSeconds(30), Encoding = Encoding.UTF8 };
         using var client = new SshClient(info);
-        client.HostKeyReceived += (_, e) =>
-        {
-            // no host-key store yet: accept and record the fingerprint so an operator can compare it (this is not a credential)
-            _log?.LogInformation("SSH host key for {Host}: {Alg} SHA256:{Fp}", _host, e.HostKeyName, e.FingerPrintSHA256);
-            e.CanTrust = true;
-        };
+        // password authentication: an unpinned key is refused at key exchange, before the password is sent
+        var name = Name ?? _host;
+        var guard = new SshHostKeys.Guard(client, name, ExpectedFingerprint, AcceptAnyHostKey,
+            fp => "add this line to Known host keys: " + SshHostKeys.KnownHostsLine(name, fp));
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
         budget.CancelAfter(_timeout);
         try
         {
-            await client.ConnectAsync(budget.Token);
+            try { await client.ConnectAsync(budget.Token); }
+            catch (Exception ex) when (guard.Explain(ex) is { } why) { throw why; }
+            if (AcceptAnyHostKey && ExpectedFingerprint is null)
+                _log?.LogWarning("SSH host key for {Host} accepted without pinning: SHA256:{Fp}", name, guard.Presented);
             var encoded = WindowsCollectorScript.Encode(script);
             var prefix = "powershell.exe -NoProfile -NonInteractive -OutputFormat Text ";
             var viaStdin = prefix.Length + "-EncodedCommand ".Length + encoded.Length > CmdLineLimit;

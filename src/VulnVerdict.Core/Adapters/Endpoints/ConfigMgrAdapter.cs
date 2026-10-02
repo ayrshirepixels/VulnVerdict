@@ -177,8 +177,11 @@ public sealed class ConfigMgrAdapter : IInventoryAdapter
         var user = EpCreds.Get(creds, "username");
         var password = EpCreds.Secret(creds, "password");
         if (user.Length == 0 || password.Length == 0) throw new InvalidOperationException("User name and password are required");
+        var host = EpCreds.BaseUrl(EpCreds.Get(creds, "host"));
+        if (host.Length == 0) throw new InvalidOperationException("SMS Provider host is required");
+        // Negotiate or NTLM to the SMS Provider only: never answer a Basic challenge with the password
         var handler = new HttpClientHandler { UseDefaultCredentials = false, PreAuthenticate = true, AllowAutoRedirect = false, UseCookies = false,
-            Credentials = WsManClient.ToNetworkCredential(user, password) };
+            Credentials = WsManClient.WindowsAuthOnly(new Uri(host), user, password) };
         if (!EpCreds.Bool(creds, "verifyTls", true)) handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
         return handler;
     }

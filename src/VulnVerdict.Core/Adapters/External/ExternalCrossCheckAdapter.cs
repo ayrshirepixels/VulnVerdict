@@ -127,6 +127,8 @@ public sealed class ExternalCrossCheckAdapter : IInventoryAdapter
                 ct.ThrowIfCancellationRequested();
                 try
                 {
+                    // Shodan only takes the key as a query parameter: the URL is never logged here, the client factory's
+                    // request logging redacts query strings (.NET 9+), and exception text is scrubbed below
                     using var resp = await client.GetAsync("https://api.shodan.io/shodan/host/" + ip + "?key=" + Uri.EscapeDataString(shodanKey), ct);
                     if (resp.StatusCode == HttpStatusCode.NotFound) { }
                     else if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) { result.Warnings.Add("Shodan rejected the API key (" + (int)resp.StatusCode + "); Shodan results skipped."); keyOk = false; }
@@ -135,7 +137,7 @@ public sealed class ExternalCrossCheckAdapter : IInventoryAdapter
                     else result.Warnings.Add("Shodan answered " + (int)resp.StatusCode + " for " + ip + ".");
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                catch (Exception ex) { result.Warnings.Add("Shodan lookup for " + ip + " failed: " + ex.Message); }
+                catch (Exception ex) { result.Warnings.Add("Shodan lookup for " + ip + " failed: " + ScrubKey(ex.Message, shodanKey)); }
                 await Task.Delay(1100, ct);
             }
         }
@@ -190,6 +192,10 @@ public sealed class ExternalCrossCheckAdapter : IInventoryAdapter
 
     private sealed record ShodanService(int Port, string? Product, string? Version);
     private sealed record ShodanHost(List<int> Ports, List<string> Hostnames, List<ShodanService> Services);
+
+    /// <summary>Removes the API key (raw or URL-encoded) from text that may end up in warnings or logs.</summary>
+    public static string ScrubKey(string text, string key) =>
+        key.Length == 0 ? text : text.Replace(Uri.EscapeDataString(key), "***").Replace(key, "***");
 
     private static ShodanHost ParseShodan(string json)
     {

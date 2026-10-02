@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using VulnVerdict.Core.Adapters.Linux;
 using VulnVerdict.Core.Data;
 
 namespace VulnVerdict.Core.Adapters.Windows;
@@ -13,6 +14,11 @@ public sealed record WinRmSettings(string Username, string Password, string Tran
     public bool IsSsh => Transport == "ssh";
     public bool UseTls => Transport == "winrm-https";
     public bool BasicAuth => Authentication == "basic";
+    /// <summary>ssh transport: pinned host keys by host (as typed, or the host part), as in the Linux adapter.</summary>
+    public IReadOnlyDictionary<string, string> KnownHostKeys { get; init; } = new Dictionary<string, string>();
+    public bool AcceptAnyHostKey { get; init; }
+
+    public string? ExpectedFingerprint(HostTarget t) => KnownHostKeys.GetValueOrDefault(t.AsTyped) ?? KnownHostKeys.GetValueOrDefault(t.Host);
 
     public static WinRmSettings From(IReadOnlyDictionary<string, string> c)
     {
@@ -25,7 +31,11 @@ public sealed record WinRmSettings(string Username, string Password, string Tran
         if (auth is not ("basic" or "negotiate")) throw new ArgumentException("Authentication must be basic or negotiate (got '" + auth + "').");
         var verify = ParseBool(c.GetValueOrDefault("verifyTls"), true);
         var timeout = int.TryParse(c.GetValueOrDefault("timeoutSeconds"), out var t) && t > 0 ? t : 120;
-        return new WinRmSettings((c.GetValueOrDefault("username") ?? "").Trim(), c.GetValueOrDefault("password") ?? "", transport, auth, verify, TimeSpan.FromSeconds(timeout));
+        return new WinRmSettings((c.GetValueOrDefault("username") ?? "").Trim(), c.GetValueOrDefault("password") ?? "", transport, auth, verify, TimeSpan.FromSeconds(timeout))
+        {
+            KnownHostKeys = SshLinuxAdapter.KnownHostKeys(c.GetValueOrDefault("knownHostKeys") ?? ""),
+            AcceptAnyHostKey = ParseBool(c.GetValueOrDefault("acceptAny"), false),
+        };
     }
 
     private static bool ParseBool(string? s, bool dflt) => string.IsNullOrWhiteSpace(s) ? dflt : s.Trim().ToLowerInvariant() is "true" or "1" or "yes" or "on";
@@ -63,6 +73,8 @@ public sealed class WinRmAdapter : IInventoryAdapter
             new CredentialField("transport", "Transport", CredentialTypes.Text, "winrm-https (default) | winrm-http | ssh. winrm-http only works when the listener has AllowUnencrypted set; keep it for lab use.", Required: false, Default: "winrm-https"),
             new CredentialField("authentication", "Authentication", CredentialTypes.Text, "negotiate (default; NTLM or Kerberos) | basic (only over winrm-https; needs Basic enabled on the listener and a local account).", Required: false, Default: "negotiate"),
             new CredentialField("verifyTls", "Verify TLS certificate", CredentialTypes.Bool, "Turn off only for self-signed WinRM listeners; the connection is still encrypted but not authenticated.", Required: false, Default: "true"),
+            new CredentialField("knownHostKeys", "Known host keys (ssh)", CredentialTypes.TextArea, "ssh transport only. One per line: host SHA256:fingerprint. Test connection prints the lines to paste; a host is not connected to until its line is here.", Required: false),
+            new CredentialField("acceptAny", "Accept any host key (ssh)", CredentialTypes.Bool, "Off (recommended). On sends the password to whatever answers on the SSH port, without checking its host key.", Required: false, Default: "false"),
             new CredentialField("timeoutSeconds", "Timeout per host (seconds)", CredentialTypes.Number, "The collector normally finishes in 5 to 30 seconds; Get-WindowsFeature on a busy server can take longer.", Required: false, Default: "120"),
         },
         MinimumPermission: "Local Administrators is NOT needed: a member of the 'Remote Management Users' group plus read access to the registry Uninstall keys and WMI (Get-HotFix needs local admin on some builds; if it fails the collector continues without hotfixes). Get-WindowsFeature, Get-SmbServerConfiguration and Hyper-V's Get-VM may also need more than the default rights; each is optional. The account needs no write permission anywhere.",
@@ -103,7 +115,10 @@ public sealed class WinRmAdapter : IInventoryAdapter
 
     private IWindowsShell DefaultShell(HostTarget target, WinRmSettings s)
     {
-        if (s.IsSsh) return new WindowsSshShell(target.Host, target.Port ?? 22, s.Username, s.Password, s.Timeout, _log);
+        if (s.IsSsh) return new WindowsSshShell(target.Host, target.Port ?? 22, s.Username, s.Password, s.Timeout, _log)
+        {
+            Name = target.AsTyped, ExpectedFingerprint = s.ExpectedFingerprint(target), AcceptAnyHostKey = s.AcceptAnyHostKey,
+        };
         return new WsManClient(new WsManOptions
         {
             Host = target.Host, Port = target.Port, UseTls = s.UseTls, VerifyTls = s.VerifyTls,
@@ -121,6 +136,7 @@ public sealed class WinRmAdapter : IInventoryAdapter
             var hosts = ParseHosts(credentials.GetValueOrDefault("hosts"));
             if (hosts.Count == 0) return new TestResult(false, "Enter at least one host.");
             if (settings.Username.Length == 0) return new TestResult(false, "Enter a username.");
+            if (settings.IsSsh) return await TestSshAsync(hosts, settings, ct);
             var target = hosts[0];
             using var shell = ShellFactory(target, settings);
             var r = await shell.RunPowerShellAsync("$ProgressPreference='SilentlyContinue'; [Console]::Out.Write($PSVersionTable.PSVersion.ToString())", ct);
@@ -134,6 +150,38 @@ public sealed class WinRmAdapter : IInventoryAdapter
         {
             return new TestResult(false, ex.Message);
         }
+    }
+
+    /// <summary>Every ssh host is tried, so the host keys still to pin are all printed in one go.</summary>
+    private async Task<TestResult> TestSshAsync(List<HostTarget> hosts, WinRmSettings settings, CancellationToken ct)
+    {
+        var lines = new List<string>(); var toPin = new List<string>(); var failures = 0;
+        foreach (var target in hosts)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                using var shell = ShellFactory(target, settings);
+                var r = await shell.RunPowerShellAsync("$ProgressPreference='SilentlyContinue'; [Console]::Out.Write($PSVersionTable.PSVersion.ToString())", ct);
+                var version = r.Stdout.Trim();
+                if (r.ExitCode != 0 || version.Length == 0) { failures++; lines.Add(target.AsTyped + ": connected but PowerShell did not answer (exit " + r.ExitCode + "). " + Trim(r.Stderr, 300)); }
+                else lines.Add(target.AsTyped + ": PowerShell " + version);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (HostKeyNotPinnedException ex)
+            {
+                failures++;
+                lines.Add(target.AsTyped + ": host key not pinned yet, so the password was not sent");
+                toPin.Add(SshHostKeys.KnownHostsLine(target.AsTyped, ex.Fingerprint));
+            }
+            catch (Exception ex) { failures++; lines.Add(target.AsTyped + ": " + ex.Message); }
+        }
+        if (toPin.Count > 0)
+        {
+            lines.Add("Host keys seen for the first time. Check each against the server (Get-ChildItem C:\\ProgramData\\ssh\\ssh_host_*_key.pub | % { ssh-keygen -lf $_ }), then paste these lines into Known host keys and test again:");
+            lines.AddRange(toPin);
+        }
+        return new TestResult(failures == 0, string.Join("\n", lines));
     }
 
     public async Task<CollectResult> CollectAsync(IReadOnlyDictionary<string, string> credentials, DateTime? since, IProgress<string>? progress, CancellationToken ct)

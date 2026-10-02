@@ -94,7 +94,9 @@ public sealed class FortiClientEmsAdapter : IInventoryAdapter
         var endpoints = await PageAsync(get, EndpointsPath, "", "endpoints", ct);
         _log.LogInformation("EMS returned {Count} endpoints", endpoints.Count);
 
-        var n = 0;
+        // 404 for one endpoint (deregistered mid-run) skips only that endpoint; 403 means the role cannot read that
+        // endpoint type at all, so stop asking for it but still report every asset
+        var n = 0; var softwareRefused = false; var vulnsRefused = false;
         foreach (var e in endpoints)
         {
             ct.ThrowIfCancellationRequested();
@@ -108,17 +110,27 @@ public sealed class FortiClientEmsAdapter : IInventoryAdapter
             progress?.Report("Endpoint " + n + "/" + endpoints.Count + ": " + asset.DisplayName);
 
             var idQuery = "device_id=" + Uri.EscapeDataString(asset.ExternalId);
-            try
+            if (softwareRefused) result.IncompleteSoftware.Add(asset.ExternalId);
+            else
             {
-                foreach (var s in await PageAsync(get, SoftwarePath, idQuery, "software", ct))
+                try
                 {
-                    var rec = MapSoftware(asset.ExternalId, s);
-                    if (rec is not null) result.Software.Add(rec);
+                    foreach (var s in await PageAsync(get, SoftwarePath, idQuery, "software", ct))
+                    {
+                        var rec = MapSoftware(asset.ExternalId, s);
+                        if (rec is not null) result.Software.Add(rec);
+                    }
                 }
+                catch (FortinetApiException ex)
+                {
+                    Warn(result, "software inventory", asset.DisplayName, ex);
+                    result.IncompleteSoftware.Add(asset.ExternalId);
+                    if (ex.Status == 403) softwareRefused = true;
+                }
+                catch (JsonException ex) { Warn(result, "software inventory", asset.DisplayName, ex); result.IncompleteSoftware.Add(asset.ExternalId); }
             }
-            catch (FortinetApiException ex) { Warn(result, "software inventory", asset.DisplayName, ex); if (ex.Status is 404 or 403) break; }
-            catch (JsonException ex) { Warn(result, "software inventory", asset.DisplayName, ex); }
 
+            if (vulnsRefused) continue;
             try
             {
                 foreach (var v in await PageAsync(get, VulnerabilitiesPath, idQuery, "vulnerabilities", ct))
@@ -127,8 +139,13 @@ public sealed class FortiClientEmsAdapter : IInventoryAdapter
                     if (rec is not null) result.Findings.Add(rec);
                 }
             }
-            catch (FortinetApiException ex) { Warn(result, "vulnerabilities", asset.DisplayName, ex); if (ex.Status is 404 or 403) break; }
-            catch (JsonException ex) { Warn(result, "vulnerabilities", asset.DisplayName, ex); }
+            catch (FortinetApiException ex)
+            {
+                Warn(result, "vulnerabilities", asset.DisplayName, ex);
+                result.FindingsIncomplete = true;
+                if (ex.Status == 403) vulnsRefused = true;
+            }
+            catch (JsonException ex) { Warn(result, "vulnerabilities", asset.DisplayName, ex); result.FindingsIncomplete = true; }
         }
         return result;
     }

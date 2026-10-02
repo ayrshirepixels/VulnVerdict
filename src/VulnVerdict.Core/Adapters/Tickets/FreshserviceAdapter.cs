@@ -74,7 +74,8 @@ public sealed class FreshserviceAdapter : TicketAdapterBase
         var found = await SendJsonAsync(client, JsonRequest(HttpMethod.Get, c.Api("tickets/filter?query=" + Uri.EscapeDataString(query))), ct);
         if (found?["tickets"] is JsonArray tickets)
         {
-            var open = tickets.FirstOrDefault(t => Int(t?["status"]) is 2 or 3);
+            // 4 resolved and 5 closed are the only built-in done states; open, pending and any custom status count as open
+            var open = tickets.FirstOrDefault(t => Int(t?["status"]) is { } st && st is not (4 or 5));
             if (open is not null && Str(open["id"]) is { Length: > 0 } existing)
             {
                 Log.LogInformation("Freshservice ticket {Id} already open for {Correlation}", existing, request.CorrelationKey);

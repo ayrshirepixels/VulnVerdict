@@ -69,12 +69,14 @@ public sealed class NinjaOneAdapter : IInventoryAdapter
         progress?.Report("Listing devices");
         var devices = new List<JsonElement>();
         long? after = null;
-        while (devices.Count < 500_000)
+        // keyset paging on the last id: a short page is not proof of the end (the API may cap pageSize lower), an empty one is
+        while (true)
         {
+            if (devices.Count >= 500_000) { result.Warnings.Add("The device list stopped at 500,000 devices; the rest were not read."); break; }
             var page = EpJson.Items(await api.GetJsonAsync(DevicesPath(after), ct));
             devices.AddRange(page);
             var last = page.Count > 0 ? EpJson.Int(page[^1], "id") : null;
-            if (page.Count < DevicePageSize || last is null || last == after) break;
+            if (page.Count == 0 || last is null || last == after) break;
             after = last;
         }
 
@@ -93,7 +95,7 @@ public sealed class NinjaOneAdapter : IInventoryAdapter
 
         progress?.Report("Reading installed software");
         var software = new List<SoftwareRecord>();
-        string? cursor = null;
+        string? cursor = null; var complete = false;
         for (var pages = 0; pages < 10_000; pages++)
         {
             var root = await api.GetJsonAsync(SoftwarePath(cursor), ct);
@@ -103,12 +105,21 @@ public sealed class NinjaOneAdapter : IInventoryAdapter
                 var rec = MapSoftware(r);
                 if (rec is not null && kept.Contains(rec.AssetExternalId)) software.Add(rec);
             }
+            // follow the cursor until it stops or a page comes back empty; a short page alone is not the end
             var nextCursor = EpJson.Str(root, "cursor.name");
-            if (rows.Count < SoftwarePageSize || nextCursor is null || nextCursor == cursor) break;
+            if (rows.Count == 0 || nextCursor is null || nextCursor == cursor) { complete = true; break; }
             cursor = nextCursor;
         }
         EndpointNaming.UniqueIds(software);
         result.Software.AddRange(software);
+        if (!complete)
+        {
+            result.Warnings.Add("The software query stopped after 10,000 pages; no software is marked removed this run.");
+            result.IncompleteSoftware.UnionWith(kept);
+        }
+        // a device with only its OS row has no inventory yet (or it was not readable): nothing on it is "uninstalled"
+        var withApps = software.Select(r => r.AssetExternalId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in kept) if (!withApps.Contains(id)) result.IncompleteSoftware.Add(id);
 
         if (stale > 0) result.Warnings.Add(stale + " device(s) not in contact for " + EndpointNaming.StaleDays + " days were left out.");
         if (noPatchLevel > 0) result.Warnings.Add(noPatchLevel + " Windows device(s): NinjaOne does not report the update revision, so their OS CVEs are assessed only where another connector (WinRM, Intune, Defender, ConfigMgr) sees them.");
