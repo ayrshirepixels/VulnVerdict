@@ -85,6 +85,7 @@ public sealed class WorkerService : BackgroundService
         await StepAsync("daily digest", () => DailyDigestIfDueAsync(ct), ct);
         await StepAsync("weekly report", () => WeeklyReportIfDueAsync(ct), ct);
         await StepAsync("feed health alert", () => FeedHealthAlertAsync(ct), ct);
+        await StepAsync("backup and SLA snapshot", () => OperationsJobs.RunAsync(_sp, _log, ct), ct);
         await StepAsync("telemetry", async () =>
         {
             using var scope = _sp.CreateScope();
@@ -185,6 +186,7 @@ public sealed class WorkerService : BackgroundService
             {
                 status.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 status.Progress = null;
+                MetricCounters.Add(MetricCounters.FeedFailures, feed.Name);
                 _log.LogError(ex, "Feed {Feed} failed", feed.Name);
             }
             finally

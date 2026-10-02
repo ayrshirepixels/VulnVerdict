@@ -23,8 +23,10 @@ exec_as_user() {
   HOME="$(getent passwd "$u" | cut -d: -f6)" exec setpriv --reuid="$u" --regid="$u" --init-groups -- "$@"
 }
 
-mkdir -p "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
+mkdir -p "$DATA/keys" "$DATA/caddy" "$DATA/cvelist" "$DATA/backups"
 chown -R vulnverdict:vulnverdict "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
+# not recursive and not fatal: the backups folder may be a mounted share with its own ownership
+{ chown vulnverdict:vulnverdict "$DATA/backups" && chmod 700 "$DATA/backups"; } 2>/dev/null || log "Could not set the owner of $DATA/backups; backups need it writable by uid $(id -u vulnverdict)"
 
 # ---------------------------------------------------------------- database
 case "${VV_DB:-embedded}" in

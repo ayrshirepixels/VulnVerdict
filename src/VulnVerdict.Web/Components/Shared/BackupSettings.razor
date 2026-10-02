@@ -1,0 +1,144 @@
+@inject BackupService Backups
+@inject SettingsService SettingsSvc
+
+@* Backups card on the Settings page. Saves on its own buttons: these values are not part of the Settings form above. *@
+<div class="card">
+    <h2>Backups</h2>
+    <p class="muted" style="margin-top:0">Every night the worker writes the database and the data-protection keys to the <code>backups</code> folder in the data volume, checks the result and removes the oldest. A backup and its keys together open every stored credential, so keep that folder somewhere only administrators can read, and off this machine (<a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/backup.md" target="_blank" rel="noopener noreferrer">how, and how to restore</a>).</p>
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+    @if (_o is null) { <p class="muted">Loading...</p> }
+    else
+    {
+        @if (_health is not null)
+        {
+            <div class="alert @(_health.State switch { BackupHealthState.Ok => "alert-ok", BackupHealthState.Failed or BackupHealthState.Stale => "alert-error", _ => "alert-info" })">@_health.Text</div>
+        }
+        <div class="form">
+            <label class="check"><input type="checkbox" @bind="_o.Enabled" /> Back up every night</label>
+            <div class="row-3">
+                <div><label>At (local time)</label><input type="text" @bind="_o.Time" placeholder="02:30" /><div class="help">In the time zone set under Digest.</div></div>
+                <div><label>Keep daily backups</label><input type="number" min="1" @bind="_o.KeepDaily" /></div>
+                <div><label>Keep weekly backups</label><input type="number" min="0" @bind="_o.KeepWeekly" /><div class="help">The newest backup of each week, beyond the daily ones.</div></div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-secondary" @onclick="Save" disabled="@_busy">Save backup settings</button>
+                <button class="btn btn-secondary" @onclick="BackUpNow" disabled="@_busy">@(_running ? "Backing up..." : "Back up now")</button>
+            </div>
+            <div class="row">
+                <div><label>Archive passphrase (optional)</label><input type="password" @bind="_passphrase" autocomplete="new-password" placeholder="@(_o.Encrypt ? "saved - leave blank to keep" : "")" /><div class="help">With a passphrase, each archive is encrypted (AES-256-GCM, key derived with PBKDF2). Keep the passphrase somewhere other than this console: a restore needs it, and it cannot be read back from here.</div></div>
+                <div class="btn-row" style="align-self:center">
+                    <button class="btn btn-secondary" @onclick="SetPassphrase" disabled="@(_busy || string.IsNullOrEmpty(_passphrase))">@(_o.Encrypt ? "Change passphrase" : "Encrypt backups")</button>
+                    @if (_o.Encrypt) { <button class="btn btn-secondary" @onclick="RemovePassphrase" disabled="@_busy">Stop encrypting</button> }
+                </div>
+            </div>
+        </div>
+        @if (_history.Count > 0)
+        {
+            <table class="table" style="margin-top:12px">
+                <thead><tr><th>When</th><th>Result</th><th>Size</th><th>Took</th><th>File</th></tr></thead>
+                <tbody>
+                    @foreach (var r in _history.Take(8))
+                    {
+                        <tr>
+                            <td>@Ui.Local(r.At, _tz) <small class="muted">@r.Kind</small></td>
+                            <td>@if (r.Ok) { <span class="state state-closed">ok</span> } else { <span>failed: @r.Error</span> }</td>
+                            <td class="num">@(r.Ok ? Size(r.Bytes) : "")</td>
+                            <td class="num">@r.Seconds.ToString("0.#") s</td>
+                            <td><small>@r.File</small></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="muted" style="margin:8px 0 0">@_files backup@(_files == 1 ? "" : "s") in the folder, @Size(_bytes) in all.</p>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private BackupOptions? _o;
+    private BackupHealth? _health;
+    private List<BackupResult> _history = new();
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+    private string? _passphrase, _notice, _error;
+    private bool _busy, _running;
+    private int _files;
+    private long _bytes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tz = (await SettingsSvc.LoadAsync()).ResolveTimeZone();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _o = await Backups.LoadOptionsAsync();
+        _health = await Backups.HealthAsync();
+        _history = await Backups.HistoryAsync();
+        var files = Backups.List();
+        _files = files.Count; _bytes = files.Sum(f => f.Bytes);
+    }
+
+    private static string Size(long bytes) => bytes >= 1 << 30 ? (bytes / 1073741824.0).ToString("0.##") + " GB" : bytes >= 1 << 20 ? (bytes / 1048576.0).ToString("0.#") + " MB" : Math.Max(bytes / 1024, 1) + " KB";
+
+    private async Task Save()
+    {
+        if (_o is null || !await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            await Backups.SaveOptionsAsync(_o, Ui.Actor((await AuthState).User));
+            await LoadAsync();
+            _notice = "Backup settings saved.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task BackUpNow()
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _running = true; _error = null; _notice = null;
+        StateHasChanged();
+        try
+        {
+            var r = await Backups.RunAsync("manual", Ui.Actor((await AuthState).User));
+            if (r.Ok) _notice = "Backup written: " + r.File + " (" + Size(r.Bytes) + ")."; else _error = "The backup failed: " + r.Error;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false; _running = false;
+    }
+
+    private async Task SetPassphrase()
+    {
+        if (string.IsNullOrEmpty(_passphrase) || !await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            await Backups.SetPassphraseAsync(_passphrase, Ui.Actor((await AuthState).User));
+            _passphrase = null;
+            await LoadAsync();
+            _notice = "Passphrase saved. Backups from now on are encrypted; earlier ones stay as they are.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task RemovePassphrase()
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            await Backups.SetPassphraseAsync(null, Ui.Actor((await AuthState).User));
+            _passphrase = null;
+            await LoadAsync();
+            _notice = "Passphrase removed. Backups from now on are not encrypted; the encrypted ones still need the old passphrase.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+}

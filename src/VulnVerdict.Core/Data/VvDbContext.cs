@@ -38,6 +38,8 @@ public class VvDbContext : DbContext
     public DbSet<BundleState> Bundles => Set<BundleState>();
     public DbSet<Advisory> Advisories => Set<Advisory>();
     public DbSet<OfficeRelease> OfficeReleases => Set<OfficeRelease>();
+    public DbSet<MetricCounter> MetricCounters => Set<MetricCounter>();
+    public DbSet<SlaSnapshot> SlaSnapshots => Set<SlaSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -110,6 +112,8 @@ public class VvDbContext : DbContext
         b.Entity<BundleState>(e => e.HasKey(x => x.Id));
         b.Entity<Advisory>(e => { e.HasIndex(x => new { x.Vendor, x.AdvisoryId }).IsUnique(); e.HasIndex(x => x.Updated); });
         b.Entity<OfficeRelease>(e => e.HasIndex(x => new { x.Build, x.Released }));
+        b.Entity<MetricCounter>(e => e.HasKey(x => new { x.Name, x.Label }));
+        b.Entity<SlaSnapshot>(e => e.HasIndex(x => new { x.Day, x.Tier }).IsUnique());
     }
 }
 

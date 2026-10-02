@@ -46,3 +46,16 @@ Done, snooze (until a date), accept risk (owner, reason, expiry), suppress (a CV
 ## Weekly report
 
 For the person who asks "are we affected by the thing on the news": new CVEs published, how many concerned what you run, how many needed action, done, open, overdue, dismissed. Printable HTML and CSV under Reports, emailed on the configured day.
+
+### Fix times and trends
+
+The same page, and the weekly email as a table, show how the fixing is going week by week (Monday to Sunday in the console's time zone):
+
+- **time to fix** per tier, median and 90th percentile, from when a verdict opened (or re-opened) to when it closed;
+- **closed inside the fix window**, as a share of what closed that week. The window restarts when a verdict is promoted or re-opens, as its due date does;
+- **opened and closed** per week, and **open and overdue** at the end of each week;
+- **accepted risk**: how many, and which expire in the next 30 days;
+- **coverage**: the share of assets a connector has seen in the last 7 days, per connector;
+- the **products with the most open verdicts**.
+
+Closures and openings are read from each verdict's history. Open and overdue over time come from a count the worker records daily; weeks from before that count existed are rebuilt from the history and marked with an asterisk (close, but verdicts deleted since are missing). A verdict closed because its CVE stopped matching is not counted as a fix. **One-page summary to print** is a single A4 page for an owner or an auditor; **Download the numbers** is every figure behind the charts as CSV.

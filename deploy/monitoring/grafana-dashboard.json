@@ -1,0 +1,140 @@
+{
+  "title": "VulnVerdict",
+  "uid": "vulnverdict-console",
+  "description": "Starter dashboard for a VulnVerdict console's /metrics endpoint (docs/metrics.md).",
+  "tags": ["vulnverdict"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-30d", "to": "now" },
+  "refresh": "5m",
+  "templating": {
+    "list": [
+      { "name": "datasource", "label": "Data source", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0 },
+      { "name": "job", "label": "Job", "type": "query", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "query": "label_values(vulnverdict_build_info, job)", "refresh": 1, "includeAll": false, "multi": false, "current": {} }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Fix today, open", "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_verdicts{job=\"$job\", tier=\"fix_today\", state=\"open\"}" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Overdue", "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "sum(vulnverdict_verdicts_overdue{job=\"$job\"})" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Worker", "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_worker_up{job=\"$job\"}" }],
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "Stopped", "color": "red" }, "1": { "text": "Running", "color": "green" } } }] }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Feeds overdue", "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "sum(vulnverdict_feed_overdue{job=\"$job\"})" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 5, "type": "stat", "title": "Last good backup", "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_backup_age_seconds{job=\"$job\"}" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 129600 }, { "color": "red", "value": 172800 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 6, "type": "stat", "title": "Version", "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_build_info{job=\"$job\"}", "legendFormat": "{{version}}" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "name", "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Open verdicts by tier", "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_verdicts{job=\"$job\", state=\"open\", tier=~\"fix_today|fix_this_week|next_patch_cycle\"}", "legendFormat": "{{tier}}" }],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] }
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Overdue by tier", "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_verdicts_overdue{job=\"$job\"}", "legendFormat": "{{tier}}" }],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] }
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Opened and closed per day", "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "increase(vulnverdict_verdicts_opened_total{job=\"$job\"}[1d])", "legendFormat": "opened" },
+        { "refId": "B", "expr": "increase(vulnverdict_verdicts_closed_total{job=\"$job\"}[1d])", "legendFormat": "closed" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60 } }, "overrides": [] }
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Mean time to fix (last 90 days), by tier", "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_time_to_fix_mean_seconds{job=\"$job\"}", "legendFormat": "{{tier}}" }],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 20, "type": "timeseries", "title": "Feed age", "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_feed_age_seconds{job=\"$job\"}", "legendFormat": "{{feed}}" }],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "lineWidth": 1 } }, "overrides": [] }
+    },
+    {
+      "id": 21, "type": "table", "title": "Connectors", "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "time() - vulnverdict_connector_last_success_timestamp_seconds{job=\"$job\"}", "format": "table", "instant": true },
+        { "refId": "B", "expr": "vulnverdict_connector_assets{job=\"$job\"}", "format": "table", "instant": true },
+        { "refId": "C", "expr": "vulnverdict_connector_consecutive_failures{job=\"$job\"}", "format": "table", "instant": true },
+        { "refId": "D", "expr": "vulnverdict_connector_last_run_partial{job=\"$job\"}", "format": "table", "instant": true }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true }, "renameByName": { "Value #A": "Since last success", "Value #B": "Assets", "Value #C": "Failures in a row", "Value #D": "Partial" } } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [{ "matcher": { "id": "byName", "options": "Since last success" }, "properties": [{ "id": "unit", "value": "s" }] }] }
+    },
+    {
+      "id": 30, "type": "timeseries", "title": "Outbound mail, tickets and webhooks per day", "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "increase(vulnverdict_mail_sent_total{job=\"$job\"}[1d])", "legendFormat": "mail sent" },
+        { "refId": "B", "expr": "increase(vulnverdict_mail_failed_total{job=\"$job\"}[1d])", "legendFormat": "mail failed" },
+        { "refId": "C", "expr": "increase(vulnverdict_tickets_raised_total{job=\"$job\"}[1d])", "legendFormat": "tickets raised" },
+        { "refId": "D", "expr": "increase(vulnverdict_tickets_failed_total{job=\"$job\"}[1d])", "legendFormat": "tickets failed" },
+        { "refId": "E", "expr": "sum by (result) (increase(vulnverdict_webhook_deliveries_total{job=\"$job\"}[1d]))", "legendFormat": "webhooks {{result}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "lineWidth": 1 } }, "overrides": [] }
+    },
+    {
+      "id": 31, "type": "timeseries", "title": "Evaluation: duration and subjects that failed", "gridPos": { "x": 12, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_evaluation_duration_seconds{job=\"$job\"}", "legendFormat": "seconds" }],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 32, "type": "timeseries", "title": "Backup size", "gridPos": { "x": 18, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "vulnverdict_backup_size_bytes{job=\"$job\"}", "legendFormat": "archive" }],
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 40, "type": "bargauge", "title": "Products with the most open verdicts", "gridPos": { "x": 0, "y": 36, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "refId": "A", "expr": "sort_desc(vulnverdict_product_open_verdicts{job=\"$job\"})", "legendFormat": "{{product}}", "instant": true }],
+      "fieldConfig": { "defaults": { "min": 0 }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "basic", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    }
+  ]
+}

@@ -31,6 +31,8 @@ services:
       Worker__DataDir: /data
     volumes:
       - data:/data
+      # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
+      - ${VV_BACKUP_DIR:-backups}:/data/backups
     expose:
       - "8080"
 
@@ -49,6 +51,8 @@ services:
       Worker__CveMinYear: ${CVE_MIN_YEAR:-0}
     volumes:
       - data:/data
+      # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
+      - ${VV_BACKUP_DIR:-backups}:/data/backups
 
   proxy:
     # Caddy built with the current Go release (deploy/images/proxy.Dockerfile); caddy:2-alpine also works
@@ -69,5 +73,6 @@ services:
 volumes:
   db:
   data:
+  backups:
   caddy_data:
   caddy_config:

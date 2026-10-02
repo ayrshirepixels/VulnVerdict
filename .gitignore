@@ -11,3 +11,7 @@ src/VulnVerdict.Web/data/
 
 # Deployment secrets
 deploy/.env
+# written by update.sh: pre-update database dumps and what to roll back to
+deploy/backups/
+deploy/.rollback-state
+deploy/.update.lock/

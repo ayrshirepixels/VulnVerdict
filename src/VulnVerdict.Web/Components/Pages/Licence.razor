@@ -213,7 +213,7 @@
         _busy = true; _uploading = true; _error = null; _notice = null;
         try
         {
-            await using var stream = _file.OpenReadStream(maxAllowedSize: 4L << 30);
+            await using var stream = _file.OpenReadStream(maxAllowedSize: BundleService.MaxZipBytes);
             var r = await Bundles.ApplyUploadedAsync(stream, await ActorAsync(), CancellationToken.None);
             await LoadAsync();
             if (r.Outcome == BundleOutcome.Applied) _notice = r.Reason;

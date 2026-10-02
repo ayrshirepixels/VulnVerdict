@@ -9,12 +9,14 @@ The console holds a map of your weakest points. It is a target, and it is built 
 - Every state change is written to the audit log with actor, time and before/after. The last administrator cannot be deleted or demoted.
 - Login is rate limited; sessions are cookie-based, HttpOnly, SameSite=Lax, 12 hours sliding. Each account has a security stamp that changes when it is deleted, its role changes or its password is reset: its cookies stop working on the next request and open console tabs lose access within five minutes. Signing out is a POST with an antiforgery token.
 - The API has a read-only token and a read-write token (imports). Only their SHA-256 hashes are stored, compared in constant time; a token is shown once when generated. Every API write is in the audit log.
+- `/metrics` (Prometheus) is off by default and never anonymous: once an administrator turns it on it needs its own metrics token, stored and compared the same way and good for nothing else, or a scraper address on the allow-list. While it is off it answers 404. Its labels carry no asset names, hostnames, addresses or CVE identifiers (see [metrics](metrics.md)).
 
 ## Secrets
 
 - Connector credentials, mail passwords, API keys, the webhook secret, the MSP token and the licence key are encrypted with ASP.NET Data Protection before they reach the database. The key ring lives in the `data` volume; keep it on an encrypted disk and back it up with the database.
 - Saved secrets are never sent back to the browser: the forms show that one is saved, and a blank field keeps it. A blank connector password is only reused while the connector's address, account and TLS setting are unchanged, so a changed address cannot be tested with the saved password.
 - Credentials never appear in configuration files or logs. Every adapter uses read-only accounts and never writes to the source.
+- A backup holds the database and the key ring, because one is useless without the other: together they open every stored credential. The backups folder is created for the console's user only; put it on storage only administrators can read, and set an archive passphrase (AES-256-GCM, key derived with PBKDF2-HMAC-SHA256) if the backups leave the machine. Backups, the passphrase and restores are administrator-only and audited. See [backup](backup.md).
 
 ## Network
 
@@ -27,7 +29,7 @@ Content Security Policy (scripts only from the console itself, no inline scripts
 
 ## Feed bundles and licences
 
-The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
+The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. An uploaded bundle is checked before it is unpacked: the manifest is read and its signature verified first, then only the files the signed manifest lists are extracted, each stopped at its signed size and hashed as it is written. A zip that holds anything else, a file larger than its signed size (a zip bomb) or an upload over 2 GB is refused. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
 
 ## Supply chain
 
@@ -35,7 +37,7 @@ Every push and release checks the NuGet packages, direct and transitive, for kno
 
 Nothing runs as root inside the containers. Postgres and the console run as their own users; Caddy runs as the console user with only the capability to bind 443. The Compose database image is Postgres 16 without gosu, running as postgres from the start, and the proxy image is Caddy compiled with the current Go release and dependencies, because the published Postgres and Caddy images can lag behind Go security fixes.
 
-Image updates are opt-in with a changelog and a one-command rollback; `deploy/update.sh` moves the database and proxy images along with the console.
+Image updates are opt-in with a changelog. `deploy/update.sh` moves the database and proxy images along with the console, takes and verifies a database dump before the new version starts (no dump, no update), and puts all four images and, if the schema moved, the database back by itself when the new version does not come up; `deploy/rollback.sh` does the same by hand.
 
 ## Reporting a vulnerability in VulnVerdict
 

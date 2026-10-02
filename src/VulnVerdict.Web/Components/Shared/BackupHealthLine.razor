@@ -1,0 +1,15 @@
+@inject BackupService Backups
+
+@* One line for the Worker card on the Sources page: when the last backup ran and whether it worked. *@
+<dt>Backup</dt>
+<dd style="@(_health?.Alarm == true ? "color:var(--today, #b3261e)" : "")">@(_health?.Text ?? "...")</dd>
+
+@code {
+    private BackupHealth? _health;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _health = await Backups.HealthAsync(); }
+        catch { }   // a health line must never take the page down
+    }
+}

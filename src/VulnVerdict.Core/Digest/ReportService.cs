@@ -42,6 +42,8 @@ public sealed class ReportService
         public List<Row> NewActionableRows { get; init; } = new();
         public string Html { get; init; } = "";
         public string Csv { get; init; } = "";
+        /// <summary>SLA trends for the eight weeks up to the report date. Null if they could not be built.</summary>
+        public SlaReport? Sla { get; init; }
     }
 
     public async Task<WeeklyReport> BuildAsync(DateTime? toUtc = null, CancellationToken ct = default)
@@ -79,13 +81,16 @@ public sealed class ReportService
             OpenRows = open.Where(v => v.Tier >= VerdictTier.FixThisWeek).OrderByDescending(v => v.Tier).ThenBy(v => v.SlaDue).Select(R).ToList(),
             NewActionableRows = created.Where(v => v.Tier >= VerdictTier.FixThisWeek).OrderByDescending(v => v.Tier).Select(R).ToList()
         };
-        var html = RenderHtml(report, tz);
+        SlaReport? sla = null;
+        try { sla = await new SlaReportService(_factory, _settings).BuildAsync(8, to, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogWarning(ex, "SLA trends left out of the weekly report"); }
+        var html = RenderHtml(report, tz, sla);
         var csv = RenderCsv(report);
         return new WeeklyReport
         {
             From = report.From, To = report.To, Organisation = report.Organisation, NewCves = report.NewCves, NewMatched = report.NewMatched, NewActionable = report.NewActionable,
             Actioned = report.Actioned, OpenActionable = report.OpenActionable, Overdue = report.Overdue, Dismissed = report.Dismissed, Assets = report.Assets, Products = report.Products,
-            ActionedRows = report.ActionedRows, OverdueRows = report.OverdueRows, OpenRows = report.OpenRows, NewActionableRows = report.NewActionableRows, Html = html, Csv = csv
+            ActionedRows = report.ActionedRows, OverdueRows = report.OverdueRows, OpenRows = report.OpenRows, NewActionableRows = report.NewActionableRows, Html = html, Csv = csv, Sla = sla
         };
     }
 
@@ -104,14 +109,14 @@ public sealed class ReportService
         var recipients = s.ReportRecipients.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         try
         {
-            await _email.SendAsync(recipients, "VulnVerdict weekly report" + (r.Organisation == "" ? "" : " for " + r.Organisation) + ": " + r.NewActionable + " new to act on, " + r.Actioned + " done, " + r.Overdue + " overdue", r.Html, RenderText(r), ct);
+            await _email.SendAsync(recipients, "VulnVerdict weekly report" + (r.Organisation == "" ? "" : " for " + r.Organisation) + ": " + r.NewActionable + " new to act on, " + r.Actioned + " done, " + r.Overdue + " overdue", r.Html, RenderText(r) + (r.Sla is null ? "" : "\n" + SlaReportRenderer.WeeklySectionText(r.Sla)), ct);
             await _settings.SetStateAsync("state:report:last", DateTime.UtcNow.ToString("O"), ct);
             return true;
         }
         catch (Exception ex) { _log.LogWarning(ex, "Weekly report not sent"); return false; }
     }
 
-    public static string RenderHtml(WeeklyReport r, TimeZoneInfo tz)
+    public static string RenderHtml(WeeklyReport r, TimeZoneInfo tz, SlaReport? sla = null)
     {
         string L(DateTime? d, string f = "d MMM") => d is null ? "-" : TimeZoneInfo.ConvertTimeFromUtc(d.Value, tz).ToString(f);
         var sb = new StringBuilder();
@@ -136,6 +141,7 @@ public sealed class ReportService
         Table("Open: fix today and fix this week", r.OpenRows, false);
         Table("Done this week", r.ActionedRows, true);
         Table("New this week that needed action", r.NewActionableRows, false);
+        if (sla is not null) sb.Append(SlaReportRenderer.WeeklySectionHtml(sla));
         sb.Append("<p class=\"muted\" style=\"font-size:11px;margin-top:24px\">" + WebUtility.HtmlEncode(DigestService.Disclaimer) + "</p><p class=\"muted\" style=\"font-size:11px\">" + WebUtility.HtmlEncode(DigestService.EpssAttribution) + "</p></body></html>");
         return sb.ToString();
     }

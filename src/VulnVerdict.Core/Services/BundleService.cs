@@ -140,7 +140,7 @@ public sealed class BundleService
                     resp.EnsureSuccessStatusCode();
                     await using var src = await resp.Content.ReadAsStreamAsync(ct);
                     await using var dst = File.Create(zipPath);
-                    await src.CopyToAsync(dst, ct);
+                    if (await CopyCappedAsync(src, dst, MaxZipBytes, null, ct) < 0) throw new BundleRejectedException("Bundle " + manifest.Version + " is larger than " + (MaxZipBytes >> 30) + " GB; refused.");
                 }
                 var host = Uri.TryCreate(baseUrl, UriKind.Absolute, out var u) ? u.Host : baseUrl;
                 var result = await ApplyZipAsync(zipPath, manifest, "central " + host, ct);
@@ -178,7 +178,8 @@ public sealed class BundleService
         try
         {
             Progress = "Receiving upload";
-            await using (var dst = File.Create(zipPath)) await zip.CopyToAsync(dst, ct);
+            await using (var dst = File.Create(zipPath))
+                if (await CopyCappedAsync(zip, dst, MaxZipBytes, null, ct) < 0) throw new BundleRejectedException("The file is larger than " + (MaxZipBytes >> 30) + " GB, which no bundle is; refused.");
             var result = await ApplyZipAsync(zipPath, null, "upload by " + actor, ct);
             _bundleMode = true;
             await AuditAsync(actor, "bundle.upload", result.Version, Describe(result), ct);
@@ -211,32 +212,84 @@ public sealed class BundleService
         Directory.CreateDirectory(dir);
         try
         {
-            Progress = "Extracting bundle";
-            using (var archive = ZipFile.OpenRead(zipPath))
-            {
-                foreach (var entry in archive.Entries)
-                {
-                    // flat archive only: the six data files plus manifest.json at the root
-                    if (entry.FullName.EndsWith('/') || entry.Name.Length == 0) continue;
-                    var name = Path.GetFileName(entry.FullName);
-                    if (name != BundleFiles.Manifest && !BundleFiles.Required.Contains(name)) continue;
-                    entry.ExtractToFile(Path.Combine(dir, name), true);
-                }
-            }
-            var manifest = trustedManifest;
-            if (manifest is null)
-            {
-                var manifestPath = Path.Combine(dir, BundleFiles.Manifest);
-                if (!File.Exists(manifestPath)) throw new BundleRejectedException("The file is not a VulnVerdict bundle (no manifest.json).");
-                manifest = BundleManifest.Parse(await File.ReadAllTextAsync(manifestPath, ct));
-                if (manifest is null || string.IsNullOrEmpty(manifest.Version)) throw new BundleRejectedException("manifest.json could not be read.");
-                using var pub = PublicKey();
-                if (!manifest.Verify(pub)) throw new BundleRejectedException("Bundle " + manifest.Version + " is unsigned or not signed by the trusted key; refused.");
-            }
+            Progress = "Verifying and extracting bundle";
+            BundleManifest manifest;
+            using (var pub = PublicKey()) manifest = await ExtractVerifiedAsync(zipPath, dir, trustedManifest, pub, ct);
             await using var db = await _factory.CreateDbContextAsync(ct);
             return await BundleApplier.ApplyAsync(db, manifest, dir, source, ct, msg => Progress = msg);
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    /// <summary>
+    /// Nothing is written to disk on the zip's own say-so. The manifest is read first (a small file, capped) and its
+    /// signature checked; only then is each file the signed manifest lists extracted, stopping at the signed size and
+    /// hashed as it is written. A zip holding anything the manifest does not list, a file larger than its signed size
+    /// (a zip bomb) or a file whose hash differs is refused. With <paramref name="trustedManifest"/> (already verified,
+    /// from the central service) the zip's own manifest.json is ignored.
+    /// </summary>
+    public static async Task<BundleManifest> ExtractVerifiedAsync(string zipPath, string dir, BundleManifest? trustedManifest, ECDsa publicKey, CancellationToken ct)
+    {
+        ZipArchive archive;
+        try { archive = ZipFile.OpenRead(zipPath); }
+        catch (InvalidDataException) { throw new BundleRejectedException("The file is not a VulnVerdict bundle (not a zip archive)."); }
+        using (archive)
+        {
+            if (archive.Entries.Count > MaxZipEntries) throw new BundleRejectedException("The file is not a VulnVerdict bundle (too many entries).");
+            var manifest = trustedManifest;
+            if (manifest is null)
+            {
+                var entries = archive.Entries.Where(e => e.FullName == BundleFiles.Manifest).ToList();
+                if (entries.Count != 1) throw new BundleRejectedException("The file is not a VulnVerdict bundle (no manifest.json).");
+                using var buffer = new MemoryStream();
+                await using (var src = entries[0].Open())
+                    if (await CopyCappedAsync(src, buffer, MaxManifestBytes, null, ct) < 0) throw new BundleRejectedException("manifest.json is too large to be a bundle manifest.");
+                manifest = BundleManifest.Parse(System.Text.Encoding.UTF8.GetString(buffer.ToArray()));
+                if (manifest is null || string.IsNullOrEmpty(manifest.Version)) throw new BundleRejectedException("manifest.json could not be read.");
+                if (!manifest.Verify(publicKey)) throw new BundleRejectedException("Bundle " + manifest.Version + " is unsigned or not signed by the trusted key; refused.");
+            }
+
+            // from here on the manifest is trusted: its names, sizes and hashes decide what may be written
+            var listed = manifest.Files.ToDictionary(f => f.Name, StringComparer.Ordinal);
+            if (listed.Keys.FirstOrDefault(n => !BundleFiles.Required.Contains(n)) is { } unknown) throw new BundleRejectedException("Manifest entry '" + unknown + "' is not a bundle file.");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in archive.Entries)
+            {
+                if (entry.FullName == BundleFiles.Manifest) continue;
+                if (!listed.TryGetValue(entry.FullName, out var file)) throw new BundleRejectedException("The bundle holds '" + (entry.FullName.Length > 80 ? entry.FullName[..80] : entry.FullName) + "', which its manifest does not list; refused.");
+                if (!seen.Add(file.Name)) throw new BundleRejectedException("The bundle holds " + file.Name + " twice; refused.");
+                if (entry.Length != file.Bytes) throw new BundleRejectedException(file.Name + " is " + entry.Length + " bytes, manifest says " + file.Bytes);
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                await using (var src = entry.Open())
+                await using (var dst = File.Create(Path.Combine(dir, file.Name)))
+                    // the size in the zip's directory is the zip's claim; the copy itself stops at the signed size
+                    if (await CopyCappedAsync(src, dst, file.Bytes, hash, ct) != file.Bytes) throw new BundleRejectedException(file.Name + " does not have the size its manifest states; refused.");
+                if (!Convert.ToHexStringLower(hash.GetHashAndReset()).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new BundleRejectedException(file.Name + " does not match its manifest hash (tampered or corrupt)");
+            }
+            return manifest;
+        }
+    }
+
+    /// <summary>The largest bundle zip accepted, uploaded or downloaded. A full bundle is a few hundred megabytes.</summary>
+    public const long MaxZipBytes = 2L << 30;
+    private const int MaxManifestBytes = 1 << 20;
+    private const int MaxZipEntries = 64;
+
+    /// <summary>Copy at most <paramref name="cap"/> bytes. Returns the bytes copied, or -1 if the source held more.</summary>
+    private static async Task<long> CopyCappedAsync(Stream src, Stream dst, long cap, IncrementalHash? hash, CancellationToken ct)
+    {
+        var buf = new byte[81920];
+        long total = 0;
+        int n;
+        while ((n = await src.ReadAsync(buf, ct)) > 0)
+        {
+            total += n;
+            if (total > cap) return -1;
+            hash?.AppendData(buf, 0, n);
+            await dst.WriteAsync(buf.AsMemory(0, n), ct);
+        }
+        return total;
     }
 
     private BundleCheck Record(BundleCheck c) { LastCheck = c; return c; }
