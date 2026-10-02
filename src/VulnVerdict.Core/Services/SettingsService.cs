@@ -51,8 +51,7 @@ public sealed class AppSettings
     public string OidcOperatorGroup { get; set; } = "";
     public string OidcGroupClaim { get; set; } = "groups";
 
-    // api
-    public string ApiToken { get; set; } = "";
+    // api tokens are stored as hashes by ApiTokenService, never here
 
     // tickets: "email" or the id of a ticket-adapter connector
     public string TicketChannel { get; set; } = "email";
@@ -99,7 +98,9 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.ApiToken), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken) };
+    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken), nameof(AppSettings.LicenceKey) };
+    /// <summary>Settings stored encrypted and never sent back to the browser.</summary>
+    public static IReadOnlySet<string> SecretNames => Secret;
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 
@@ -114,6 +115,7 @@ public sealed class SettingsService
         await using var db = await _factory.CreateDbContextAsync(ct);
         var rows = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, ct);
         var s = new AppSettings();
+        var plaintextSecrets = new List<string>();
         foreach (var p in typeof(AppSettings).GetProperties().Where(p => p.CanWrite))
         {
             if (!rows.TryGetValue(p.Name, out var row) || row.Value is null) continue;
@@ -122,6 +124,7 @@ public sealed class SettingsService
             {
                 try { value = _protector.Unprotect(value); } catch { value = ""; }
             }
+            else if (Secret.Contains(p.Name) && value != "") plaintextSecrets.Add(p.Name);
             try
             {
                 object typed = p.PropertyType == typeof(int) ? int.Parse(value)
@@ -131,7 +134,20 @@ public sealed class SettingsService
             }
             catch { }
         }
+        // a setting that became secret in a later release (the licence key) is encrypted the first time it is read
+        if (plaintextSecrets.Count > 0) await EncryptPlaintextAsync(plaintextSecrets, ct);
         return s;
+    }
+
+    private async Task EncryptPlaintextAsync(List<string> keys, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        foreach (var row in await db.Settings.Where(r => keys.Contains(r.Key) && !r.Encrypted).ToListAsync(ct))
+        {
+            if (string.IsNullOrEmpty(row.Value)) continue;
+            row.Value = _protector.Protect(row.Value); row.Encrypted = true;
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task SaveAsync(AppSettings s, string actor, CancellationToken ct = default)
@@ -148,7 +164,7 @@ public sealed class SettingsService
             if (rows.TryGetValue(p.Name, out var row))
             {
                 var before = row.Encrypted ? (row.Value == "" ? "" : SafeUnprotect(row.Value)) : row.Value;
-                if (before == raw) continue;
+                if (before == raw && row.Encrypted == enc) continue;
                 row.Value = stored; row.Encrypted = enc; row.UpdatedAt = now;
             }
             else db.Settings.Add(new AppSetting { Key = p.Name, Value = stored, Encrypted = enc, UpdatedAt = now });

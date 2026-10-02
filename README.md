@@ -39,7 +39,7 @@ docker compose up -d
 
 That fetches the latest release's Compose files and runs its published images; the appliance (OVA) and the single all-in-one container are the other routes, see [docs/install.md](docs/install.md). To build from source, run `docker compose up -d --build` in `deploy/` with `VV_IMAGE` commented out of `.env`.
 
-Open `https://<VV_HOSTNAME>/`, create the administrator account, set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
+Open `https://<VV_HOSTNAME>/` and create the administrator account with the setup token from the console log (`docker compose logs web | grep -i "setup token"`), then set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
 
 The same stack ships three ways, all supported: this Compose file for people who already run Docker, a single all-in-one container (`Dockerfile.allinone`) for people who want one `docker run`, and an OVA appliance (Ubuntu LTS with Docker and this Compose pre-installed, first-boot wizard for hostname and admin account) for people who do not run Docker at all. All three point at the same signed feed bundle from the central service when one is configured. See `docs/install.md`.
 

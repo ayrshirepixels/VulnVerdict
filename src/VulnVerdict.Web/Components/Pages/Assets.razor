@@ -95,7 +95,7 @@
 
     private async Task UploadSbom()
     {
-        if (_sbomJson is null) return;
+        if (_sbomJson is null || !await Ui.CanOperateAsync(AuthState)) return;
         _sbomBusy = true; _sbomError = null; _sbomNotice = null;
         try
         {

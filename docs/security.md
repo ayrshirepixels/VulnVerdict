@@ -4,14 +4,16 @@ The console holds a map of your weakest points. It is a target, and it is built 
 
 ## Access
 
-- A local administrator is created at install. OpenID Connect (Microsoft Entra, Google Workspace, generic OIDC) with group-to-role mapping for everyone else.
-- Roles: Administrator (everything), Operator (verdict workflow, watchlist, connectors, suppressions), Viewer (read only), Reporter (digest recipient without a login).
-- Every state change is written to the audit log with actor, time and before/after.
-- Login is rate limited; sessions are cookie-based, HttpOnly, SameSite=Lax, 12 hours sliding.
+- A local administrator is created at install, on a first page that needs a one-time setup token printed in the console's log and kept in the data volume, so whoever reaches the console first over the network cannot claim it. Only one administrator can be created that way, even from two requests at once. OpenID Connect (Microsoft Entra, Google Workspace, generic OIDC) with group-to-role mapping for everyone else.
+- Roles: Administrator (everything, including adding, editing, testing and deleting connectors), Operator (verdict workflow, watchlist, mapping, suppressions, running connectors and AI explanations), Viewer (read only), Reporter (digest recipient without a login). Every action checks the role on the server, not only by hiding the button.
+- Every state change is written to the audit log with actor, time and before/after. The last administrator cannot be deleted or demoted.
+- Login is rate limited; sessions are cookie-based, HttpOnly, SameSite=Lax, 12 hours sliding. Each account has a security stamp that changes when it is deleted, its role changes or its password is reset: its cookies stop working on the next request and open console tabs lose access within five minutes. Signing out is a POST with an antiforgery token.
+- The API has a read-only token and a read-write token (imports). Only their SHA-256 hashes are stored, compared in constant time; a token is shown once when generated. Every API write is in the audit log.
 
 ## Secrets
 
-- Connector credentials, mail passwords, API keys, the webhook secret and the MSP token are encrypted with ASP.NET Data Protection before they reach the database. The key ring lives in the `data` volume; keep it on an encrypted disk and back it up with the database.
+- Connector credentials, mail passwords, API keys, the webhook secret, the MSP token and the licence key are encrypted with ASP.NET Data Protection before they reach the database. The key ring lives in the `data` volume; keep it on an encrypted disk and back it up with the database.
+- Saved secrets are never sent back to the browser: the forms show that one is saved, and a blank field keeps it. A blank connector password is only reused while the connector's address, account and TLS setting are unchanged, so a changed address cannot be tested with the saved password.
 - Credentials never appear in configuration files or logs. Every adapter uses read-only accounts and never writes to the source.
 
 ## Network
@@ -21,7 +23,7 @@ The console holds a map of your weakest points. It is a target, and it is built 
 
 ## Headers and browser
 
-Content Security Policy (scripts only from the console itself, no inline scripts), X-Content-Type-Options, X-Frame-Options same-origin, Referrer-Policy, Permissions-Policy. Antiforgery tokens on every form. No external CDNs: fonts and styles are served locally so an air-gapped console renders the same.
+Content Security Policy (scripts only from the console itself, no inline scripts, connections only to the console, forms only to the console and the configured identity provider), X-Content-Type-Options, X-Frame-Options same-origin, Referrer-Policy, Permissions-Policy. Antiforgery tokens on every form. No external CDNs: fonts and styles are served locally so an air-gapped console renders the same.
 
 ## Feed bundles and licences
 

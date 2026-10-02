@@ -2,7 +2,7 @@
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
 @layout EmptyLayout
-@inject AuthService Auth
+@inject UserService Users
 @inject NavigationManager Nav
 
 <PageTitle>First run - VulnVerdict</PageTitle>
@@ -18,8 +18,13 @@
         <form method="post" action="/auth/setup" class="form">
             <AntiforgeryToken />
             <div>
+                <label for="token">Setup token</label>
+                <input id="token" name="token" type="text" required autofocus autocomplete="off" spellcheck="false" />
+                <div class="help">Printed in the console log when VulnVerdict first starts (<code>docker compose logs web</code>), and kept in the file <code>setup-token</code> in the data folder until this account exists.</div>
+            </div>
+            <div>
                 <label for="username">Username</label>
-                <input id="username" name="username" type="text" required autofocus autocomplete="username" placeholder="for example admin" />
+                <input id="username" name="username" type="text" required autocomplete="username" placeholder="for example admin" />
             </div>
             <div>
                 <label for="email">Email (optional, used for administrator alerts)</label>
@@ -41,6 +46,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (await Auth.HasUsersAsync()) Nav.NavigateTo("/login");
+        if (await Users.HasUsersAsync()) Nav.NavigateTo("/login");
     }
 }

@@ -129,6 +129,11 @@ namespace VulnVerdict.Core.Data.Migrations.Postgres
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(128)

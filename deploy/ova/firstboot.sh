@@ -67,8 +67,21 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 
+# The console's first page asks for a one-time setup token, which the web container writes when it first starts.
+SETUP_TOKEN=""
+for _ in $(seq 1 45); do
+  SETUP_TOKEN="$(docker compose exec -T web cat /data/setup-token 2>/dev/null | tr -d '\r\n' || true)"
+  [ -n "$SETUP_TOKEN" ] && break
+  sleep 2
+done
+
 echo
 echo "Done. Open https://${HOST}/ (or https://${IP:-<this appliance>}/) and create the administrator account."
+if [ -n "$SETUP_TOKEN" ]; then
+  echo "The first page asks for this setup token: ${SETUP_TOKEN}"
+else
+  echo "The first page asks for a setup token: cd /opt/vulnverdict && sudo docker compose logs web | grep -i 'setup token'"
+fi
 echo "The certificate is from the appliance's own internal CA. Import /opt/vulnverdict/caddy-root.crt into"
 echo "your browsers, or replace it with your own certificate (docs/install.md)."
 echo "Feeds start loading now; the first full CVE list takes 10 to 20 minutes."

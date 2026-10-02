@@ -13,7 +13,7 @@
     @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
     @if (_error is not null) { <div class="alert alert-error">@_error</div> }
 
-    <AuthorizeView Roles="Administrator,Operator">
+    <AuthorizeView Roles="Administrator">
         <div class="card">
             <h2>@(_editId is null ? "Add a connector" : "Edit connector")</h2>
             <div class="form">
@@ -80,7 +80,7 @@
                         else if (c.LastSuccess is not null) { <span class="state state-closed">ok</span> <span class="progress">@c.Progress</span>@if (c.LastError is not null) { <div class="progress">@c.LastError</div> } }
                         else { <span class="muted">not run yet</span> }
                     </td>
-                    <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth">@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button> }<button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button></AuthorizeView>@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <AuthorizeView Roles="Administrator" Context="admin"><a class="btn btn-secondary btn-sm" href="/connectors/@c.Id/diagnostics" download data-enhance-nav="false" title="Runs the connector once without changing anything and downloads what its API returned, with names, users and addresses replaced. Look through it, then attach it to a GitHub issue.">Diagnostics</a></AuthorizeView><a class="btn btn-secondary btn-sm" href="@IssueLinks.ConnectorProblem(c.AdapterId, AppVersion.Current)" target="_blank" rel="noopener noreferrer" title="Opens a pre-filled GitHub issue in your browser">Report a problem</a> }</td>
+                    <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth">@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button> }</AuthorizeView><AuthorizeView Roles="Administrator" Context="admin"><button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button>@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <form method="post" action="/connectors/@c.Id/diagnostics" data-enhance="false" style="display:inline"><AntiforgeryToken /><button type="submit" class="btn btn-secondary btn-sm" title="Runs the connector once without changing anything and downloads what its API returned, with names, users and addresses replaced. Look through it, then attach it to a GitHub issue.">Diagnostics</button></form> }</AuthorizeView>@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) {<a class="btn btn-secondary btn-sm" href="@IssueLinks.ConnectorProblem(c.AdapterId, AppVersion.Current)" target="_blank" rel="noopener noreferrer" title="Opens a pre-filled GitHub issue in your browser">Report a problem</a> }</td>
                 </tr>
             }
             @if (_list.Count == 0) { <tr><td colspan="8" class="muted">No connectors yet. The watchlist works without any; connectors add the estate.</td></tr> }
@@ -125,8 +125,10 @@
         _testResult = null;
     }
 
-    private void Edit(Connector c)
+    // adding, editing, testing and deleting connectors is for administrators: a test sends the saved credential to the form's address
+    private async Task Edit(Connector c)
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         _editId = c.Id; _metaId = c.AdapterId; _meta = ConnectorSvc.Metadata(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
         _values = ConnectorSvc.Decrypt(c);
         foreach (var f in _meta?.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
@@ -143,6 +145,7 @@
 
     private async Task TestAsync()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         _busy = true; _testResult = null;
         _testResult = await ConnectorSvc.TestAsync(_metaId, new Dictionary<string, string>(_values), _editId);
         _busy = false;
@@ -150,6 +153,7 @@
 
     private async Task SaveAsync()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         _busy = true; _error = null; _notice = null;
         try
         {
@@ -164,12 +168,16 @@
 
     private async Task DeleteAsync()
     {
-        if (_editId is null) return;
+        if (_editId is null || !await Ui.IsAdminAsync(AuthState)) return;
         await ConnectorSvc.DeleteAsync(_editId.Value, await ActorAsync());
         _notice = "Connector deleted. Its assets stay, marked unknown, until archived."; Reset(); _list = await ConnectorSvc.ListAsync();
     }
 
-    private async Task RunNow(Guid id) { await ConnectorSvc.RequestRunAsync(id); _list = await ConnectorSvc.ListAsync(); }
+    private async Task RunNow(Guid id)
+    {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
+        await ConnectorSvc.RequestRunAsync(id); _list = await ConnectorSvc.ListAsync();
+    }
 
     public void Dispose() => _timer?.Dispose();
 }

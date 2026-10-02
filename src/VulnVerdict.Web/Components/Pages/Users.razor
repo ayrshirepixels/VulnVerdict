@@ -1,6 +1,6 @@
 @page "/users"
 @attribute [Authorize(Roles = "Administrator")]
-@inject AuthService Auth
+@inject UserService UserSvc
 
 <PageTitle>Users - VulnVerdict</PageTitle>
 
@@ -58,42 +58,46 @@
     private Guid? _resetFor;
     private string? _notice, _error;
 
-    protected override async Task OnInitializedAsync() => _users = await Auth.ListUsersAsync();
+    protected override async Task OnInitializedAsync() => _users = await UserSvc.ListUsersAsync();
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
 
     private async Task AddAsync()
     {
         _error = null; _notice = null;
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         try
         {
             if (_password.Length < 12) throw new ArgumentException("Password must be at least 12 characters");
-            await Auth.CreateLocalUserAsync(_username, _password, Enum.Parse<UserRole>(_role), null, await ActorAsync());
+            await UserSvc.CreateLocalUserAsync(_username, _password, Enum.Parse<UserRole>(_role), null, await ActorAsync());
             _notice = _username + " added."; _username = ""; _password = "";
-            _users = await Auth.ListUsersAsync();
+            _users = await UserSvc.ListUsersAsync();
         }
         catch (Exception ex) { _error = ex.Message; }
     }
 
     private async Task ChangeRole(AppUser u, string? role)
     {
-        if (!Enum.TryParse<UserRole>(role, out var r)) return;
-        try { await Auth.UpdateUserAsync(u.Id, r, null, await ActorAsync()); _notice = u.Username + " is now " + r + "."; _users = await Auth.ListUsersAsync(); }
+        if (!Enum.TryParse<UserRole>(role, out var r) || !await Ui.IsAdminAsync(AuthState)) return;
+        try { await UserSvc.UpdateUserAsync(u.Id, r, null, await ActorAsync()); _notice = u.Username + " is now " + r + ". Their open sessions end."; }
         catch (Exception ex) { _error = ex.Message; }
+        _users = await UserSvc.ListUsersAsync();
     }
 
     private async Task ResetAsync(AppUser u)
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         try
         {
             if (_newPassword.Length < 12) throw new ArgumentException("Password must be at least 12 characters");
-            await Auth.UpdateUserAsync(u.Id, u.Role, _newPassword, await ActorAsync()); _notice = "Password reset for " + u.Username + "."; _resetFor = null; _newPassword = "";
+            await UserSvc.UpdateUserAsync(u.Id, u.Role, _newPassword, await ActorAsync()); _notice = "Password reset for " + u.Username + "."; _resetFor = null; _newPassword = "";
         }
         catch (Exception ex) { _error = ex.Message; }
     }
 
     private async Task DeleteAsync(Guid id)
     {
-        try { await Auth.DeleteUserAsync(id, await ActorAsync()); _notice = "Deleted."; _users = await Auth.ListUsersAsync(); }
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        try { await UserSvc.DeleteUserAsync(id, await ActorAsync()); _notice = "Deleted."; _users = await UserSvc.ListUsersAsync(); }
         catch (Exception ex) { _error = ex.Message; }
     }
 }

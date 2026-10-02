@@ -2,7 +2,7 @@
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
 @layout EmptyLayout
-@inject AuthService Auth
+@inject UserService Users
 @inject SettingsService Settings
 @inject NavigationManager Nav
 
@@ -48,7 +48,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!await Auth.HasUsersAsync()) { Nav.NavigateTo("/setup"); return; }
+        if (!await Users.HasUsersAsync()) { Nav.NavigateTo("/setup"); return; }
         var s = await Settings.LoadAsync();
         _oidc = s.OidcEnabled && !string.IsNullOrWhiteSpace(s.OidcAuthority) && !string.IsNullOrWhiteSpace(s.OidcClientId);
         _oidcName = string.IsNullOrWhiteSpace(s.OidcDisplayName) ? "Single sign-on" : s.OidcDisplayName;
