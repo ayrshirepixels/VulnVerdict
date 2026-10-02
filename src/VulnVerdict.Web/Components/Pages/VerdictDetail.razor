@@ -159,19 +159,38 @@
         </div>
 
         <div class="card">
-            <h2>History</h2>
-            @if (_history.Count == 0) { <p class="muted" style="margin:0">No changes yet.</p> }
+            <h2>What changed and why</h2>
+            @if (_timeline.Count == 0) { <p class="muted" style="margin:0">No changes yet.</p> }
             else
             {
-                <table class="table">
-                    <thead><tr><th>When</th><th>Who</th><th>Change</th><th>Reason</th></tr></thead>
-                    <tbody>
-                        @foreach (var h in _history)
-                        {
-                            <tr><td>@Ui.Local(h.At, _tz)</td><td>@h.Actor</td><td>@h.Kind: @h.From to @h.To</td><td>@h.Reason</td></tr>
-                        }
-                    </tbody>
-                </table>
+                <p class="muted" style="margin-top:0">Newest first. Worked out from the recorded inputs and evidence; nothing here is written by an AI model.</p>
+                <ul style="list-style:none;margin:0;padding:0">
+                    @foreach (var t in _timeline)
+                    {
+                        <li style="padding:9px 0;border-top:1px solid var(--line)">
+                            <div><b>@Ui.Local(t.At, _tz, "d MMM yyyy HH:mm")</b> &mdash; @t.Text</div>
+                            @if (t.RuleBefore is not null && t.RuleAfter is not null)
+                            {
+                                @if (t.RuleBefore == t.RuleAfter) { <div class="muted" style="font-size:12px;margin-top:2px">Same @t.RuleAfter</div> }
+                                else { <div class="muted" style="font-size:12px;margin-top:2px">Before: @t.RuleBefore<br />After: @t.RuleAfter</div> }
+                            }
+                        </li>
+                    }
+                </ul>
+                <details style="margin-top:12px">
+                    <summary class="muted">History as recorded</summary>
+                    <div style="overflow-x:auto;width:0;min-width:100%;margin-top:8px">
+                        <table class="table">
+                            <thead><tr><th>When</th><th>Who</th><th>Change</th><th>Reason</th></tr></thead>
+                            <tbody>
+                                @foreach (var h in _history.Where(h => h.Kind != VerdictChanges.Kind))
+                                {
+                                    <tr><td>@Ui.Local(h.At, _tz)</td><td>@h.Actor</td><td>@h.Kind: @h.From to @h.To</td><td>@h.Reason</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
             }
         </div>
     }
@@ -259,6 +278,7 @@
     private CvssVector? _cvss;
     private List<ExploitSignal> _signals = new();
     private List<VerdictHistory> _history = new();
+    private List<TimelineEntry> _timeline = new();
     private List<EvidenceClaim> _evidence = new();
     private string? _reportUrl;
 
@@ -319,6 +339,8 @@
         _epss = await db.Epss.AsNoTracking().FirstOrDefaultAsync(e => e.CveId == _v.CveId);
         _signals = await db.ExploitSignals.AsNoTracking().Where(s => s.CveId == _v.CveId).OrderBy(s => s.Source).ToListAsync();
         _history = await db.VerdictHistory.AsNoTracking().Where(h => h.VerdictId == Id).OrderByDescending(h => h.At).ToListAsync();
+        // an asset's exposure evidence (a firewall VIP, say) explains the latest exposure change; a watchlist entry's exposure is declared by hand
+        _timeline = VerdictChanges.Timeline(_history, _v.Asset?.ExposureEvidence ?? (_v.WatchlistEntry is null ? null : "declared on the watchlist"), _v.Asset?.Exposure ?? _v.WatchlistEntry?.Exposure);
         _cvss = CvssVector.Parse(_cve?.CvssV40Vector) ?? CvssVector.Parse(_cve?.CvssV31Vector);
         try { _evidence = JsonSerializer.Deserialize<List<EvidenceClaim>>(_v.EvidenceJson) ?? new(); } catch { _evidence = new(); }
         _reportUrl = ReportUrl(_v, _evidence);
