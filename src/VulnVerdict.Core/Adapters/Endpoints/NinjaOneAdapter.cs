@@ -68,15 +68,19 @@ public sealed class NinjaOneAdapter : IInventoryAdapter
 
         progress?.Report("Listing devices");
         var devices = new List<JsonElement>();
+        var seen = new HashSet<long>();
         long? after = null;
-        // keyset paging on the last id: a short page is not proof of the end (the API may cap pageSize lower), an empty one is
+        // keyset paging on the last id: a short page is not proof of the end (the API may cap pageSize lower), an empty one
+        // is, and so is a page with no device not already read (an API that ignores "after" must not list devices twice)
         while (true)
         {
-            if (devices.Count >= 500_000) { result.Warnings.Add("The device list stopped at 500,000 devices; the rest were not read."); break; }
+            if (devices.Count >= 500_000) { result.MarkPartial("The device list stopped at 500,000 devices; the listing is partial, so nothing is marked removed or aged out this run."); break; }
             var page = EpJson.Items(await api.GetJsonAsync(DevicesPath(after), ct));
-            devices.AddRange(page);
+            var fresh = 0;
+            foreach (var d in page)
+                if (EpJson.Int(d, "id") is not { } id || seen.Add(id)) { devices.Add(d); fresh++; }
             var last = page.Count > 0 ? EpJson.Int(page[^1], "id") : null;
-            if (page.Count == 0 || last is null || last == after) break;
+            if (fresh == 0 || last is null || last == after) break;
             after = last;
         }
 
