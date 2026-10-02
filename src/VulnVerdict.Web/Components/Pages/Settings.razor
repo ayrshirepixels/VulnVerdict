@@ -207,6 +207,16 @@
 
     // stored secrets never reach the browser: the form shows that one is saved, a blank field keeps it
     private readonly HashSet<string> _saved = new(), _clear = new();
+    private static readonly Dictionary<string, string> SecretLabels = new()
+    {
+        [nameof(AppSettings.SmtpPassword)] = "SMTP password",
+        [nameof(AppSettings.M365ClientSecret)] = "Microsoft 365 client secret",
+        [nameof(AppSettings.OidcClientSecret)] = "OpenID Connect client secret",
+        [nameof(AppSettings.LlmApiKey)] = "AI API key",
+        [nameof(AppSettings.MspTenantToken)] = "MSP tenant token",
+        [nameof(AppSettings.WebhookSecret)] = "webhook signing secret",
+        [nameof(AppSettings.LicenceKey)] = "licence key",
+    };
     private bool _apiRead, _apiWrite, _apiLegacy;
     private string? _newToken;
 
@@ -278,10 +288,15 @@
             // saved from a copy, so a stored secret filled back in is never part of what the page renders
             var stored = await SettingsSvc.LoadAsync();
             var save = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(_s))!;
-            foreach (var name in SettingsService.SecretNames)
+            // a blank secret keeps the stored one only while where it is sent is unchanged
+            var retype = SettingsService.ReuseStoredSecrets(save, stored, _clear);
+            if (retype.Count > 0)
             {
-                var p = typeof(AppSettings).GetProperty(name)!;
-                if (string.IsNullOrEmpty((string?)p.GetValue(save)) && !_clear.Contains(name)) p.SetValue(save, p.GetValue(stored));
+                var names = retype.Select(n => SecretLabels.GetValueOrDefault(n, n)).ToList();
+                _error = "Where the saved " + string.Join(", ", names) + (names.Count == 1 ? " is" : " are") + " sent has changed, so "
+                    + (names.Count == 1 ? "it is" : "they are") + " not reused. Type " + (names.Count == 1 ? "it" : "them") + " again, or remove " + (names.Count == 1 ? "it" : "them") + ", and save.";
+                _busy = false;
+                return;
             }
             await SettingsSvc.SaveAsync(save, Ui.Actor((await AuthState).User));
             Auth.ReloadOidc(save);

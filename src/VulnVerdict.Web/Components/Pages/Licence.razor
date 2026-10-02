@@ -158,7 +158,13 @@
         try
         {
             var save = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(_s))!;
-            if (save.MspTenantToken == "" && _tenantSaved) save.MspTenantToken = (await SettingsSvc.LoadAsync()).MspTenantToken;
+            // the saved tenant token is reused only while the portal it goes to is unchanged
+            if (SettingsService.ReuseStoredSecrets(save, await SettingsSvc.LoadAsync(), Array.Empty<string>()).Count > 0)
+            {
+                _error = "The MSP portal address changed, so the saved tenant token is not reused. Type it again and save.";
+                _busy = false;
+                return;
+            }
             await SettingsSvc.SaveAsync(save, await ActorAsync());
             await LoadAsync();
             _notice = "Settings saved.";

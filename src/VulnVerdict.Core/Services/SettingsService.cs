@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using VulnVerdict.Core.Data;
@@ -133,6 +134,44 @@ public sealed class SettingsService
     /// <summary>Settings stored encrypted and never sent back to the browser.</summary>
     public static IReadOnlySet<string> SecretNames => Secret;
     static SettingsService() { Secret.Add(nameof(AppSettings.TeamsWebhookUrl)); Secret.Add(nameof(AppSettings.SlackWebhookUrl)); }
+
+    /// <summary>
+    /// For each secret, the settings that say where it is sent. A secret left blank on the form is filled from the stored
+    /// value only while these are unchanged; otherwise pointing one of them elsewhere and pressing Test would send the
+    /// stored secret to the new address. Secrets sent only to a fixed vendor address (SendGrid, Brevo, Cisco) have none.
+    /// The mail transport is left out so switching transport does not ask for a password the new one will not use.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> SecretDestinations = new Dictionary<string, string[]>
+    {
+        [nameof(AppSettings.SmtpPassword)] = new[] { nameof(AppSettings.SmtpHost), nameof(AppSettings.SmtpPort), nameof(AppSettings.SmtpUsername), nameof(AppSettings.SmtpSecurity) },
+        [nameof(AppSettings.M365ClientSecret)] = new[] { nameof(AppSettings.M365TenantId), nameof(AppSettings.M365ClientId) },
+        [nameof(AppSettings.OidcClientSecret)] = new[] { nameof(AppSettings.OidcAuthority), nameof(AppSettings.OidcClientId) },
+        [nameof(AppSettings.LlmApiKey)] = new[] { nameof(AppSettings.LlmProvider), nameof(AppSettings.LlmBaseUrl) },
+        [nameof(AppSettings.MspTenantToken)] = new[] { nameof(AppSettings.MspPortalUrl) },
+        [nameof(AppSettings.WebhookSecret)] = new[] { nameof(AppSettings.WebhookUrl) },
+        [nameof(AppSettings.LicenceKey)] = new[] { nameof(AppSettings.BundleUrl) },
+    };
+
+    /// <summary>
+    /// Fills the secrets left blank on <paramref name="form"/> from <paramref name="stored"/>, except those in
+    /// <paramref name="clear"/> and those whose destination changed (<see cref="SecretDestinations"/>). Returns the
+    /// names of the secrets that must be typed again; when it is not empty the form must not be saved.
+    /// </summary>
+    public static List<string> ReuseStoredSecrets(AppSettings form, AppSettings stored, IReadOnlyCollection<string> clear)
+    {
+        static string Value(AppSettings s, string name) => Convert.ToString(typeof(AppSettings).GetProperty(name)!.GetValue(s), CultureInfo.InvariantCulture)?.Trim() ?? "";
+        var retype = new List<string>();
+        foreach (var name in Secret)
+        {
+            var p = typeof(AppSettings).GetProperty(name)!;
+            if (!string.IsNullOrEmpty((string?)p.GetValue(form)) || clear.Contains(name) || string.IsNullOrEmpty((string?)p.GetValue(stored))) continue;
+            if (SecretDestinations.TryGetValue(name, out var where) && where.Any(w => !string.Equals(Value(form, w), Value(stored, w), StringComparison.OrdinalIgnoreCase)))
+                retype.Add(name);
+            else
+                p.SetValue(form, p.GetValue(stored));
+        }
+        return retype;
+    }
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 
