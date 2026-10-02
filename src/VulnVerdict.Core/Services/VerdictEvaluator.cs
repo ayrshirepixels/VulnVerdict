@@ -779,6 +779,8 @@ public sealed partial class VerdictEvaluator
     private static bool Apply(Verdict v, Computed c, Subject s, DateTime now, List<SuppressionRule> rules, AppSettings settings, List<(string Event, Guid VerdictId)> events, bool isNew = false)
     {
         var tierChanged = !isNew && v.Tier != c.Decision.Tier;
+        // the inputs before and after, for "what changed and why" on the verdict page; must run before the row is overwritten
+        if (!isNew) VerdictChanges.Record(v, now, VerdictChanges.Snapshot(c.Inputs, c.Decision, c.Epss, c.InKev, s.Version, c.Evidence, c.Modifiers));
         if (isNew && c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventCreated, v.Id));
 
         // a closed verdict that is affected again re-opens, with a fresh SLA and fresh alerts, instead of a second verdict

@@ -92,15 +92,147 @@ public sealed class VerdictWorkflow
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var v = await db.Verdicts.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("Verdict not found");
-        var now = DateTime.UtcNow;
+        SetState(db, v, actor, to, reason, mutate, DateTime.UtcNow);
+        await db.SaveChangesAsync(ct);
+        // the web process closes tickets directly; deliver the webhook now rather than through the worker queue
+        if (to == VerdictState.Closed) await _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct);
+    }
+
+    /// <summary>One state change on a tracked verdict, with its history line and audit entry. The caller saves.</summary>
+    private static void SetState(VvDbContext db, Verdict v, string actor, VerdictState to, string reason, Action<Verdict> mutate, DateTime now)
+    {
         var from = v.State;
         v.State = to; v.StateReason = reason; v.StateChangedAt = now; v.UpdatedAt = now;
         mutate(v);
         db.VerdictHistory.Add(new VerdictHistory { VerdictId = v.Id, At = now, Actor = actor, Kind = "state", From = from.ToString(), To = to.ToString(), Reason = reason });
         db.Audit.Add(new AuditEntry { At = now, Actor = actor, Action = "verdict." + to.ToString().ToLowerInvariant(), Target = v.CveId + " / " + (v.WatchlistEntryId ?? v.SoftwareInstanceId), Before = from.ToString(), After = to.ToString() + ": " + reason });
-        await db.SaveChangesAsync(ct);
-        // the web process closes tickets directly; deliver the webhook now rather than through the worker queue
-        if (to == VerdictState.Closed) await _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct);
+    }
+
+    // ------------------------------------------------------------------ bulk
+
+    public enum BulkAction { Done, Snooze, AcceptRisk, Reopen }
+
+    /// <summary>A selected verdict as the page last showed it. If it has moved on since, the bulk action leaves it alone.</summary>
+    public sealed record BulkItem(Guid Id, VerdictState State, DateTime? StateChangedAt, VerdictTier Tier);
+
+    /// <param name="Reason">Note for Done, reason for Snooze and Accept risk. Blank takes the same default as the single action.</param>
+    /// <param name="UntilUtc">Snooze: until when (required). Accept risk: optional expiry.</param>
+    /// <param name="Owner">Accept risk: who is accountable. Blank means the person doing it.</param>
+    public sealed record BulkRequest(BulkAction Action, IReadOnlyCollection<BulkItem> Items, string? Reason = null, DateTime? UntilUtc = null, string? Owner = null);
+
+    /// <param name="Changed">Verdicts the action was applied to.</param>
+    /// <param name="Skipped">Why the rest were left alone, with how many for each reason.</param>
+    public sealed record BulkResult(BulkAction Action, int Changed, IReadOnlyList<(string Why, int Count)> Skipped)
+    {
+        /// <summary>"12 marked done. 2 skipped: already closed."</summary>
+        public string Summary =>
+            Changed + " " + Action switch { BulkAction.Done => "marked done", BulkAction.Snooze => "snoozed", BulkAction.AcceptRisk => "accepted as risk", _ => "re-opened" } + "."
+            + (Skipped.Count == 0 ? "" : " " + Skipped.Sum(s => s.Count) + " skipped: " + string.Join(", ", Skipped.Select(s => Skipped.Count == 1 ? s.Why : s.Count + " " + s.Why)) + ".");
+    }
+
+    /// <summary>The most one bulk action takes. Everything is one save, so the batch has to stay a sensible size.</summary>
+    public const int MaxBulk = 2000;
+
+    /// <summary>Same rule the pages apply: Operator or Administrator. Checked here as well, so no caller can skip it.</summary>
+    public static bool CanOperate(System.Security.Claims.ClaimsPrincipal? user) =>
+        user?.Identity?.IsAuthenticated == true && (user.IsInRole(nameof(UserRole.Administrator)) || user.IsInRole(nameof(UserRole.Operator)));
+
+    /// <summary>Whether the action makes sense in this state: the same rule that shows or hides the single buttons.</summary>
+    public static bool Applies(BulkAction action, VerdictState state) => action switch
+    {
+        BulkAction.Done => state != VerdictState.Closed,
+        BulkAction.Reopen => state != VerdictState.Open,
+        _ => state == VerdictState.Open
+    };
+
+    /// <summary>"12 verdicts: 3 Fix today, 9 Fix this week", most urgent first. For the confirmation.</summary>
+    public static string TierSummary(IEnumerable<VerdictTier> tiers)
+    {
+        var groups = tiers.GroupBy(t => t).OrderByDescending(g => g.Key).Select(g => g.Count() + " " + g.Key.Plain()).ToList();
+        var n = tiers.Count();
+        return n + " verdict" + (n == 1 ? "" : "s") + (n == 0 ? "" : ": " + string.Join(", ", groups));
+    }
+
+    /// <summary>
+    /// Apply one action to many verdicts. Each gets its own history line and audit entry, exactly as if done singly,
+    /// and they are saved together: all of them or none. A verdict whose state or tier is no longer what the page
+    /// showed (<see cref="BulkItem"/>) is skipped and counted, never overwritten. Closed verdicts send their webhook
+    /// after the save, as the single action does. Bulk Done does not move a watchlist version; that stays a single action.
+    /// </summary>
+    public async Task<BulkResult> BulkAsync(System.Security.Claims.ClaimsPrincipal? user, BulkRequest req, CancellationToken ct = default)
+    {
+        if (!CanOperate(user)) throw new UnauthorizedAccessException("Changing verdicts needs the Operator role or above.");
+        if (req.Items.Count > MaxBulk) throw new ArgumentException("At most " + MaxBulk + " verdicts can be changed at once. Narrow the filter and do it in parts.");
+        if (req.Action == BulkAction.Snooze && req.UntilUtc is null) throw new ArgumentException("Snooze needs a date.");
+        var actor = user!.Identity?.Name ?? "unknown";
+        var note = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
+        var owner = string.IsNullOrWhiteSpace(req.Owner) ? actor : req.Owner.Trim();
+
+        var seen = req.Items.GroupBy(i => i.Id).ToDictionary(g => g.Key, g => g.First());
+        var skipped = new Dictionary<string, int>();
+        void Skip(string why) => skipped[why] = skipped.GetValueOrDefault(why) + 1;
+        var closed = new List<Verdict>();
+        var changed = 0;
+
+        await using (var db = await _factory.CreateDbContextAsync(ct))
+        {
+            var rows = new List<Verdict>();
+            foreach (var chunk in seen.Keys.Chunk(400))
+                rows.AddRange(await db.Verdicts.Where(v => chunk.Contains(v.Id)).ToListAsync(ct));
+            for (var i = rows.Count; i < seen.Count; i++) Skip("removed since the page loaded");
+
+            var now = DateTime.UtcNow;
+            foreach (var v in rows)
+            {
+                var was = seen[v.Id];
+                if (v.State != was.State)
+                {
+                    Skip(v.State switch
+                    {
+                        VerdictState.Closed => "already closed",
+                        VerdictState.Open => "open again",
+                        VerdictState.Snoozed => "already snoozed",
+                        VerdictState.AcceptedRisk => "risk already accepted",
+                        _ => "already suppressed"
+                    });
+                    continue;
+                }
+                if (v.StateChangedAt != was.StateChangedAt) { Skip("changed since the page loaded"); continue; }
+                // the confirmation named the tiers; a verdict that has since been promoted or demoted is not what was confirmed
+                if (v.Tier != was.Tier) { Skip("now " + v.Tier.Plain()); continue; }
+                if (!Applies(req.Action, v.State))
+                {
+                    Skip(req.Action switch { BulkAction.Done => "already closed", BulkAction.Reopen => "already open", _ => "not open" });
+                    continue;
+                }
+
+                switch (req.Action)
+                {
+                    case BulkAction.Done:
+                        SetState(db, v, actor, VerdictState.Closed, note ?? "marked done", x => { x.StateOwner = actor; }, now);
+                        closed.Add(v);
+                        break;
+                    case BulkAction.Snooze:
+                        var until = req.UntilUtc!.Value;
+                        SetState(db, v, actor, VerdictState.Snoozed, (note ?? "snoozed") + " (until " + until.ToString("d MMM yyyy") + ")", x => { x.SnoozedUntil = until; x.StateOwner = actor; }, now);
+                        break;
+                    case BulkAction.AcceptRisk:
+                        SetState(db, v, actor, VerdictState.AcceptedRisk, note ?? "risk accepted", x => { x.AcceptedRiskExpiry = req.UntilUtc; x.StateOwner = owner; }, now);
+                        break;
+                    case BulkAction.Reopen:
+                        SetState(db, v, actor, VerdictState.Open, "re-opened manually", x => { x.SnoozedUntil = null; x.AcceptedRiskExpiry = null; x.SuppressedByRuleId = null; x.StateOwner = null; }, now);
+                        break;
+                }
+                changed++;
+            }
+            if (changed > 0) await db.SaveChangesAsync(ct);   // one save: every history line and audit entry, or none
+        }
+
+        // the same webhook the single Done sends, a few at a time so a slow receiver does not hold the page for long
+        foreach (var batch in closed.Chunk(8))
+            await Task.WhenAll(batch.Select(v => _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct)));
+
+        return new BulkResult(req.Action, changed, skipped.OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal).Select(s => (s.Key, s.Value)).ToList());
     }
 
     // ------------------------------------------------------------------ suppression rules
