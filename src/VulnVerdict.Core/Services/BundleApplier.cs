@@ -121,6 +121,7 @@ public static class BundleApplier
         var insertOnly = !await db.Cves.AnyAsync(ct);
         var count = 0;
         var batch = new List<Cve>(BatchSize);
+        // spans the whole file, not one batch: a CVE repeated across batches would break the insert-only path's primary key
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var reader = new StreamReader(path);
         while (await reader.ReadLineAsync(ct) is { } line)
@@ -133,7 +134,7 @@ public static class BundleApplier
             if (batch.Count >= BatchSize)
             {
                 count += await FlushCvesAsync(db, batch, insertOnly, ct);
-                batch.Clear(); seen.Clear();
+                batch.Clear();
                 progress("Applied " + count.ToString("N0") + " CVE records");
             }
         }
