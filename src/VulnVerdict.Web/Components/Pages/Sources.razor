@@ -50,6 +50,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
     private List<FeedStatus> _status = new();
     private bool _alive;
     private string? _activity;
@@ -79,6 +80,7 @@
 
     private async Task RunNow(string name)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         await db.FeedStatuses.Where(f => f.Name == name).ExecuteUpdateAsync(u => u.SetProperty(f => f.RunRequested, true));
         await LoadAsync();

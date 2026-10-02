@@ -277,6 +277,8 @@ public class AppUser
     [MaxLength(64)] public string Provider { get; set; } = "local";
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>Changes whenever the account's access changes (role, password, deletion); sign-ins carrying an older stamp end.</summary>
+    [MaxLength(64)] public string SecurityStamp { get; set; } = "";
 }
 
 public class AuditEntry

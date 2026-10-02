@@ -92,7 +92,7 @@
                 <div class="help" style="margin-top:-6px">What leaves the box: your organisation name, the counts of Fix today / Fix this week / Next patch cycle / dismissed / overdue verdicts, the feed date, and the top ten Fix today and Fix this week items as product and CVE only. Asset names are stripped before sending; the inventory itself never leaves.</div>
                 <div class="row">
                     <div><label>MSP portal URL</label><input type="text" @bind="_s.MspPortalUrl" placeholder="https://central.vulnverdict.example" /></div>
-                    <div><label>Tenant token</label><input type="password" @bind="_s.MspTenantToken" autocomplete="new-password" placeholder="@(_licence?.TenantToken is { Length: > 0 } ? "from your MSP licence key" : "")" /><div class="help">Stored encrypted. An MSP licence key carries it; the button below fills it in.</div></div>
+                    <div><label>Tenant token</label><input type="password" @bind="_s.MspTenantToken" autocomplete="new-password" placeholder="@(_tenantSaved ? "saved - leave blank to keep" : _licence?.TenantToken is { Length: > 0 } ? "from your MSP licence key" : "")" /><div class="help">Stored encrypted. An MSP licence key carries it; the button below fills it in.</div></div>
                 </div>
                 <div class="btn-row">
                     <button class="btn btn-secondary" @onclick="SaveSettings" disabled="@_busy">Save</button>
@@ -127,7 +127,7 @@
     private BundleState? _bundle;
     private bool _bundleMode;
     private int _assets;
-    private bool _busy, _uploading;
+    private bool _busy, _uploading, _tenantSaved;
     private string? _notice, _error;
     private IBrowserFile? _file;
     private System.Threading.Timer? _timer;
@@ -141,6 +141,8 @@
     private async Task LoadAsync()
     {
         _s = await SettingsSvc.LoadAsync();
+        // the saved tenant token stays on the server; a blank field keeps it
+        _tenantSaved = _s.MspTenantToken.Length > 0; _s.MspTenantToken = "";
         _licence = LicenseService.Parse(_s.LicenceKey);
         _assets = await Licences.AssetCountAsync();
         _bundle = await Bundles.CurrentAsync();
@@ -151,11 +153,13 @@
 
     private async Task SaveSettings()
     {
-        if (_s is null) return;
+        if (_s is null || !await Ui.IsAdminAsync(AuthState)) return;
         _busy = true; _error = null; _notice = null;
         try
         {
-            await SettingsSvc.SaveAsync(_s, await ActorAsync());
+            var save = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(_s))!;
+            if (save.MspTenantToken == "" && _tenantSaved) save.MspTenantToken = (await SettingsSvc.LoadAsync()).MspTenantToken;
+            await SettingsSvc.SaveAsync(save, await ActorAsync());
             await LoadAsync();
             _notice = "Settings saved.";
         }
@@ -165,7 +169,7 @@
 
     private async Task SaveLicence()
     {
-        if (_s is null) return;
+        if (_s is null || !await Ui.IsAdminAsync(AuthState)) return;
         var check = LicenseService.Parse(_s.LicenceKey);
         if (check.Present && !check.Valid && check.Customer is null)
         {
@@ -186,6 +190,7 @@
 
     private async Task CheckNow()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         await SaveSettings();
         if (_error is not null) return;
         _busy = true; _notice = null;
@@ -204,7 +209,7 @@
 
     private async Task Upload()
     {
-        if (_file is null) return;
+        if (_file is null || !await Ui.IsAdminAsync(AuthState)) return;
         _busy = true; _uploading = true; _error = null; _notice = null;
         try
         {
@@ -221,14 +226,16 @@
 
     private async Task SendTestReport()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         await SaveSettings();
         if (_error is not null) return;
         _busy = true; _notice = null;
         try
         {
-            if (!MspReportService.Configured(_s!)) throw new InvalidOperationException("Turn on MSP reporting and set the portal URL and tenant token first.");
-            var ok = await MspReports.SendNowAsync(_s);
-            if (ok) _notice = "Report sent to " + _s!.MspPortalUrl + ".";
+            var s = await SettingsSvc.LoadAsync();
+            if (!MspReportService.Configured(s)) throw new InvalidOperationException("Turn on MSP reporting and set the portal URL and tenant token first.");
+            var ok = await MspReports.SendNowAsync(s);
+            if (ok) _notice = "Report sent to " + s.MspPortalUrl + ".";
             else _error = "The report could not be sent: " + (MspReports.LastError ?? "unknown error");
         }
         catch (Exception ex) { _error = ex.Message; }

@@ -166,6 +166,7 @@
 
     private async Task Snooze(Guid id)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await Workflow.SnoozeAsync(id, await ActorAsync(), DateTime.UtcNow.AddDays(7), "snoozed from Today");
         _notice = "Snoozed for 7 days.";
         await LoadAsync();
@@ -173,6 +174,7 @@
 
     private async Task SendNow()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         _busy = true; _notice = null; _error = null;
         try
         {

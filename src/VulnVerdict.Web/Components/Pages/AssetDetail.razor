@@ -159,7 +159,7 @@
 
     private async Task SaveAsync()
     {
-        if (_a is null) return;
+        if (_a is null || !await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         var row = await db.Assets.FirstAsync(a => a.Id == Id);
         var before = row.Exposure + "/" + row.Criticality;
@@ -174,6 +174,7 @@
 
     private async Task ArchiveAsync()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         await db.Assets.Where(a => a.Id == Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.Archived, true));
         db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "asset.archive", Target = _a!.DisplayName });
@@ -183,6 +184,7 @@
 
     private async Task AddControlAsync()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         db.Controls.Add(new CompensatingControl { Id = Guid.NewGuid(), AssetId = Id, Kind = _ctlKind, Description = _ctlDesc, ProductNorm = string.IsNullOrWhiteSpace(_ctlProduct) ? null : Normalizer.Norm(_ctlProduct), Expiry = _ctlExpiry?.ToUniversalTime(), CreatedAt = DateTime.UtcNow, CreatedBy = await ActorAsync() });
         db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "control.add", Target = _a!.DisplayName, After = _ctlKind + ": " + _ctlDesc });
@@ -194,6 +196,7 @@
 
     private async Task RemoveControlAsync(Guid id)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         await db.Controls.Where(c => c.Id == id).ExecuteDeleteAsync();
         db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = await ActorAsync(), Action = "control.remove", Target = _a!.DisplayName });

@@ -60,10 +60,10 @@ public sealed class ConnectorService
         var c = id is null ? null : await db.Connectors.FirstOrDefaultAsync(x => x.Id == id, ct);
         var now = DateTime.UtcNow;
         if (c is null) { c = new Connector { Id = Guid.NewGuid(), AdapterId = meta.Id, CreatedAt = now }; db.Connectors.Add(c); }
-        // blank password fields keep the stored value
-        var current = Decrypt(c);
-        foreach (var f in meta.Form)
-            if (f.Type == CredentialTypes.Password && credentials.TryGetValue(f.Key, out var v) && v == "" && current.TryGetValue(f.Key, out var old)) credentials[f.Key] = old;
+        else if (!c.AdapterId.Equals(meta.Id, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("That connector uses a different source.");
+        // blank password fields keep the stored value, but only while the connector still points where it did
+        var reenter = ReuseStoredSecrets(meta, credentials, Decrypt(c));
+        if (reenter.Count > 0) throw new ArgumentException(ReenterMessage(reenter));
         var missing = meta.Form.Where(f => f.Required && string.IsNullOrWhiteSpace(credentials.GetValueOrDefault(f.Key))).Select(f => f.Label).ToList();
         if (missing.Count > 0) throw new ArgumentException("Required: " + string.Join(", ", missing));
         c.DisplayName = string.IsNullOrWhiteSpace(displayName) ? meta.DisplayName : displayName.Trim();
@@ -100,11 +100,11 @@ public sealed class ConnectorService
         {
             await using var db = await _factory.CreateDbContextAsync(ct);
             var c = await db.Connectors.AsNoTracking().FirstOrDefaultAsync(x => x.Id == existingId, ct);
+            if (c is not null && !c.AdapterId.Equals(meta.Id, StringComparison.OrdinalIgnoreCase)) return new TestResult(false, "That connector uses a different source.");
             if (c is not null)
             {
-                var current = Decrypt(c);
-                foreach (var f in meta.Form)
-                    if (f.Type == CredentialTypes.Password && credentials.GetValueOrDefault(f.Key) == "" && current.TryGetValue(f.Key, out var old)) credentials[f.Key] = old;
+                var reenter = ReuseStoredSecrets(meta, credentials, Decrypt(c));
+                if (reenter.Count > 0) return new TestResult(false, ReenterMessage(reenter));
             }
         }
         try
@@ -115,6 +115,32 @@ public sealed class ConnectorService
         }
         catch (Exception ex) { return new TestResult(false, ex.Message); }
     }
+
+    /// <summary>
+    /// Fill blank secret fields from the stored credential, only if every field that says where the credential goes
+    /// (address, tenant, account, TLS checking: every text field and the verify switch) is unchanged. Otherwise a
+    /// changed address with a blank password would send the stored secret to wherever the form now points.
+    /// Returns the labels of secrets that must be typed again.
+    /// </summary>
+    public static List<string> ReuseStoredSecrets(AdapterMetadata meta, Dictionary<string, string> credentials, Dictionary<string, string> stored)
+    {
+        var blank = meta.Form.Where(f => f.Type == CredentialTypes.Password && credentials.GetValueOrDefault(f.Key) == "" && !string.IsNullOrEmpty(stored.GetValueOrDefault(f.Key))).ToList();
+        if (blank.Count == 0) return new();
+        var moved = meta.Form.Any(f => IdentifiesEndpoint(f) && Norm(credentials.GetValueOrDefault(f.Key)) != Norm(stored.GetValueOrDefault(f.Key)))
+            // a key the form does not know about could be read by the adapter as well
+            || credentials.Where(kv => meta.Form.All(f => f.Key != kv.Key)).Any(kv => Norm(kv.Value) != Norm(stored.GetValueOrDefault(kv.Key)));
+        if (moved) return blank.Select(f => f.Label).ToList();
+        foreach (var f in blank) credentials[f.Key] = stored[f.Key];
+        return new();
+    }
+
+    private static bool IdentifiesEndpoint(CredentialField f) =>
+        f.Type is CredentialTypes.Text or CredentialTypes.TextArea || (f.Type == CredentialTypes.Bool && f.Key.Equals("verifyTls", StringComparison.OrdinalIgnoreCase));
+
+    private static string Norm(string? v) => (v ?? "").Trim();
+
+    private static string ReenterMessage(List<string> labels) =>
+        "The connection details changed, so the saved " + string.Join(", ", labels) + " is not reused. Type " + (labels.Count == 1 ? "it" : "them") + " again.";
 
     public async Task RequestRunAsync(Guid id, CancellationToken ct = default)
     {

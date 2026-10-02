@@ -13,7 +13,13 @@ cp .env.example .env        # set DB_PASSWORD and VV_HOSTNAME
 docker compose up -d
 ```
 
-That downloads the latest release's Compose files (the compose file, Caddyfile, `.env.example` set to that release's images, and the update and rollback scripts) and runs the published, scanned images. Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account.
+That downloads the latest release's Compose files (the compose file, Caddyfile, `.env.example` set to that release's images, and the update and rollback scripts) and runs the published, scanned images. Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account and asks for the setup token, a one-time code the console prints in its log on first start so that only someone with access to the server can claim the console:
+
+```bash
+docker compose logs web | grep -i "setup token"
+```
+
+The token is also in the file `setup-token` in the data volume until the account exists (`docker compose exec web cat /data/setup-token`), and stops working once it does.
 
 To build from source instead: clone the repository, `cd deploy`, comment out `VV_IMAGE` in `.env`, and run `docker compose up -d --build`.
 
@@ -29,6 +35,8 @@ docker run -d --name vulnverdict --restart unless-stopped \
   ghcr.io/ayrshirepixels/vulnverdict:allinone
 ```
 
+The setup token for the first page is in the container log: `docker logs vulnverdict 2>&1 | grep -i "setup token"`.
+
 Build it with `docker build -f Dockerfile.allinone -t vulnverdict:allinone .`. Options: `VV_TLS=public` for Let's Encrypt on a public name, `VV_TLS=off` to expose plain HTTP on 8080 behind your own proxy, `VV_DB=sqlite` to skip Postgres for small estates, `VV_DB=external` with `Database__ConnectionString` to use your own Postgres. Back up the `vulnverdict` volume; it holds the database, the keys and the CA. The trade-off against Option A is that the database lifecycle (major-version upgrades, separate backups) is tied to the application container; the Compose stack is the better fit when someone already runs Postgres.
 
 ## Option B: the appliance (a VM)
@@ -41,7 +49,7 @@ Download `vulnverdict-<version>.ova` and its `.sha256` from the [latest release]
 - **Proxmox:** `qm importovf <vmid> vulnverdict-<version>.ovf <storage>` after unpacking the OVA with `tar -xf`.
 - **Hyper-V:** convert the OVA's disk (the Hyper-V disk is too large to attach to a release): `tar -xf vulnverdict-<version>.ova`, then `qemu-img convert -O vhdx -o subformat=dynamic vulnverdict-<version>-disk1.vmdk vulnverdict.vhdx`. Attach it to a **generation 1** VM with 2 vCPU, 4096 MB static memory and one network adapter.
 
-Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL. SSH is off until the wizard has run, so the build's default password is never reachable over the network.
+Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL and the setup token the console's first page asks for (later, `cd /opt/vulnverdict && sudo docker compose logs web | grep -i "setup token"` shows it again). SSH is off until the wizard has run, so the build's default password is never reachable over the network.
 
 The appliance installs Ubuntu's security updates automatically. The first run starts a few minutes after first boot, so a reboot in that window can take several minutes to complete while it finishes; later reboots are quick.
 

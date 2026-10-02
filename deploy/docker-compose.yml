@@ -1,5 +1,5 @@
 # VulnVerdict on-premises console. One command: docker compose up -d
-# Then open https://<host>/ and create the administrator account.
+# Then open https://<host>/ and create the administrator account with the setup token from: docker compose logs web
 services:
   db:
     # Postgres 16 without gosu, running as postgres (deploy/images/db.Dockerfile); postgres:16-alpine also works

@@ -119,6 +119,7 @@
     private async Task AddAsync()
     {
         _error = null; _notice = null;
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         try
         {
             var scope = Enum.Parse<SuppressionScope>(_scope);
@@ -146,6 +147,7 @@
 
     private async Task RemoveAsync(Guid id)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await Workflow.RemoveSuppressionAsync(id, Ui.Actor((await AuthState).User));
         _notice = "Rule removed; affected verdicts re-opened.";
         await LoadAsync();

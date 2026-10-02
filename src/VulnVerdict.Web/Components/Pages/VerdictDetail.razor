@@ -72,7 +72,7 @@
                     {
                         <h3>References</h3>
                         <ul style="margin:0;padding-left:18px">
-                            @foreach (var r in _refs.Take(8)) { <li><a href="@r" target="_blank" rel="noopener noreferrer">@r</a></li> }
+                            @foreach (var r in _refs.Take(8)) { <li>@if (Ui.IsWebLink(r)) { <a href="@r" target="_blank" rel="noopener noreferrer">@r</a> } else { @r }</li> }
                         </ul>
                     }
                 }
@@ -88,13 +88,13 @@
                 <div class="grid grid-2">
                     <div>
                         <h3>What this vulnerability is</h3>
-                        @if (_narrative is null) { <button class="btn btn-secondary btn-sm" @onclick="() => Ai(false)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Explain in plain English")</button> }
-                        else { <p>@_narrative.Text</p><p class="muted" style="font-size:12px">@_narrative.Provider / @_narrative.Model, @Ui.Local(_narrative.CreatedAt, _tz) <a href="" @onclick="() => Ai(false, true)" @onclick:preventDefault="true">regenerate</a></p> }
+                        @if (_narrative is null) { <AuthorizeView Roles="Administrator,Operator" Context="auth"><Authorized><button class="btn btn-secondary btn-sm" @onclick="() => Ai(false)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Explain in plain English")</button></Authorized><NotAuthorized><p class="muted">Not explained yet. An operator can ask for it.</p></NotAuthorized></AuthorizeView> }
+                        else { <p>@_narrative.Text</p><p class="muted" style="font-size:12px">@_narrative.Provider / @_narrative.Model, @Ui.Local(_narrative.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth"><a href="" @onclick="() => Ai(false, true)" @onclick:preventDefault="true">regenerate</a></AuthorizeView></p> }
                     </div>
                     <div>
                         <h3>How an attacker would have to do it here</h3>
-                        @if (_story is null) { <button class="btn btn-secondary btn-sm" @onclick="() => Ai(true)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Tell the attack story")</button> }
-                        else { <p>@_story.Text</p><p class="muted" style="font-size:12px">@_story.Provider / @_story.Model, @Ui.Local(_story.CreatedAt, _tz) <a href="" @onclick="() => Ai(true, true)" @onclick:preventDefault="true">regenerate</a></p> }
+                        @if (_story is null) { <AuthorizeView Roles="Administrator,Operator" Context="auth"><Authorized><button class="btn btn-secondary btn-sm" @onclick="() => Ai(true)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Tell the attack story")</button></Authorized><NotAuthorized><p class="muted">Not written yet. An operator can ask for it.</p></NotAuthorized></AuthorizeView> }
+                        else { <p>@_story.Text</p><p class="muted" style="font-size:12px">@_story.Provider / @_story.Model, @Ui.Local(_story.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth"><a href="" @onclick="() => Ai(true, true)" @onclick:preventDefault="true">regenerate</a></AuthorizeView></p> }
                     </div>
                 </div>
             </div>
@@ -107,7 +107,7 @@
                 {
                     <li>
                         <div>@e.Claim</div>
-                        <div class="src">@(e.Source.StartsWith("http") ? "" : "Source: ")@if (e.Source.StartsWith("http")) { <a href="@e.Source" target="_blank" rel="noopener noreferrer">@e.Source</a> } else { @e.Source } &middot; retrieved @Ui.Local(e.RetrievedAt, _tz)</div>
+                        <div class="src">@(Ui.IsWebLink(e.Source) ? "" : "Source: ")@if (Ui.IsWebLink(e.Source)) { <a href="@e.Source" target="_blank" rel="noopener noreferrer">@e.Source</a> } else { @e.Source } &middot; retrieved @Ui.Local(e.RetrievedAt, _tz)</div>
                         @if (e.Excerpt is not null) { <pre class="excerpt">@e.Excerpt</pre> }
                     </li>
                 }
@@ -151,7 +151,7 @@
                     {
                         <h3>Public exploit references</h3>
                         <ul style="margin:0;padding-left:18px">
-                            @foreach (var s in _signals) { <li><a href="@s.Url" target="_blank" rel="noopener noreferrer">@s.Source: @(s.Title ?? s.Url)</a></li> }
+                            @foreach (var s in _signals) { <li>@if (Ui.IsWebLink(s.Url)) { <a href="@s.Url" target="_blank" rel="noopener noreferrer">@s.Source: @(s.Title ?? s.Url)</a> } else { @(s.Source + ": " + (s.Title ?? s.Url)) }</li> }
                         </ul>
                     }
                 </div>
@@ -283,8 +283,10 @@
     private Narrative? _narrative, _story;
     private string? _aiError;
 
+    // the model costs money per call, so asking for an explanation is an operator action
     private async Task Ai(bool story, bool refresh = false)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         _aiBusy = true; _aiError = null;
         try
         {
@@ -334,6 +336,7 @@
     private async Task Run(Func<string, Task> action, string notice)
     {
         _error = null; _notice = null;
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         try { await action(await ActorAsync()); _notice = notice; _dialog = Dialog.None; _reason = ""; _owner = ""; _date = null; await LoadAsync(); }
         catch (Exception ex) { _error = ex.Message; }
     }
@@ -358,6 +361,7 @@
     private async Task Done()
     {
         _error = null; _notice = null;
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         try
         {
             var r = await Workflow.DoneAsync(Id, await ActorAsync(), _running, _uprev && _v?.WatchlistEntry is not null, _reason);

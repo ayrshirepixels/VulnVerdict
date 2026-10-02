@@ -7,6 +7,7 @@
 @inject AuthService Auth
 @inject NavigationManager Nav
 @inject HealthNotices Notices
+@inject ApiTokenService ApiTokens
 
 <PageTitle>Settings - VulnVerdict</PageTitle>
 
@@ -57,7 +58,7 @@
                         <div><label>Tenant ID</label><input type="text" @bind="_s.M365TenantId" placeholder="00000000-0000-0000-0000-000000000000" /><div class="help">Directory (tenant) ID from the app registration's overview page.</div></div>
                         <div><label>Application (client) ID</label><input type="text" @bind="_s.M365ClientId" /></div>
                     </div>
-                    <div><label>Client secret</label><input type="password" @bind="_s.M365ClientSecret" autocomplete="new-password" /><div class="help">Stored encrypted. The app registration needs permission to send as the from mailbox only; <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/mail.md#microsoft-365" target="_blank" rel="noopener noreferrer">how to set it up</a>. Outbound HTTPS to login.microsoftonline.com and graph.microsoft.com is required.</div></div>
+                    <div><label>Client secret</label><input type="password" @bind="_s.M365ClientSecret" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.M365ClientSecret))" />@Remove(nameof(AppSettings.M365ClientSecret))<div class="help">Stored encrypted. The app registration needs permission to send as the from mailbox only; <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/mail.md#microsoft-365" target="_blank" rel="noopener noreferrer">how to set it up</a>. Outbound HTTPS to login.microsoftonline.com and graph.microsoft.com is required.</div></div>
                     <div><label>Client secret expires on (optional)</label><input type="date" value="@_s.M365SecretExpires" @onchange="e => _s.M365SecretExpires = e.Value?.ToString() ?? string.Empty" /><div class="help">The console warns 30 days before, on screen and in the digest. The setup script prints this date.</div></div>
                 }
                 else if (_s.MailTransport == "smtp")
@@ -69,12 +70,12 @@
                     </div>
                     <div class="row">
                         <div><label>Username</label><input type="text" @bind="_s.SmtpUsername" /></div>
-                        <div><label>Password</label><input type="password" @bind="_s.SmtpPassword" autocomplete="new-password" /><div class="help">Stored encrypted.</div></div>
+                        <div><label>Password</label><input type="password" @bind="_s.SmtpPassword" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.SmtpPassword))" />@Remove(nameof(AppSettings.SmtpPassword))<div class="help">Stored encrypted.</div></div>
                     </div>
                 }
                 else
                 {
-                    <div><label>@(_s.MailTransport == "sendgrid" ? "SendGrid API key (Mail Send permission)" : "Brevo API key (v3, transactional email)")</label><input type="password" @bind="_s.MailApiKey" autocomplete="new-password" /><div class="help">Stored encrypted. Outbound HTTPS to @(_s.MailTransport == "sendgrid" ? "api.sendgrid.com" : "api.brevo.com") is required.</div></div>
+                    <div><label>@(_s.MailTransport == "sendgrid" ? "SendGrid API key (Mail Send permission)" : "Brevo API key (v3, transactional email)")</label><input type="password" @bind="_s.MailApiKey" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.MailApiKey))" />@Remove(nameof(AppSettings.MailApiKey))<div class="help">Stored encrypted. Outbound HTTPS to @(_s.MailTransport == "sendgrid" ? "api.sendgrid.com" : "api.brevo.com") is required.</div></div>
                 }
                 <div class="btn-row"><button class="btn btn-secondary" @onclick="TestMail" disabled="@_busy">Save and send a test email</button></div>
                 @if (_mailFailure is not null) { <div class="alert alert-error" style="margin-top:10px">@_mailFailure.Text</div> }
@@ -110,7 +111,7 @@
                 </div>
                 <div class="row">
                     <div><label>Webhook URL</label><input type="text" @bind="_s.WebhookUrl" placeholder="https://hooks.example.com/vulnverdict" /><div class="help">Receives verdict created, promoted and closed events as JSON, signed with HMAC-SHA256 (see docs/api.md).</div></div>
-                    <div><label>Webhook secret</label><input type="password" @bind="_s.WebhookSecret" autocomplete="new-password" /></div>
+                    <div><label>Webhook secret</label><input type="password" @bind="_s.WebhookSecret" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.WebhookSecret))" />@Remove(nameof(AppSettings.WebhookSecret))</div>
                 </div>
             </div>
         </div>
@@ -135,7 +136,7 @@
                     <div><label>Client id</label><input type="text" @bind="_s.OidcClientId" /></div>
                 </div>
                 <div class="row-3">
-                    <div><label>Client secret</label><input type="password" @bind="_s.OidcClientSecret" autocomplete="new-password" /></div>
+                    <div><label>Client secret</label><input type="password" @bind="_s.OidcClientSecret" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.OidcClientSecret))" />@Remove(nameof(AppSettings.OidcClientSecret))</div>
                     <div><label>Group claim name</label><input type="text" @bind="_s.OidcGroupClaim" placeholder="groups" /></div>
                     <div></div>
                 </div>
@@ -159,7 +160,7 @@
                             <option value="openai-compatible">OpenAI-compatible endpoint (Ollama, vLLM, LM Studio)</option>
                         </select></div>
                     <div><label>Model</label><input type="text" @bind="_s.LlmModel" placeholder="@(_s.LlmProvider == "anthropic" ? "claude-opus-5" : _s.LlmProvider == "openai" ? "the model name from your OpenAI account" : "llama3.1")" /></div>
-                    <div><label>API key</label><input type="password" @bind="_s.LlmApiKey" autocomplete="new-password" /><div class="help">Stored encrypted. Optional for a local endpoint.</div></div>
+                    <div><label>API key</label><input type="password" @bind="_s.LlmApiKey" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.LlmApiKey))" />@Remove(nameof(AppSettings.LlmApiKey))<div class="help">Stored encrypted. Optional for a local endpoint.</div></div>
                 </div>
                 @if (_s.LlmProvider == "openai-compatible")
                 {
@@ -171,8 +172,19 @@
 
         <div class="card">
             <h2>API</h2>
-            <p class="muted" style="margin-top:0">Read verdicts, the watchlist and the digest, or import a watchlist, with <code>Authorization: Bearer TOKEN</code> against <code>/api/verdicts</code>, <code>/api/watchlist</code> and <code>/api/digest</code>.</p>
-            <div class="form"><div class="row"><div><label>API token</label><input type="text" @bind="_s.ApiToken" /></div><div style="align-self:end"><button class="btn btn-secondary" @onclick="() => _s.ApiToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24)).ToLowerInvariant()">Generate</button></div></div></div>
+            <p class="muted" style="margin-top:0">Send <code>Authorization: Bearer TOKEN</code> to <code>/api/verdicts</code>, <code>/api/watchlist</code>, <code>/api/assets</code> and <code>/api/digest</code>. The read-only token reads; the read-write token can also import a watchlist or an SBOM. Only a hash is kept, so a token is shown once, when it is generated.</p>
+            @if (_apiLegacy) { <div class="alert alert-info">The read-write token is the one from an earlier version, which showed it on this page. Generate a new one and update the integrations that use it.</div> }
+            @if (_newToken is not null) { <div class="alert alert-ok">Copy this token now; it is not shown again.<br /><code style="user-select:all;word-break:break-all">@_newToken</code></div> }
+            <div class="form">
+                <div class="row">
+                    <div><label>Read-only token</label><div>@(_apiRead ? "Set" : "Not set")</div></div>
+                    <div class="btn-row" style="align-self:end"><button class="btn btn-secondary" @onclick="() => GenerateToken(ApiScope.Read)" disabled="@_busy">@(_apiRead ? "Replace" : "Generate")</button>@if (_apiRead) { <button class="btn btn-secondary" @onclick="() => RevokeToken(ApiScope.Read)" disabled="@_busy">Revoke</button> }</div>
+                </div>
+                <div class="row">
+                    <div><label>Read-write token</label><div>@(_apiWrite ? "Set" : "Not set")</div></div>
+                    <div class="btn-row" style="align-self:end"><button class="btn btn-secondary" @onclick="() => GenerateToken(ApiScope.ReadWrite)" disabled="@_busy">@(_apiWrite ? "Replace" : "Generate")</button>@if (_apiWrite) { <button class="btn btn-secondary" @onclick="() => RevokeToken(ApiScope.ReadWrite)" disabled="@_busy">Revoke</button> }</div>
+                </div>
+            </div>
         </div>
 
         <div class="btn-row" style="margin-bottom:30px"><button class="btn" @onclick="Save" disabled="@_busy">Save settings</button></div>
@@ -188,11 +200,57 @@
 
     private List<Connector> _ticketConnectors = new();
 
+    // stored secrets never reach the browser: the form shows that one is saved, a blank field keeps it
+    private readonly HashSet<string> _saved = new(), _clear = new();
+    private bool _apiRead, _apiWrite, _apiLegacy;
+    private string? _newToken;
+
     protected override async Task OnInitializedAsync()
     {
         _s = await SettingsSvc.LoadAsync();
+        HideSecrets(_s);
         _ticketConnectors = (await ConnectorSvc.ListAsync()).Where(c => ConnectorSvc.IsTicketAdapter(c.AdapterId)).ToList();
         await LoadMailHealthAsync();
+        await LoadApiStatusAsync();
+    }
+
+    private void HideSecrets(AppSettings s)
+    {
+        foreach (var name in SettingsService.SecretNames)
+        {
+            var p = typeof(AppSettings).GetProperty(name)!;
+            if (!string.IsNullOrEmpty((string?)p.GetValue(s))) _saved.Add(name); else _saved.Remove(name);
+            p.SetValue(s, "");
+        }
+    }
+
+    private string Saved(string name) => _saved.Contains(name) && !_clear.Contains(name) ? "saved - leave blank to keep" : "";
+
+    private RenderFragment Remove(string name) => __builder =>
+    {
+        if (_saved.Contains(name))
+        {
+            <label class="check" style="font-weight:400;font-size:12px;margin-top:3px"><input type="checkbox" checked="@_clear.Contains(name)" @onchange="e => { if (e.Value is true) _clear.Add(name); else _clear.Remove(name); }" /> Remove the saved value</label>
+        }
+    };
+
+    private async Task LoadApiStatusAsync() => (_apiRead, _apiWrite, _apiLegacy) = await ApiTokens.StatusAsync();
+
+    private async Task GenerateToken(ApiScope scope)
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _error = null; _notice = null;
+        _newToken = await ApiTokens.GenerateAsync(scope, Ui.Actor((await AuthState).User));
+        await LoadApiStatusAsync();
+    }
+
+    private async Task RevokeToken(ApiScope scope)
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _error = null; _newToken = null;
+        await ApiTokens.RevokeAsync(scope, Ui.Actor((await AuthState).User));
+        _notice = (scope == ApiScope.ReadWrite ? "Read-write" : "Read-only") + " token revoked.";
+        await LoadApiStatusAsync();
     }
 
     private HealthNotices.Notice? _mailFailure;
@@ -208,12 +266,24 @@
 
     private async Task Save()
     {
-        if (_s is null) return;
+        if (_s is null || !await Ui.IsAdminAsync(AuthState)) return;
         _busy = true; _error = null; _notice = null;
         try
         {
-            await SettingsSvc.SaveAsync(_s, Ui.Actor((await AuthState).User));
-            Auth.ReloadOidc();
+            // saved from a copy, so a stored secret filled back in is never part of what the page renders
+            var stored = await SettingsSvc.LoadAsync();
+            var save = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(_s))!;
+            foreach (var name in SettingsService.SecretNames)
+            {
+                var p = typeof(AppSettings).GetProperty(name)!;
+                if (string.IsNullOrEmpty((string?)p.GetValue(save)) && !_clear.Contains(name)) p.SetValue(save, p.GetValue(stored));
+            }
+            await SettingsSvc.SaveAsync(save, Ui.Actor((await AuthState).User));
+            Auth.ReloadOidc(save);
+            _clear.Clear();
+            HideSecrets(_s);
+            foreach (var name in SettingsService.SecretNames)
+                if (!string.IsNullOrEmpty((string?)typeof(AppSettings).GetProperty(name)!.GetValue(save))) _saved.Add(name); else _saved.Remove(name);
             _notice = "Settings saved.";
         }
         catch (Exception ex) { _error = ex.Message; }
@@ -222,6 +292,7 @@
 
     private async Task TestLlm()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         await Save();
         if (_error is not null) return;
         _busy = true;
@@ -236,6 +307,7 @@
 
     private async Task TestMail()
     {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
         await Save();
         if (_error is not null) return;
         _busy = true;
