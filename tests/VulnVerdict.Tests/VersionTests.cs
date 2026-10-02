@@ -412,4 +412,36 @@ public class VersionTests
         Assert.Equal(VersionMatch.NotAffected, outside.Match);
         Assert.NotEqual(MatchConfidence.Exact, outside.Confidence);
     }
+
+    [Theory]
+    [InlineData("5 - 7")]
+    [InlineData("5-7")]
+    [InlineData("5 to 7")]
+    [InlineData("between 5 and 7")]
+    [InlineData("5 – 7")]
+    [InlineData(">= 5, <= 7")]
+    public void Whole_number_ranges_cover_every_release_of_the_top_line(string text)
+    {
+        var versions = V((text, "affected", null, null));
+        foreach (var inside in new[] { "5", "5.0.0", "6.4.1", "7", "7.2.3" })
+            Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate(inside, versions, null).Match);
+        foreach (var outside in new[] { "4.9.9", "8.0.0" })
+            Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate(outside, versions, null).Match);
+    }
+
+    [Fact]
+    public void Whole_number_bounds_mix_with_dotted_ones_and_keep_exclusive_tops()
+    {
+        Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate("7.9", V(("5.1.0 - 7", "affected", null, null)), null).Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("5.0.9", V(("5.1.0 - 7", "affected", null, null)), null).Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("7.0.1", V((">= 5, < 7", "affected", null, null)), null).Match);
+        Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate("6.9", V((">= 5, < 7", "affected", null, null)), null).Match);
+    }
+
+    [Fact]
+    public void A_glued_pair_that_runs_downwards_is_not_a_range()
+    {
+        // "10-3" is a version with a build number, not "10 down to 3"
+        Assert.NotEqual(VersionMatch.Affected, VersionMatcher.Evaluate("5.0", V(("10-3", "affected", null, null)), null).Match);
+    }
 }

@@ -172,6 +172,10 @@ public static partial class VersionMatcher
     [GeneratedRegex(@"^\s*(?<a>[\w.\-]+)\s*(?<lo><=|≤|<)\s*[a-z]\w*\s*(?<hi><=|≤|<)\s*(?<b>[\w.\-]+)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex ComparatorBetween();
     [GeneratedRegex(@"^\d+(?:\.\d+)+[\w.\-]*$")] private static partial Regex DottedBound();
+    // Whole-number bounds ("5 - 7", "2019 to 2022"). Glued ("5-7") only reads as a range when it runs upwards.
+    [GeneratedRegex(@"^\d{1,4}$")] private static partial Regex WholeBound();
+    [GeneratedRegex(@"^\s*(?:from\s+)?(?<a>v?\d{1,4})-(?<b>v?\d{1,4})\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex GluedWholeRange();
 
     [GeneratedRegex(@"^\s*(?:<|<=|≤|prior to|before|earlier than|up to|through|below)\s*(?<b>[\w.\-]+)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex LessThanText();
@@ -224,12 +228,12 @@ public static partial class VersionMatcher
     /// One end of a text range: a dotted version, optionally after a product name ("FortiOS 7.0.0", "v1.1.0"). Null
     /// for anything else, so "7.1.1-7058" or "1.2.3-rc.1" never splits into a range of two halves.
     /// </summary>
-    private static string? BoundVersion(string bound)
+    private static string? BoundVersion(string bound, bool allowWhole = false)
     {
         var words = bound.Trim().TrimEnd(',').Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (words.Length == 0 || words[..^1].Any(w => !char.IsLetter(w[0]) || RangeWords().IsMatch(w))) return null;
         var last = VersionCompare.Clean(words[^1]);
-        return DottedBound().IsMatch(last) ? last : null;
+        return DottedBound().IsMatch(last) || (allowWhole && WholeBound().IsMatch(last)) ? last : null;
     }
 
     /// <summary>
@@ -245,24 +249,34 @@ public static partial class VersionMatcher
         Match m;
         if ((m = ComparatorPair().Match(text)).Success || (m = ComparatorBetween().Match(text)).Success)
         {
-            a = BoundVersion(m.Groups["a"].Value);
-            b = BoundVersion(m.Groups["b"].Value);
+            a = BoundVersion(m.Groups["a"].Value, allowWhole: true);
+            b = BoundVersion(m.Groups["b"].Value, allowWhole: true);
             fromIncl = m.Groups["lo"].Value is ">=" or "≥" or "<=" or "≤";
             toIncl = m.Groups["hi"].Value is "<=" or "≤";
+        }
+        else if ((m = GluedWholeRange().Match(text)).Success)
+        {
+            // "5-7" is a range; "10-3" is one version with a build number, as before
+            a = VersionCompare.Clean(m.Groups["a"].Value);
+            b = VersionCompare.Clean(m.Groups["b"].Value);
+            if (VersionCompare.Compare(a, b) >= 0) return null;
         }
         else
         {
             foreach (var re in new[] { GluedDashRange(), BetweenRange(), WordRange(), DashRange() })
             {
                 if (!(m = re.Match(text)).Success) continue;
-                a = BoundVersion(m.Groups["a"].Value);
-                b = BoundVersion(m.Groups["b"].Value);
+                a = BoundVersion(m.Groups["a"].Value, allowWhole: true);
+                b = BoundVersion(m.Groups["b"].Value, allowWhole: true);
                 if (a is not null && b is not null) break;
             }
         }
         if (a is null || b is null) return null;
         if (VersionCompare.Compare(a, b) > 0)
             return new Range(null, null, true, affected, MatchConfidence.Possible, text + " (range written backwards, unparsed)");
+        // A whole number at the top means the whole of that line: "5 - 7" covers 7.2.3, so the range ends just
+        // before 8. Read as 7.0.0 exactly, every 7.x release would have been cleared.
+        if (toIncl && WholeBound().IsMatch(b)) { b = (int.Parse(b) + 1).ToString(); toIncl = false; }
         return new Range(a, b, toIncl, affected, MatchConfidence.Likely, text, fromIncl);
     }
 
