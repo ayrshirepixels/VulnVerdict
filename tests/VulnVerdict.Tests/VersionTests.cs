@@ -402,4 +402,14 @@ public class VersionTests
         Assert.Equal(MatchConfidence.Possible, r.Confidence);
         Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("1.0", new(), "unaffected").Match);
     }
+
+    [Fact]
+    public void A_specific_affected_range_beats_a_blanket_unaffected_entry()
+    {
+        var versions = V(("*", "unaffected", null, null), ("7.0.0", "affected", "7.2.5", null));
+        Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate("7.2.3", versions, null).Match);
+        var outside = VersionMatcher.Evaluate("7.4.0", versions, null);
+        Assert.Equal(VersionMatch.NotAffected, outside.Match);
+        Assert.NotEqual(MatchConfidence.Exact, outside.Confidence);
+    }
 }

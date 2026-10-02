@@ -442,7 +442,8 @@ public static partial class VersionMatcher
         {
             // an unaffected entry we could not read ("n/a", "7.2.5 and later" before it was understood) says nothing
             // about this release; read as "every version", it overrode every affected range in the record
-            if (r.Confidence == MatchConfidence.Possible && r.Unbounded) continue;
+            // A stated "unaffected: *" is weighed after the affected ranges: a specific affected range beats a blanket.
+            if (r.Unbounded) continue;
             var c = Contains(r, installed);
             if (c is null) { unknownSeen = true; continue; }
             if (c == true) return new VersionMatchResult(VersionMatch.NotAffected, r.Confidence, installed + " is inside the unaffected range " + r.Text, fixedIn);
@@ -463,6 +464,9 @@ public static partial class VersionMatcher
                 return new VersionMatchResult(VersionMatch.Affected, r.Confidence, installed + " is inside the affected range " + r.Text, branchFix ?? fixedIn);
             }
         }
+        var blanket = ranges.FirstOrDefault(r => !r.Affected && r.Unbounded && r.Confidence != MatchConfidence.Possible);
+        if (blanket is not null && !unknownSeen)
+            return new VersionMatchResult(VersionMatch.NotAffected, blanket.Confidence, "the record states every version is unaffected and no affected range covers " + installed, fixedIn);
         if ((defaultStatus ?? "").Equals("affected", StringComparison.OrdinalIgnoreCase))
             return new VersionMatchResult(VersionMatch.Affected, MatchConfidence.Likely, "default status is affected and no unaffected range covers " + installed, fixedIn);
         if (unknownSeen)
