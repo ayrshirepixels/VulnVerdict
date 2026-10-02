@@ -35,6 +35,7 @@ public class VvDbContext : DbContext
     public DbSet<CompensatingControl> Controls => Set<CompensatingControl>();
     public DbSet<PackageVulnCache> PackageVulns => Set<PackageVulnCache>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
     public DbSet<BundleState> Bundles => Set<BundleState>();
     public DbSet<Advisory> Advisories => Set<Advisory>();
     public DbSet<OfficeRelease> OfficeReleases => Set<OfficeRelease>();
@@ -107,6 +108,7 @@ public class VvDbContext : DbContext
         b.Entity<CompensatingControl>(e => { e.HasIndex(x => x.AssetId); e.HasIndex(x => x.WatchlistEntryId); });
         b.Entity<PackageVulnCache>(e => e.HasKey(x => x.Key));
         b.Entity<WebhookDelivery>(e => e.HasIndex(x => x.At));
+        b.Entity<OutboxMessage>(e => { e.ToTable("Outbox"); e.HasIndex(x => x.NextAttemptAt); });
         b.Entity<BundleState>(e => e.HasKey(x => x.Id));
         b.Entity<Advisory>(e => { e.HasIndex(x => new { x.Vendor, x.AdvisoryId }).IsUnique(); e.HasIndex(x => x.Updated); });
         b.Entity<OfficeRelease>(e => e.HasIndex(x => new { x.Build, x.Released }));

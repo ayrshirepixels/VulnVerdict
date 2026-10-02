@@ -30,6 +30,7 @@ public sealed class HealthNotices
         var list = new List<Notice>();
         if (await MailFailureAsync(ct) is { } mail) list.Add(mail);
         list.AddRange(await SecretsAsync(DateTime.UtcNow, ct));
+        list.AddRange(await WebhookService.FailureNoticesAsync(_factory, ct));
         return list;
     }
 

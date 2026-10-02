@@ -93,9 +93,11 @@ public sealed class VerdictWorkflow
         await using var db = await _factory.CreateDbContextAsync(ct);
         var v = await db.Verdicts.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("Verdict not found");
         SetState(db, v, actor, to, reason, mutate, DateTime.UtcNow);
+        // queued in the same save, so the worker sends it even if this process stops here; tried now as well, so a
+        // helpdesk that closes its ticket on this event hears straight away
+        var queued = to == VerdictState.Closed ? await _webhooks.EnqueueAsync(db, new[] { (WebhookService.EventClosed, v.Id) }, ct) : null;
         await db.SaveChangesAsync(ct);
-        // the web process closes tickets directly; deliver the webhook now rather than through the worker queue
-        if (to == VerdictState.Closed) await _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct);
+        if (queued is { Count: > 0 }) await _webhooks.DeliverNowAsync(queued, ct);
     }
 
     /// <summary>One state change on a tracked verdict, with its history line and audit entry. The caller saves.</summary>
@@ -172,6 +174,7 @@ public sealed class VerdictWorkflow
         var skipped = new Dictionary<string, int>();
         void Skip(string why) => skipped[why] = skipped.GetValueOrDefault(why) + 1;
         var closed = new List<Verdict>();
+        List<OutboxMessage>? queued = null;
         var changed = 0;
 
         await using (var db = await _factory.CreateDbContextAsync(ct))
@@ -225,12 +228,15 @@ public sealed class VerdictWorkflow
                 }
                 changed++;
             }
+            // the same webhook the single Done sends, queued in the same save so the worker sends whatever is not
+            // delivered straight away
+            if (closed.Count > 0) queued = await _webhooks.EnqueueAsync(db, closed.Select(v => (WebhookService.EventClosed, v.Id)).ToList(), ct);
             if (changed > 0) await db.SaveChangesAsync(ct);   // one save: every history line and audit entry, or none
         }
 
-        // the same webhook the single Done sends, a few at a time so a slow receiver does not hold the page for long
-        foreach (var batch in closed.Chunk(8))
-            await Task.WhenAll(batch.Select(v => _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct)));
+        // tried now, a few at a time so a slow receiver does not hold the page for long; the worker retries the rest
+        foreach (var batch in (queued ?? new()).Chunk(8))
+            await _webhooks.DeliverNowAsync(batch, ct);
 
         return new BulkResult(req.Action, changed, skipped.OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal).Select(s => (s.Key, s.Value)).ToList());
     }

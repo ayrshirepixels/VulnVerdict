@@ -449,9 +449,9 @@ public sealed partial class VerdictEvaluator
             removed++;
         }
 
+        await _webhooks.EnqueueAsync(db, events, ct);   // outbox rows, written in the same save as the verdicts
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
-        foreach (var (evt, id) in events) _webhooks.Enqueue(evt, id);
         return new EvaluationSummary(1, byCve.Count, created, changed, removed, TimeSpan.Zero);
     }
 
@@ -963,9 +963,9 @@ public sealed partial class VerdictEvaluator
         foreach (var x in goneAssets.Where(x => IsOpenish(x.Verdict.State) && (x.Archived || !held.Contains(x.Id))))
             CloseAsGone(db, x.Verdict, NoLongerReported + ": " + (x.Archived ? "asset archived" : "asset not seen since " + x.LastSeen.ToString("yyyy-MM-dd")), now, events);
 
+        await _webhooks.EnqueueAsync(db, events, ct);   // outbox rows, written in the same save as the verdicts
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
-        foreach (var (evt, id) in events) _webhooks.Enqueue(evt, id);
         return events.Count;
     }
 

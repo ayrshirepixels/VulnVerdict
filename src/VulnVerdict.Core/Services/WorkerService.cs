@@ -268,7 +268,8 @@ public sealed class WorkerService : BackgroundService
         if (n > 0) _log.LogInformation("Sent immediate Fix-today email for {Count} verdict(s)", n);
         var t = await digest.SendTicketsAsync(ct);
         if (t > 0) _log.LogInformation("Raised {Count} ticket(s)", t);
-        await scope.ServiceProvider.GetRequiredService<WebhookService>().FlushPendingAsync(ct);
+        var gaveUp = await scope.ServiceProvider.GetRequiredService<WebhookService>().FlushPendingAsync(ct);
+        if (gaveUp.Count > 0) await AdminAlertAsync(scope.ServiceProvider, "Notifications could not be delivered", string.Join("\n", gaveUp), ct);
     }
 
     private async Task DailyDigestIfDueAsync(CancellationToken ct)
@@ -288,6 +289,7 @@ public sealed class WorkerService : BackgroundService
         {
             // still record that the day's digest was generated so the Today page can show it, without sending
             await settingsSvc.SetStateAsync(SettingsService.Keys.LastDailyDigest, DateTime.UtcNow.ToString("O"), ct);
+            await scope.ServiceProvider.GetRequiredService<DigestService>().QueueChatSummaryAsync(ct);   // Teams and Slack do not need mail
             return;
         }
         var digest = scope.ServiceProvider.GetRequiredService<DigestService>();
@@ -325,6 +327,7 @@ public sealed class WorkerService : BackgroundService
             .Where(f => Feeds.FeedHealth.IsOverdue(f, now)).ToList();
         if (stale.Count == 0) return;
         var body = string.Join("\n", stale.Select(f => f.DisplayName + ": last success " + (f.LastSuccess?.ToString("u") ?? "never") + ", last error: " + (f.LastError ?? "none")));
+        await scope.ServiceProvider.GetRequiredService<ChatNotificationService>().QueueFeedHealthAsync(stale.Select(f => f.DisplayName).ToList(), ct);
         await AdminAlertAsync(scope.ServiceProvider, "Feeds overdue", body, ct);
     }
 

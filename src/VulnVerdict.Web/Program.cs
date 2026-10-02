@@ -262,6 +262,7 @@ app.MapGet("/digests/{id:guid}/html", async (Guid id, VvDbContext db) =>
     var run = await db.DigestRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
     return run is null ? Results.NotFound() : Results.Content(run.Html, "text/html");
 });
+app.MapDigestActions();   // the digest email's Done and Snooze links: anonymous, token-signed (DigestActionEndpoints.cs)
 app.MapGet("/digests/preview/html", async (DigestService digest) => Results.Content((await digest.BuildAsync()).Html, "text/html"));
 app.MapGet("/reports/weekly.html", async (ReportService reports, int? weeks) => Results.Content((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Html, "text/html"));
 // Connector diagnostics for a bug report: one collection run, nothing applied to the inventory, identifying values replaced.
