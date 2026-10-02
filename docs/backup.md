@@ -24,6 +24,8 @@ It is a gzip-compressed tar archive holding:
 Feed downloads and the TLS proxy's certificates are not in it: the feeds load again by themselves, and Caddy issues new certificates.
 
 > **A backup and its keys together open every stored credential.** Connector passwords, the mail password, API keys and the webhook secret are encrypted in the database with the data-protection keys. The archive holds both, because a database without its keys cannot be used again. Treat the backups folder like a password store: readable by administrators only, and encrypted (below) if it leaves the machine or sits on a share other people can read.
+>
+> With a key-ring secret set (`VV_KEY_SECRET`, see [security](security.md#secrets)) the keys in the archive are themselves encrypted, so the archive alone opens nothing. The secret is not in the backup: a restore needs the same `VV_KEY_SECRET` in `.env`, so keep a copy of it somewhere other than this machine.
 
 ## How it is taken
 

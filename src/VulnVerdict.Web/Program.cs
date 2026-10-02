@@ -37,6 +37,7 @@ var workerOptions = new WorkerOptions
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")))
     .SetApplicationName("VulnVerdict");
+KeyRingProtection.Configure(builder.Services, cfg, Path.Combine(dataDir, "keys")); // VV_KEY_SECRET: keys encrypted at rest
 builder.Services.AddVulnVerdictCore(provider, connectionString, workerOptions, role);
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<UserService>();
@@ -97,6 +98,7 @@ builder.Services.AddRateLimiter(o =>
 });
 
 var app = builder.Build();
+if (KeyRingProtection.StartupNote is { } keyNote) { if (KeyRingProtection.Protected) app.Logger.LogInformation("{Note}", keyNote); else app.Logger.LogWarning("{Note}", keyNote); }
 
 await CoreServices.InitialiseDatabaseAsync(app.Services);
 if (await ConsoleCommands.RunAsync(args, app.Services)) return; // break-glass: reset-2fa <username>, see docs/security.md

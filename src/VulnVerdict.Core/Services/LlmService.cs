@@ -155,9 +155,29 @@ public sealed class LlmService
         });
         using var resp = await client.SendAsync(req, ct);
         var body = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException("The AI endpoint returned " + (int)resp.StatusCode + ": " + (body.Length > 300 ? body[..300] : body));
-        using var doc = JsonDocument.Parse(body);
-        var text = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+        if (!resp.IsSuccessStatusCode)
+        {
+            // The base URL is whatever was typed in Settings: what the host at that address replies is not shown on
+            // the page (it would let the console be used to read internal services), only logged.
+            _log.LogWarning("AI endpoint {Url} returned {Status}: {Body}", baseUrl, (int)resp.StatusCode, body.Length > 300 ? body[..300] : body);
+            throw new InvalidOperationException("The AI endpoint returned " + (int)resp.StatusCode + " (" + resp.StatusCode + "). " + ((int)resp.StatusCode switch
+            {
+                401 or 403 => "Check the API key under Settings.",
+                404 => "Check the base URL and the model name under Settings.",
+                429 => "The provider is rate limiting or the account is out of credit; try again later.",
+                _ => "The reply is in the console log."
+            }));
+        }
+        string? text;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            text = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            throw new InvalidOperationException("The AI endpoint's reply was not a chat completion. Check the base URL under Settings.");
+        }
         if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("The AI endpoint returned no text.");
         return text;
     }

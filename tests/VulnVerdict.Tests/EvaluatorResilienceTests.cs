@@ -336,6 +336,27 @@ public class EvaluatorResilienceTests : IDisposable
         Assert.DoesNotContain("web-07", sent);
     }
 
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError, "{\"internal\":\"admin panel of some other service\"}")]
+    [InlineData(System.Net.HttpStatusCode.OK, "<html>admin panel of some other service</html>")]
+    public async Task What_the_AI_endpoint_replies_is_never_shown_on_the_page(System.Net.HttpStatusCode status, string body)
+    {
+        var s = await _settings.LoadAsync();
+        s.LlmProvider = "openai-compatible"; s.LlmModel = "test-model"; s.LlmBaseUrl = "http://intranet.test/v1";
+        await _settings.SaveAsync(s, "test");
+        var handler = new FakeHandler().On(HttpMethod.Post, "/chat/completions", body, status);
+        var llm = new LlmService(_factory, _settings, new FakeHttpClientFactory(handler), NullLogger<LlmService>.Instance);
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            db.Cves.Add(new Cve { Id = "CVE-2099-3001", State = "PUBLISHED", RetrievedAt = DateTime.UtcNow, Description = "test record" });
+            await db.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => llm.CveNarrativeAsync("CVE-2099-3001"));
+
+        Assert.DoesNotContain("admin panel", ex.Message);
+    }
+
     // ------------------------------------------------------------------ fakes
 
     private sealed class FakeOsv : IPackageVulnSource
