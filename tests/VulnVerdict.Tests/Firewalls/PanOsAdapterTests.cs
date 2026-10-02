@@ -101,6 +101,59 @@ public class PanOsAdapterTests
         var named = new Dictionary<string, string>(KeyCreds) { ["internetZones"] = "untrust, dmz" };
         var r2 = await a.CollectAsync(named, null, null, CancellationToken.None);
         Assert.Empty(r2.Warnings);
+        Assert.False(r2.Partial);
+    }
+
+    private const string PushedPolicy = """
+        <response status="success"><result><policy><panorama>
+          <address>
+            <entry name="crm-public"><ip-netmask>203.0.113.30</ip-netmask></entry>
+            <entry name="crm-internal"><ip-netmask>10.30.0.30</ip-netmask></entry>
+          </address>
+          <pre-rulebase>
+            <nat><rules><entry name="crm-dnat">
+              <from><member>untrust</member></from><to><member>untrust</member></to><source><member>any</member></source>
+              <destination><member>crm-public</member></destination><service>service-https</service>
+              <destination-translation><translated-address>crm-internal</translated-address><translated-port>443</translated-port></destination-translation>
+            </entry></rules></nat>
+            <security><rules><entry name="pano-allow-crm">
+              <from><member>untrust</member></from><to><member>dmz</member></to><source><member>any</member></source>
+              <destination><member>crm-public</member></destination><service><member>application-default</member></service><action>allow</action>
+            </entry></rules></security>
+          </pre-rulebase>
+        </panorama></policy></result></response>
+        """;
+
+    [Fact]
+    public async Task Rules_pushed_from_panorama_are_read_from_the_firewall_and_count_for_exposure()
+    {
+        var (a, h, _) = Build(q => q.Contains("pushed-shared-policy") ? PushedPolicy : null);
+        var r = await a.CollectAsync(KeyCreds, null, null, CancellationToken.None);
+
+        var crm = Assert.Single(r.Exposures, e => e.IpAddress == "10.30.0.30");
+        Assert.Equal("NAT rule crm-dnat 203.0.113.30 service-https -> 10.30.0.30:443 allowed by security rule pano-allow-crm", crm.Evidence);
+        Assert.Contains(r.Exposures, e => e.IpAddress == "10.30.0.20");            // the local rulebase still counts
+        Assert.False(r.ExposureUnknown);
+        Assert.All(h.Calls, c => Assert.Equal(HttpMethod.Get, c.Method));          // still read-only
+    }
+
+    [Fact]
+    public async Task Unreadable_panorama_rules_or_a_failed_nat_read_leave_exposure_unknown()
+    {
+        // managed by Panorama, but the pushed policy cannot be shown: the local rulebase alone is not the whole policy
+        var (a, _, _) = Build(q => q.Contains("panorama-status") ? "<response status=\"success\"><result>Panorama Server 1 : 192.0.2.50\n    Connected     : yes\n    HA state      : disconnected</result></response>" : null);
+        var r = await a.CollectAsync(KeyCreds, null, null, CancellationToken.None);
+        Assert.True(r.ExposureUnknown);
+        Assert.True(r.Partial);
+        Assert.StartsWith("Exposure could not be read (this firewall is managed by Panorama and the rules it pushed could not be read", r.Warnings[0]);
+
+        // the NAT rulebase read fails with a firewall error: no exposure is derived, and the run says so
+        var (b, _, _) = Build(q => q.Contains("/rulebase/nat/rules") ? "<response status=\"error\" code=\"13\"><msg><line>Internal error</line></msg></response>" : null);
+        var r2 = await b.CollectAsync(KeyCreds, null, null, CancellationToken.None);
+        Assert.True(r2.ExposureUnknown);
+        Assert.StartsWith("Exposure could not be read (rulebase/nat/rules)", r2.Warnings[0]);
+        Assert.Contains(r2.Warnings, w => w.StartsWith("Skipped ") && w.Contains("Internal error"));
+        Assert.DoesNotContain(r2.Exposures, e => e.IpAddress == "10.30.0.20");
     }
 
     [Fact]

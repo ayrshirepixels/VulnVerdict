@@ -73,7 +73,7 @@ public sealed partial class MerakiMxAdapter : IInventoryAdapter
         foreach (var (orgId, orgName) in await OrganisationsAsync(api, credentials, ct))
         {
             progress?.Report("Reading appliances in " + orgName);
-            var devices = await PagesAsync(api, "organizations/" + orgId + "/devices?productTypes[]=appliance&perPage=" + PageSize, ct);
+            var devices = await PagesAsync(api, "organizations/" + orgId + "/devices?productTypes[]=appliance&perPage=" + PageSize, ct, r);
             var statuses = (await PagesAsync(api, "organizations/" + orgId + "/devices/statuses?productTypes[]=appliance&perPage=" + PageSize, ct))
                 .Where(s => Str(s, "serial") is not null).GroupBy(s => Str(s, "serial")!).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
@@ -204,7 +204,7 @@ public sealed partial class MerakiMxAdapter : IInventoryAdapter
     }
 
     /// <summary>Every page of a list endpoint, following Link: &lt;...&gt;; rel=next until there is none.</summary>
-    public static async Task<List<JsonElement>> PagesAsync(EdgeHttp api, string path, CancellationToken ct)
+    public static async Task<List<JsonElement>> PagesAsync(EdgeHttp api, string path, CancellationToken ct, CollectResult? r = null)
     {
         var all = new List<JsonElement>();
         string? next = path;
@@ -216,6 +216,8 @@ public sealed partial class MerakiMxAdapter : IInventoryAdapter
             if (root.ValueKind == JsonValueKind.Array) all.AddRange(root.EnumerateArray().Select(e => e.Clone()));
             next = NextLink(headers);
         }
+        // still a next link after the page cap: the list is truncated, not complete
+        if (next is not null) r?.MarkPartial("Stopped reading " + EdgeHttp.StripQuery(path) + " after 500 pages; the listing is partial, so nothing is aged out this run.");
         return all;
     }
 
@@ -245,6 +247,9 @@ public sealed partial class MerakiMxAdapter : IInventoryAdapter
         catch (FirewallApiException ex) when (ex.Status is not (401 or 429))
         {
             r.Warnings.Add("Skipped " + path + ": " + ex.Message);
+            // 400 and 404 are how the dashboard says a network has no such setting (passthrough mode, no appliance);
+            // anything else (403, 5xx) is a read that failed, and every list read here feeds exposure
+            if (ex.Status is not (400 or 404)) r.ExposureNotRead(path[(path.LastIndexOf('/') + 1)..] + " of network " + path.Split('/').ElementAtOrDefault(1));
             return new();
         }
     }

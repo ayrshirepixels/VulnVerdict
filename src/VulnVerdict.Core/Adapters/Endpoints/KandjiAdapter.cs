@@ -20,6 +20,8 @@ public sealed class KandjiAdapter : IInventoryAdapter
     private readonly IHttpClientFactory _http;
     private readonly ILogger _log;
     public Func<TimeSpan, CancellationToken, Task>? Delay { get; set; }
+    /// <summary>Page cap; a listing that reaches it is reported as partial instead of being taken for the whole fleet.</summary>
+    public int MaxPages { get; set; } = 2000;
 
     public KandjiAdapter(IHttpClientFactory http, ILogger<KandjiAdapter>? log = null)
     {
@@ -62,11 +64,17 @@ public sealed class KandjiAdapter : IInventoryAdapter
         var result = new CollectResult { FullSnapshot = true };
         progress?.Report("Listing devices");
         var devices = new List<JsonElement>();
-        for (var offset = 0; offset < 500_000; offset += PageSize)
+        // no total and no cursor: the listing ends at an empty page (or one that repeats devices already read), never at
+        // a short one, and the offset moves by what actually came back
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (int offset = 0, pages = 0; ; pages++)
         {
+            if (pages >= MaxPages) { result.MarkPartial(EndpointPaging.CapHit("devices", MaxPages)); break; }
             var page = EpJson.Items(await api.GetJsonAsync(DevicesPath(offset), ct), "results");
-            devices.AddRange(page);
-            if (page.Count < PageSize) break;
+            var fresh = page.Where(d => EpJson.Str(d, "device_id") is not { } deviceId || ids.Add(deviceId)).ToList();
+            if (fresh.Count == 0) break;
+            devices.AddRange(fresh);
+            offset += page.Count;
         }
         var includeApps = EpCreds.Bool(credentials, "includeApps", true); var appsFailed = false;
         var stale = 0; var n = 0;

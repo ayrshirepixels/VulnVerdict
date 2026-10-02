@@ -952,8 +952,10 @@ public sealed partial class VerdictEvaluator
         var goneAssets = await (from v in db.Verdicts
                                 join a in db.Assets on v.AssetId equals (Guid?)a.Id
                                 where (a.Archived || a.LastSeen < staleBefore) && OpenishStates.Contains(v.State)
-                                select new { Verdict = v, a.Archived, a.LastSeen }).ToListAsync(ct);
-        foreach (var x in goneAssets.Where(x => IsOpenish(x.Verdict.State)))
+                                select new { Verdict = v, a.Id, a.Archived, a.LastSeen }).ToListAsync(ct);
+        // an asset whose connector has only had partial runs since it last saw it has not been shown to be gone
+        var held = goneAssets.Count == 0 ? new HashSet<Guid>() : await InventoryService.HeldByPartialRunsAsync(db, ct);
+        foreach (var x in goneAssets.Where(x => IsOpenish(x.Verdict.State) && (x.Archived || !held.Contains(x.Id))))
             CloseAsGone(db, x.Verdict, NoLongerReported + ": " + (x.Archived ? "asset archived" : "asset not seen since " + x.LastSeen.ToString("yyyy-MM-dd")), now, events);
 
         await db.SaveChangesAsync(ct);

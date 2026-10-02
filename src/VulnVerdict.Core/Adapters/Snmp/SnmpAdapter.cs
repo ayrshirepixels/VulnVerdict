@@ -90,6 +90,11 @@ public sealed class SnmpAdapter : IInventoryAdapter
                         answered++;
                         result.Assets.Add(dev.Value.Asset);
                         if (dev.Value.Software is not null) result.Software.Add(dev.Value.Software);
+                        if (dev.Value.VersionUnread)
+                        {
+                            result.IncompleteSoftware.Add(dev.Value.Asset.ExternalId);
+                            result.Warnings.Add(dev.Value.Asset.DisplayName + ": the DSM version could not be read this run; the version an earlier run recorded is kept.");
+                        }
                     }
                 }
             }
@@ -112,7 +117,7 @@ public sealed class SnmpAdapter : IInventoryAdapter
 
     // ------------------------------------------------------------------ per device
 
-    private (AssetRecord Asset, SoftwareRecord? Software)? QueryDevice(AddressRanges.Entry target, Options opts, List<string> errors)
+    private (AssetRecord Asset, SoftwareRecord? Software, bool VersionUnread)? QueryDevice(AddressRanges.Entry target, Options opts, List<string> errors)
     {
         (string? Descr, string? ObjectId, string? Name)? sys;
         try { sys = QuerySystem(target.Address, opts); }
@@ -121,10 +126,18 @@ public sealed class SnmpAdapter : IInventoryAdapter
 
         var descr = sys.Value.Descr ?? "";
         var enterprise = SnmpDeviceMapper.EnterpriseNumber(sys.Value.ObjectId);
+        var versionUnread = false;
         if (enterprise == 6574)
         {
-            // Synology keeps the DSM version in its private MIB, sysDescr is only the kernel line
-            try { var v = Get(target.Address, opts, new[] { SynologyVersion }); if (v is not null && Text(v[0]) is { Length: > 0 } dsm) descr += " " + (dsm.StartsWith("DSM", StringComparison.OrdinalIgnoreCase) ? dsm : "DSM " + dsm); } catch { }
+            // Synology keeps the DSM version in its private MIB, sysDescr is only the kernel line. A read that fails or
+            // times out is "unknown": the software row is left out below so a blank one never replaces the versioned one.
+            try
+            {
+                var v = Get(target.Address, opts, new[] { SynologyVersion });
+                if (v is not null && Text(v[0]) is { Length: > 0 } dsm) descr += " " + (dsm.StartsWith("DSM", StringComparison.OrdinalIgnoreCase) ? dsm : "DSM " + dsm);
+                else versionUnread = true;
+            }
+            catch (Exception ex) { versionUnread = true; _log.LogDebug("DSM version read failed for {Target}: {Error}", target.Text, ex.Message); }
         }
         var device = SnmpDeviceMapper.Map(descr, sys.Value.ObjectId);
 
@@ -138,8 +151,8 @@ public sealed class SnmpAdapter : IInventoryAdapter
 
         var asset = new AssetRecord(target.Text, string.IsNullOrEmpty(name) ? target.Text : name!, device.Kind, hostnames.ToArray(), new[] { target.Address.ToString() }, macs.ToArray(),
             device.OsVendor, device.OsProduct, device.OsVersion, device.OsBuild);
-        SoftwareRecord? software = device.Product == "" ? null : new SoftwareRecord(target.Text, device.Vendor, device.Product, device.Version, device.SoftwareKind);
-        return (asset, software);
+        SoftwareRecord? software = device.Product == "" || versionUnread ? null : new SoftwareRecord(target.Text, device.Vendor, device.Product, device.Version, device.SoftwareKind);
+        return (asset, software, versionUnread);
     }
 
     private static (string? Descr, string? ObjectId, string? Name)? QuerySystem(IPAddress ip, Options opts)

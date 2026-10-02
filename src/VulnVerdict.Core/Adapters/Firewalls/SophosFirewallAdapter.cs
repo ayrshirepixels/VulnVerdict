@@ -83,15 +83,23 @@ public sealed partial class SophosFirewallAdapter : IInventoryAdapter
         progress?.Report("Reading zones, interfaces and NAT rules");
         var resp = await RequestAsync(credentials, Entities, ct);
         foreach (var e in Entities)
-            if (EntityStatus(resp, e) is { } problem) r.Warnings.Add(e + ": " + problem);
+            if (EntityStatus(resp, e) is { } problem)
+            {
+                r.Warnings.Add(e + ": " + problem);
+                // zones, interfaces, NAT rules and hosts are what exposure is derived from
+                if (e != "AdminSettings") r.ExposureNotRead(e + " " + problem);
+            }
 
         Dictionary<string, string>? snmp = null;
+        var snmpFailed = false;
         if (FwCreds.HasSnmp(credentials))
         {
             progress?.Report("Reading firmware over SNMP");
             try { snmp = await Snmp(FwCreds.HostOnly(host), credentials, new[] { SfosDeviceName, SfosDeviceType, SfosDeviceFwVersion, SfosDeviceAppKey }, ct); }
             catch (Exception ex) when (ex is not OperationCanceledException) { r.Warnings.Add("SNMP: " + ex.Message); }
-            if (snmp is null) r.Warnings.Add("SNMP did not answer; the firmware version is blank.");
+            // a failed read is not a blank version: the firmware row is left out so the one an earlier run versioned stays
+            snmpFailed = snmp?.GetValueOrDefault(SfosDeviceFwVersion) is null;
+            if (snmpFailed) r.Warnings.Add("SNMP did not answer; the firmware version an earlier run recorded is kept.");
         }
         else r.Warnings.Add("No SNMP credentials; the firmware version is blank (the XML API does not report it).");
 
@@ -125,7 +133,8 @@ public sealed partial class SophosFirewallAdapter : IInventoryAdapter
         }
 
         r.Assets.Add(EdgeRecords.Firewall(id, hostname, interfaces.Select(i => i.Ip), interfaces.Select(i => i.Mac), CnaNames.Sophos, CnaNames.SophosFirewall, version, build, new[] { hostname }));
-        r.Software.AddRange(EdgeRecords.Firmware(id, CnaNames.Sophos, CnaNames.SophosFirewall, version ?? "", "sfos", listeners: device.Listeners, edition: snmp?.GetValueOrDefault(SfosDeviceType)));
+        if (snmpFailed) r.IncompleteSoftware.Add(id);
+        else r.Software.AddRange(EdgeRecords.Firmware(id, CnaNames.Sophos, CnaNames.SophosFirewall, version ?? "", "sfos", listeners: device.Listeners, edition: snmp?.GetValueOrDefault(SfosDeviceType)));
         if (device.Record(id) is { } self) r.Exposures.Add(self);
 
         var hosts = resp.Descendants("IPHost").Select(h => (Name: Val(h.Element("Name")), Ip: Val(h.Element("IPAddress"))))

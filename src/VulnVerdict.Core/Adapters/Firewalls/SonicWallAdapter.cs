@@ -92,7 +92,7 @@ public sealed class SonicWallAdapter : IInventoryAdapter
         var sshPort = Int(Obj(admin, "ssh"), "port") ?? 22;
 
         var interfaces = Array(Parse(await api.GetAsync(Paths.Interfaces, ct)), "interfaces").Select(i => Obj(i, "ipv4")).Select(ParseInterface).Where(i => i.Name.Length > 0).ToList();
-        var untrustedZones = new HashSet<string>(Array(await api.OptionalAsync(Paths.Zones, r, ct), "zones")
+        var untrustedZones = new HashSet<string>(Array(await api.OptionalAsync(Paths.Zones, r, ct, "zones"), "zones")
             .Where(z => (Str(z, "security_type") ?? "").Equals("untrusted", StringComparison.OrdinalIgnoreCase)).Select(z => Str(z, "name") ?? ""), StringComparer.OrdinalIgnoreCase) { "WAN" };
         var wan = new HashSet<string>(interfaces.Where(i => i.Zone is not null && untrustedZones.Contains(i.Zone)).Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
         if (wan.Count == 0) r.Warnings.Add("No interface is in the WAN zone (or another untrusted zone); internet exposure could not be derived.");
@@ -107,9 +107,9 @@ public sealed class SonicWallAdapter : IInventoryAdapter
             if (i.Http) device.Add(httpPort, "tcp", i.Name, "management http", onWan, "management HTTP on " + where + ":" + httpPort);
             if (i.UserLoginHttps) device.Add(httpsPort, "tcp", i.Name, "user login https", onWan, "user login HTTPS on " + where);
         }
-        var sslBase = Obj(Obj(await api.OptionalAsync(Paths.SslVpnBase, r, ct), "ssl_vpn"), "server");
+        var sslBase = Obj(Obj(await api.OptionalAsync(Paths.SslVpnBase, r, ct, "SSL VPN settings"), "ssl_vpn"), "server");
         var sslPort = Int(sslBase, "port") ?? 4433;
-        foreach (var access in Array(Obj(Obj(await api.OptionalAsync(Paths.SslVpnAccess, r, ct), "ssl_vpn"), "server"), "access"))
+        foreach (var access in Array(Obj(Obj(await api.OptionalAsync(Paths.SslVpnAccess, r, ct, "SSL VPN access"), "ssl_vpn"), "server"), "access"))
         {
             var zone = Str(access, "zone");
             if (zone is null || !Enabled(access, "enable", false)) continue;
@@ -121,7 +121,7 @@ public sealed class SonicWallAdapter : IInventoryAdapter
         if (device.Record(serial) is { } self) r.Exposures.Add(self);
 
         progress?.Report("Reading NAT policies");
-        var addresses = Array(await api.OptionalAsync(Paths.Addresses, r, ct), "address_objects").Select(a => Obj(a, "ipv4"))
+        var addresses = Array(await api.OptionalAsync(Paths.Addresses, r, ct, "address objects"), "address_objects").Select(a => Obj(a, "ipv4"))
             .Select(a => (Name: Str(a, "name"), Ip: Str(Obj(a, "host"), "ip")))
             .Where(a => a.Name is not null && a.Ip is not null).GroupBy(a => a.Name!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Ip!, StringComparer.OrdinalIgnoreCase);
         var nat = Array(Parse(await api.GetAsync(Paths.Nat, ct)), "nat_policies").Select(p => Obj(p, "ipv4")).Select(ParseNat).ToList();
@@ -216,13 +216,18 @@ public sealed class SonicWallAdapter : IInventoryAdapter
             return body;
         }
 
-        /// <summary>Endpoints some models or licences lack (SSL VPN, zones) become a warning, not a failure.</summary>
-        public async Task<JsonElement> OptionalAsync(string path, CollectResult r, CancellationToken ct)
+        /// <summary>
+        /// Endpoints some models or licences lack (SSL VPN, zones) become a warning, not a failure. The firewall says "not
+        /// here" with a 4xx or its own status envelope; a 5xx or an unparsable answer is a read that failed, and when
+        /// <paramref name="exposure"/> names what the read feeds, exposure is unknown for the run.
+        /// </summary>
+        public async Task<JsonElement> OptionalAsync(string path, CollectResult r, CancellationToken ct, string? exposure = null)
         {
             try { return Parse(await GetAsync(path, ct)); }
             catch (Exception ex) when (ex is FirewallApiException { Status: not (401 or 403) } or JsonException)
             {
                 r.Warnings.Add("Skipped " + path + ": " + ex.Message);
+                if (exposure is not null && (ex is JsonException or FirewallApiException { Status: >= 500 })) r.ExposureNotRead(exposure);
                 return default;
             }
         }

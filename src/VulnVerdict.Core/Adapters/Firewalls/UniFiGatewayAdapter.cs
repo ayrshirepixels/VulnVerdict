@@ -81,6 +81,9 @@ public sealed class UniFiGatewayAdapter : IInventoryAdapter
         }
     }
 
+    public const string FirmwareId = "unifi-firmware";
+    public const string ApplicationId = "unifi-network-application";
+
     public async Task<CollectResult> CollectAsync(IReadOnlyDictionary<string, string> credentials, DateTime? since, IProgress<string>? progress, CancellationToken ct)
     {
         var r = new CollectResult { FullSnapshot = true };
@@ -107,9 +110,10 @@ public sealed class UniFiGatewayAdapter : IInventoryAdapter
                     d.Ips.Where(EdgeRecords.IsUsableIp).Distinct().ToArray(), d.Mac is null ? System.Array.Empty<string>() : new[] { d.Mac.ToLowerInvariant() },
                     OsVendor: CnaNames.Ubiquiti, OsProduct: d.Product, OsVersion: d.Version, Criticality: d.Gateway ? Criticality.Critical : null));
                 var alts = d.Gateway && IsConsole(d.Product) ? new[] { CnaNames.UniFiOs } : null;
-                r.Software.AddRange(EdgeRecords.Firmware(d.Id, CnaNames.Ubiquiti, d.Product, d.Version ?? "", "unifi-firmware", alts,
+                // no version this run (device adopting, detail not answered): the row an earlier run versioned is kept, not blanked
+                if (d.Version is null) { r.KeepRows(d.Id, FirmwareId); r.Warnings.Add(d.Name + ": no firmware version reported; the version an earlier run recorded is kept"); continue; }
+                r.Software.AddRange(EdgeRecords.Firmware(d.Id, CnaNames.Ubiquiti, d.Product, d.Version, FirmwareId, alts,
                     listeners: d == gateway ? device.Listeners : null, edition: d.ModelCode));
-                if (d.Version is null) r.Warnings.Add(d.Name + ": no firmware version reported");
             }
             if (gateway is not null && device.Record(gateway.Id) is { } self) r.Exposures.Add(self);
             else if (gateway is null && device.InternetFacing) r.Warnings.Add("Site " + site.Name + " has a VPN server but no gateway in the device list.");
@@ -117,15 +121,19 @@ public sealed class UniFiGatewayAdapter : IInventoryAdapter
         }
 
         // the Network application itself: on the console when there is one, otherwise the self-hosted controller
-        if (appVersion is not null)
+        if (appHost is null)
         {
-            if (appHost is null)
-            {
-                appHost = FwCreds.HostOnly(FwCreds.Get(credentials, "host"));
-                r.Assets.Add(new AssetRecord(appHost, appHost, AssetKind.Server, System.Net.IPAddress.TryParse(appHost, out _) ? System.Array.Empty<string>() : new[] { appHost },
-                    System.Net.IPAddress.TryParse(appHost, out _) ? new[] { appHost } : System.Array.Empty<string>(), System.Array.Empty<string>()));
-            }
-            r.Software.Add(new SoftwareRecord(appHost, CnaNames.Ubiquiti, CnaNames.UniFiNetworkApplication, appVersion, SoftwareKind.Application, ExternalId: "unifi-network-application"));
+            appHost = FwCreds.HostOnly(FwCreds.Get(credentials, "host"));
+            r.Assets.Add(new AssetRecord(appHost, appHost, AssetKind.Server, System.Net.IPAddress.TryParse(appHost, out _) ? System.Array.Empty<string>() : new[] { appHost },
+                System.Net.IPAddress.TryParse(appHost, out _) ? new[] { appHost } : System.Array.Empty<string>(), System.Array.Empty<string>()));
+        }
+        if (appVersion is not null)
+            r.Software.Add(new SoftwareRecord(appHost, CnaNames.Ubiquiti, CnaNames.UniFiNetworkApplication, appVersion, SoftwareKind.Application, ExternalId: ApplicationId));
+        else
+        {
+            // the version read failed (404/400 on some releases and roles): unknown, not uninstalled
+            r.KeepRows(appHost, ApplicationId);
+            r.Warnings.Add("The UniFi Network application version could not be read; the version an earlier run recorded is kept.");
         }
         if (s.ApiKey) r.Warnings.Add("Port forwards and VPN servers are not in the UniFi Network API; use a local view-only account for exposure.");
         _log.LogInformation("UniFi: {Assets} devices, {Exposures} exposure records", r.Assets.Count, r.Exposures.Count);
@@ -316,7 +324,8 @@ public sealed class UniFiGatewayAdapter : IInventoryAdapter
         public async Task<List<JsonElement>> ClassicListAsync(string site, string what, CollectResult r, CancellationToken ct)
         {
             try { return Data(Parse(await _http.GetAsync(_prefix + "api/s/" + Uri.EscapeDataString(site) + "/" + what, ct))); }
-            catch (FirewallApiException ex) when (ex.Status != 401) { r.Warnings.Add("Skipped " + what + ": " + ex.Message); return new(); }
+            // both lists read through here (port forwards, VPN servers) are exposure: a refused read leaves it unknown
+            catch (FirewallApiException ex) when (ex.Status != 401) { r.Warnings.Add("Skipped " + what + ": " + ex.Message); r.ExposureNotRead(what + " in site " + site); return new(); }
         }
 
         /// <summary>The official API's offset/limit pages until totalCount is reached.</summary>

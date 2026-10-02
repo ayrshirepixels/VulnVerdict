@@ -7,7 +7,8 @@ namespace VulnVerdict.Core.Adapters.Windows;
 /// single JSON object to stdout. It must work on Windows PowerShell 5.1 and PowerShell 7, reads only (registry,
 /// CIM, cmdlets), needs no module that might be missing (ServerManager, WebAdministration, Hyper-V and the SMB
 /// cmdlets are each guarded) and never writes to the target. Sections that fail are reported in "warnings" and the
-/// rest of the document is still produced.
+/// rest of the document is still produced; a failure that would make rows look uninstalled is also named in
+/// "failedSections" (or, for one unreadable Uninstall key, in "softwareUnread") so the mapper keeps those rows.
 /// </summary>
 public static class WindowsCollectorScript
 {
@@ -23,7 +24,8 @@ public static class WindowsCollectorScript
         try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
         function Get-VvReg($p, $n) { try { (Get-ItemProperty -Path $p -Name $n -ErrorAction Stop).$n } catch { $null } }
         function ConvertTo-VvStr($v) { if ($null -eq $v) { $null } else { [string]$v } }
-        $w = @()
+        # $fs: sections that could not be read (the host's list is then not a full picture); $su: Uninstall keys that could not be read
+        $w = @(); $fs = @(); $su = @()
         $o = [ordered]@{ collector = 'vulnverdict-windows/1'; psVersion = $PSVersionTable.PSVersion.ToString(); collectedAt = (Get-Date).ToUniversalTime().ToString('o') }
 
         # ---- host
@@ -65,32 +67,37 @@ public static class WindowsCollectorScript
         $sw = @()
         $is64 = [Environment]::Is64BitOperatingSystem
         foreach ($k in @{ p = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'; a = $(if ($is64) { 'x64' } else { 'x86' }) }, @{ p = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'; a = 'x86' }) {
+          if (-not (Test-Path $k.p)) { continue }
           try {
             Get-ChildItem $k.p -ErrorAction Stop | ForEach-Object {
+              $it = $_
               try {
-                $p = Get-ItemProperty $_.PSPath -ErrorAction Stop
+                $p = Get-ItemProperty $it.PSPath -ErrorAction Stop
                 $dn = ([string]$p.DisplayName).Trim()
-                if ($dn -and $p.SystemComponent -ne 1) { $sw += [ordered]@{ name = $dn; version = ConvertTo-VvStr $p.DisplayVersion; publisher = ConvertTo-VvStr $p.Publisher; installDate = ConvertTo-VvStr $p.InstallDate; arch = $k.a; key = $_.PSChildName } }
-              } catch { }
+                if ($dn -and $p.SystemComponent -ne 1) { $sw += [ordered]@{ name = $dn; version = ConvertTo-VvStr $p.DisplayVersion; publisher = ConvertTo-VvStr $p.Publisher; installDate = ConvertTo-VvStr $p.InstallDate; arch = $k.a; key = $it.PSChildName } }
+              } catch { $su += "$($k.a):$($it.PSChildName)" }
             }
-          } catch { }
+          } catch { $fs += 'software'; $w += "software: $($_.Exception.Message)" }
         }
         $o.software = $sw
+        $o.softwareUnread = $su
 
         # ---- roles and features
         $ft = @(); $fsrc = $null
         $want = @('Web-Server', 'Web-WebServer', 'Web-DAV-Publishing', 'FS-SMB1', 'FS-SMB1-Server', 'Print-Services', 'Print-Server', 'Remote-Desktop-Services', 'RDS-RD-Server', 'Hyper-V', 'AD-Domain-Services', 'IIS-WebServer', 'IIS-WebDAV', 'SMB1Protocol', 'SMB1Protocol-Server', 'Microsoft-Hyper-V', 'Printing-Foundation-Features')
         try { Import-Module ServerManager -ErrorAction Stop; $ft = @(Get-WindowsFeature -ErrorAction Stop | Where-Object { $_.Installed -or $_.Name -in $want } | ForEach-Object { [ordered]@{ name = ConvertTo-VvStr $_.Name; displayName = ConvertTo-VvStr $_.DisplayName; installed = [bool]$_.Installed } }); $fsrc = 'ServerManager' } catch { }
-        if (-not $fsrc) { try { $ft = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -or $_.FeatureName -in $want } | ForEach-Object { [ordered]@{ name = ConvertTo-VvStr $_.FeatureName; displayName = $null; installed = ($_.State -eq 'Enabled') } }); $fsrc = 'Dism' } catch { $w += "features: $($_.Exception.Message)" } }
+        if (-not $fsrc) { try { $ft = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -or $_.FeatureName -in $want } | ForEach-Object { [ordered]@{ name = ConvertTo-VvStr $_.FeatureName; displayName = $null; installed = ($_.State -eq 'Enabled') } }); $fsrc = 'Dism' } catch { $fs += 'features'; $w += "features: $($_.Exception.Message)" } }
         $o.features = $ft
         $o.featureSource = $fsrc
 
         # ---- services of interest
         $o.services = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('Spooler', 'TermService', 'LanmanServer', 'W3SVC', 'WAS', 'WinRM', 'sshd', 'vmms', 'WebClient', 'NTDS', 'DNS', 'MSDTC') -or $_.Name -like 'MSSQL*' -or $_.Name -like 'SQLAgent*' } | ForEach-Object { [ordered]@{ name = ConvertTo-VvStr $_.Name; displayName = ConvertTo-VvStr $_.DisplayName; status = ConvertTo-VvStr $_.Status; startType = ConvertTo-VvStr $_.StartType } })
+        # WinRM, LanmanServer and the rest exist on every Windows: an empty list is a failed read, not "no services"
+        if ($o.services.Count -eq 0) { $fs += 'services' }
 
-        # ---- SMBv1 and RDP
+        # ---- SMBv1 and RDP (a missing cmdlet on an old build is not a failure; a cmdlet that is there and throws is)
         $o.smb1Enabled = $null
-        try { $c = Get-SmbServerConfiguration -ErrorAction Stop; $o.smb1Enabled = [bool]$c.EnableSMB1Protocol } catch { $r = Get-VvReg 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' 'SMB1'; if ($null -ne $r) { $o.smb1Enabled = ($r -ne 0) } }
+        try { $c = Get-SmbServerConfiguration -ErrorAction Stop; $o.smb1Enabled = [bool]$c.EnableSMB1Protocol } catch { $r = Get-VvReg 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' 'SMB1'; if ($null -ne $r) { $o.smb1Enabled = ($r -ne 0) } elseif (Get-Command Get-SmbServerConfiguration -ErrorAction SilentlyContinue) { $fs += 'smb1' } }
         $d = Get-VvReg 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' 'fDenyTSConnections'
         $o.rdpEnabled = $(if ($null -eq $d) { $null } else { ($d -eq 0) })
         $n = Get-VvReg 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' 'UserAuthentication'
@@ -117,14 +124,15 @@ public static class WindowsCollectorScript
         # ---- SQL Server instances
         $sql = @()
         foreach ($root in 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Microsoft SQL Server') {
+          if (-not (Test-Path "$root\Instance Names\SQL")) { continue }
           try {
             $names = Get-ItemProperty "$root\Instance Names\SQL" -ErrorAction Stop
             $names.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
               $inst = $_.Name; $id = $_.Value; $s = $null
-              try { $s = Get-ItemProperty "$root\$id\Setup" -ErrorAction Stop } catch { }
+              try { $s = Get-ItemProperty "$root\$id\Setup" -ErrorAction Stop } catch { $fs += 'sql' }
               $sql += [ordered]@{ instance = $inst; id = ConvertTo-VvStr $id; version = ConvertTo-VvStr $s.Version; patchLevel = ConvertTo-VvStr $s.PatchLevel; edition = ConvertTo-VvStr $s.Edition; arch = $(if ($root -like '*WOW6432Node*') { 'x86' } else { 'x64' }) }
             }
-          } catch { }
+          } catch { $fs += 'sql'; $w += "sql: $($_.Exception.Message)" }
         }
         $o.sql = $sql
 
@@ -133,13 +141,15 @@ public static class WindowsCollectorScript
         $dx = $null
         try { $dx = (Get-Command dotnet.exe -ErrorAction Stop).Source } catch { if (Test-Path "$env:ProgramFiles\dotnet\dotnet.exe") { $dx = "$env:ProgramFiles\dotnet\dotnet.exe" } }
         if ($dx) {
-          try { $dn.runtimes = @(& $dx --list-runtimes 2>$null | ForEach-Object { if ($_ -match '^(\S+)\s+(\S+)') { [ordered]@{ name = $matches[1]; version = $matches[2] } } }) } catch { }
-          try { $dn.sdks = @(& $dx --list-sdks 2>$null | ForEach-Object { if ($_ -match '^(\S+)') { $matches[1] } }) } catch { }
+          try { $dn.runtimes = @(& $dx --list-runtimes 2>$null | ForEach-Object { if ($_ -match '^(\S+)\s+(\S+)') { [ordered]@{ name = $matches[1]; version = $matches[2] } } }); if ($LASTEXITCODE -ne 0) { $fs += 'dotnet' } } catch { $fs += 'dotnet' }
+          try { $dn.sdks = @(& $dx --list-sdks 2>$null | ForEach-Object { if ($_ -match '^(\S+)') { $matches[1] } }); if ($LASTEXITCODE -ne 0) { $fs += 'dotnet' } } catch { $fs += 'dotnet' }
         }
         $ndp = 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full'
         $rel = Get-VvReg $ndp 'Release'
         if ($null -ne $rel) { $dn.frameworks += [ordered]@{ release = [int]$rel; version = ConvertTo-VvStr (Get-VvReg $ndp 'Version') } }
-        try { Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^v[23]' } | ForEach-Object { $v = Get-VvReg $_.PSPath 'Version'; $i = Get-VvReg $_.PSPath 'Install'; if ($i -eq 1 -and $v) { $dn.frameworks += [ordered]@{ release = $null; version = ConvertTo-VvStr $v } } } } catch { }
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP') {
+          try { Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^v[23]' } | ForEach-Object { $v = Get-VvReg $_.PSPath 'Version'; $i = Get-VvReg $_.PSPath 'Install'; if ($i -eq 1 -and $v) { $dn.frameworks += [ordered]@{ release = $null; version = ConvertTo-VvStr $v } } } } catch { $fs += 'dotnet' }
+        }
         $o.dotnet = $dn
 
         # ---- Hyper-V (the VM list is the coverage reconciliation set)
@@ -152,10 +162,11 @@ public static class WindowsCollectorScript
               try { $na = @(Get-VMNetworkAdapter -VM $v -ErrorAction Stop) } catch { }
               [ordered]@{ name = ConvertTo-VvStr $v.Name; state = ConvertTo-VvStr $v.State; generation = $v.Generation; macs = @($na | ForEach-Object { $_.MacAddress } | Where-Object { $_ }); ips = @($na | ForEach-Object { @($_.IPAddresses) } | Where-Object { $_ -and $_ -notmatch '^(fe80|169\.254\.|127\.)' }) }
             })
-          } catch { $w += "hyperv: $($_.Exception.Message)" }
+          } catch { $fs += 'hyperv'; $w += "hyperv: $($_.Exception.Message)" }
         }
         $o.hyperv = $hv
 
+        $o.failedSections = @($fs | Select-Object -Unique)
         $o.warnings = $w
         [Console]::Out.Write((ConvertTo-Json -InputObject $o -Depth 6 -Compress))
         [Console]::Out.Write("`n")
