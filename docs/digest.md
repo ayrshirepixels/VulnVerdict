@@ -13,7 +13,7 @@ Daily at 07:30 local on weekdays (configurable), plus an immediate email wheneve
 5. **Changed since last digest**: promoted, demoted, closed or re-opened, with the reason ("now in CISA KEV", "public exploit published", "patched, closed", "re-opened: snooze expired"). A re-open is always listed here, whether or not the verdict moved tier: something you marked done that comes back under Fix today says why.
 6. **Overdue**: anything open past its fix window.
 7. **Next patch cycle**: a count and a link.
-8. A coverage line: assets seen, sources, unknown hosts, watchlist size, when the feeds were last current.
+8. A coverage line: assets seen, sources, unknown hosts, watchlist size, when the feeds were last current, and, when there is something to say, how many products are past vendor support or reach its end within 90 days.
 9. Attribution for EPSS and the other feeds that ask for it. Nothing else.
 
 The same events can also go to Teams or Slack: see [chat.md](chat.md).
@@ -59,7 +59,7 @@ The decision table is in `src/VulnVerdict.Core/Engine/DecisionTable.cs`; every r
 
 ## The sentence
 
-Product, version, asset: what the attacker has, how they get in, where it is, what fixes it. "FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8." Something you can repeat to your boss.
+Product, version, asset: what the attacker has, how they get in, where it is, what fixes it. "FortiOS 7.2.5 on FW-EDGE-01: exploited in the wild, works over the network with no login, reachable from the internet. Fixed in 7.2.8." Something you can repeat to your boss. When the installed release is past vendor support the last part reads "No fix will be released for this version: upgrade or replace." When the vendor has published a statement that the product is not affected, the sentence says so and gives the vendor's reason (see [vex-and-end-of-life.md](vex-and-end-of-life.md)).
 
 ## Evidence
 

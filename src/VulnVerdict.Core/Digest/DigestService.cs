@@ -123,6 +123,7 @@ public sealed class DigestService
         var unknownCount = await db.Assets.CountAsync(a => !a.Archived && a.Unknown, ct);
         var coverage = (assetCount > 0 ? "Seeing " + assetCount + " asset" + (assetCount == 1 ? "" : "s") + " from " + sourceCount + " source" + (sourceCount == 1 ? "" : "s") + (unknownCount > 0 ? ", " + unknownCount + " unknown host" + (unknownCount == 1 ? "" : "s") : "") + ". " : "")
             + "Watching " + entries + " product" + (entries == 1 ? "" : "s") + " on the watchlist. Feeds current as of " + (feedsAsOf == default ? "never" : TimeZoneInfo.ConvertTimeFromUtc(feedsAsOf, tz).ToString("d MMM HH:mm")) + ".";
+        coverage += await EndOfLifeLineAsync(db, now, ct);
         var warning = stale.Count > 0 ? "Feeds overdue (not updated on schedule): " + string.Join(", ", stale) + "." : null;
         // client secrets about to expire: the digest is the one place an administrator reliably sees a month ahead
         var secretNotices = await _notices.SecretsAsync(now, ct);
@@ -152,6 +153,10 @@ public sealed class DigestService
             CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
         };
     }
+
+    /// <summary>One line on vendor support, appended to the coverage line: "3 products are past vendor support; 2 reach end of support within 90 days."</summary>
+    private static async Task<string> EndOfLifeLineAsync(VvDbContext db, DateTime now, CancellationToken ct) =>
+        await EndOfLifeReport.DigestLineAsync(db, now, ct) is { } line ? " " + line : "";
 
     // ------------------------------------------------------------------ send
 

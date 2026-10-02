@@ -1,0 +1,55 @@
+{
+  "document": {
+    "category": "csaf_security_advisory",
+    "csaf_version": "2.0",
+    "publisher": { "category": "vendor", "name": "Example Networks PSIRT", "namespace": "https://psirt.example.test" },
+    "title": "ExampleOS: authentication bypass in the management interface",
+    "tracking": {
+      "current_release_date": "2026-09-15T10:00:00Z",
+      "id": "EX-SA-2099-01",
+      "initial_release_date": "2026-09-10T10:00:00Z",
+      "revision_history": [ { "date": "2026-09-15T10:00:00Z", "number": "2", "summary": "Fixed release added" } ],
+      "status": "final",
+      "version": "2"
+    }
+  },
+  "product_tree": {
+    "branches": [
+      {
+        "category": "vendor",
+        "name": "Example Networks",
+        "branches": [
+          {
+            "category": "product_name",
+            "name": "ExampleOS",
+            "branches": [
+              { "category": "product_version", "name": "7.2.5", "product": { "name": "Example Networks ExampleOS 7.2.5", "product_id": "EXOS-7.2.5", "product_identification_helper": { "cpe": "cpe:2.3:o:example:exampleos:7.2.5:*:*:*:*:*:*:*" } } },
+              { "category": "product_version", "name": "7.2.8", "product": { "name": "Example Networks ExampleOS 7.2.8", "product_id": "EXOS-7.2.8" } },
+              { "category": "product_version_range", "name": "vers:generic/>=7.0.0|<7.2.8", "product": { "name": "Example Networks ExampleOS 7.0.0 up to 7.2.8", "product_id": "EXOS-RANGE" } }
+            ]
+          },
+          { "category": "product_name", "name": "Example Manager", "product": { "name": "Example Manager", "product_id": "EXMGR" } }
+        ]
+      }
+    ],
+    "product_groups": [ { "group_id": "GRP-NOT-AFFECTED", "product_ids": [ "EXMGR" ] } ]
+  },
+  "vulnerabilities": [
+    {
+      "cve": "CVE-2099-1001",
+      "product_status": {
+        "known_affected": [ "EXOS-7.2.5", "EXOS-RANGE" ],
+        "first_fixed": [ "EXOS-7.2.8" ],
+        "known_not_affected": [ "EXMGR" ],
+        "recommended": [ "EXOS-7.2.8" ]
+      },
+      "flags": [ { "label": "component_not_present", "group_ids": [ "GRP-NOT-AFFECTED" ] } ],
+      "threats": [ { "category": "impact", "details": "Example Manager does not include the management interface code.", "group_ids": [ "GRP-NOT-AFFECTED" ] } ],
+      "remediations": [ { "category": "vendor_fix", "details": "Upgrade to ExampleOS 7.2.8 or later.", "product_ids": [ "EXOS-7.2.5", "EXOS-RANGE" ] } ]
+    },
+    {
+      "title": "An entry with no CVE id is skipped",
+      "product_status": { "known_affected": [ "EXOS-7.2.5" ] }
+    }
+  ]
+}

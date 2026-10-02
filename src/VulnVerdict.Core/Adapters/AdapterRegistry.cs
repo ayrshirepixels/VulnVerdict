@@ -59,6 +59,9 @@ public static class AdapterRegistry
         services.AddSingleton<IFeed, UbuntuSecurityFeed>();
         services.AddSingleton<IFeed, DebianSecurityFeed>();
         services.AddSingleton<IFeed, RedHatCsafFeed>();
+        // vendor VEX statements and end-of-life dates
+        services.AddSingleton<IFeed, Feeds.Vex.CsafVexFeed>();
+        services.AddSingleton<IFeed, EndOfLifeFeed>();
 
         // ticket channels
         services.AddSingleton<ITicketAdapter, JiraCloudAdapter>();

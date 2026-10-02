@@ -407,6 +407,10 @@ public sealed partial class VerdictEvaluator
             }
         }
 
+        // vendor VEX statements for the candidate CVEs, and where this product stands on vendor support
+        var vex = await VexStatementsAsync(db, run, ids, ct);
+        var eol = IsPackage(s) ? null : (run.Eol ??= await EolIndex.LoadAsync(db, ct)).Find(s.Vendor, s.Product, s.Version, now, settings.EolWarnDays);
+
         var windowsTimeline = await TimelineAsync(db, run, s, ct);
         var officeTimeline = await OfficeTimelineAsync(db, run, s, ct);
         var rules = run.Rules ??= await db.Suppressions.AsNoTracking().ToListAsync(ct);
@@ -424,7 +428,7 @@ public sealed partial class VerdictEvaluator
             if (cve is null && productMatches.All(m => m.Package is null)) continue;
             seen.Add(cveId);
 
-            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now, windowsTimeline, officeTimeline);
+            var computed = Compute(s, cveId, cve, productMatches, kev.GetValueOrDefault(cveId), epss.GetValueOrDefault(cveId), signals.GetValueOrDefault(cveId) ?? new(), controls, advisories.GetValueOrDefault(cveId) ?? new(), now, windowsTimeline, officeTimeline, vex.GetValueOrDefault(cveId), eol);
 
             if (existing.TryGetValue(cveId, out var v))
             {
@@ -520,6 +524,20 @@ public sealed partial class VerdictEvaluator
         public readonly Dictionary<string, Dictionary<string, List<Advisory>>> AdvisoriesByVendor = new();
         public bool? Offline;
         public bool OsvUnavailable;
+        public bool? VexAny; public EolIndex? Eol;
+    }
+
+    private static readonly Dictionary<string, List<VexStatement>> NoVex = new();
+
+    /// <summary>Vendor VEX statements for these CVEs, by CVE. One existence check per run keeps installs without VEX data from querying per subject.</summary>
+    private static async Task<Dictionary<string, List<VexStatement>>> VexStatementsAsync(VvDbContext db, RunCache run, List<string> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0 || !(run.VexAny ??= await db.VexStatements.AnyAsync(ct))) return NoVex;
+        var byCve = new Dictionary<string, List<VexStatement>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in ids.Chunk(400))
+            foreach (var st in await db.VexStatements.AsNoTracking().Where(x => chunk.Contains(x.CveId)).ToListAsync(ct))
+                (byCve.TryGetValue(st.CveId, out var l) ? l : byCve[st.CveId] = new()).Add(st);
+        return byCve;
     }
 
     private static async Task<OfficeBuildTimeline?> OfficeTimelineAsync(VvDbContext db, RunCache holder, Subject s, CancellationToken ct)
@@ -575,7 +593,7 @@ public sealed partial class VerdictEvaluator
         return null;
     }
 
-    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now, WindowsBuildTimeline? windowsTimeline = null, OfficeBuildTimeline? officeTimeline = null)
+    private static Computed Compute(Subject s, string cveId, Cve? cve, List<ProductMatch> productMatches, KevEntry? kev, EpssScore? epss, List<ExploitSignal> signals, List<CompensatingControl> controls, List<Advisory> advisories, DateTime now, WindowsBuildTimeline? windowsTimeline = null, OfficeBuildTimeline? officeTimeline = null, List<VexStatement>? vex = null, EolFinding? eol = null)
     {
         var ev = new List<EvidenceClaim>();
         var retrieved = cve?.RetrievedAt ?? now;
@@ -725,6 +743,19 @@ public sealed partial class VerdictEvaluator
             ev.Add(new EvidenceClaim("No known exploitation: not in KEV, no public exploit indexed, " + epssNote, "CISA KEV, Exploit-DB, Metasploit, Nuclei, EPSS", now));
         }
 
+        // ---- vendor VEX statements (VexAssessor): evidence always; the verdict moves only on an exact match, and a
+        // not-affected statement never lowers a CVE that is exploited in the wild
+        string? vexNotAffected = null, vexCheck = null;
+        if (vex is { Count: > 0 } && VexAssessor.Assess(s, vex, overall, exploitation == Exploitation.Active) is { } vendorSays)
+        {
+            ev.AddRange(vendorSays.Evidence);
+            // the vendor's fixed version fills a gap, and replaces a phrase that is not a version ("a release later than 7.2.5")
+            if (vendorSays.FixedIn is { } vexFix && (fixedIn is null || !VersionCompare.IsParseable(fixedIn))) fixedIn = vexFix;
+            if (vendorSays.Overall is { } settled) { overall = settled; versionUnknown = false; }
+            if (vendorSays.Confidence is { } raised && raised > confidence) confidence = raised;
+            vexNotAffected = vendorSays.NotAffectedText; vexCheck = vendorSays.CheckText;
+        }
+
         // ---- automatable and attack path
         var cvss = CvssVector.Parse(cve?.CvssV40Vector) ?? CvssVector.Parse(cve?.CvssV31Vector);
         var automatable = cvss?.Automatable == true;
@@ -763,7 +794,17 @@ public sealed partial class VerdictEvaluator
         else if (controls.Count > 0 && exploitation == Exploitation.Active && inputs.EffectiveExposure == Exposure.Internet)
             ev.Add(new EvidenceClaim("Compensating control recorded (" + controls[0].KindText + ") but not applied: exploited in the wild and internet-facing is never lowered", "VulnVerdict decision table", now));
 
-        var sentence = SentenceBuilder.Build(s, inputs, cvss, decision.Tier, fixedIn, confidence, versionUnknown, modifiers);
+        // ---- end of life: a flag in the evidence and the advice, never an input to the decision table
+        string? fixAdvice = null;
+        if (eol is { Flagged: true })
+        {
+            ev.Add(eol.Evidence(now));
+            if (decision.Tier > VerdictTier.NotAffected) fixAdvice = eol.FixAdvice(s.Version, fixedIn);
+        }
+
+        var sentence = SentenceBuilder.Build(s, inputs, cvss, decision.Tier, fixedIn, confidence, versionUnknown, modifiers, fixAdvice);
+        if (vexNotAffected is not null && decision.Tier == VerdictTier.NotAffected) sentence = s.Display + ": not affected, " + vexNotAffected + ".";
+        else if (vexCheck is not null) sentence += " " + vexCheck;
         return new Computed(inputs, decision, confidence, versionUnknown, sentence, fixedIn, ev, epss?.Score, kev is not null, cvss, modifiers);
     }
 
@@ -808,6 +849,8 @@ public sealed partial class VerdictEvaluator
                 : c.Modifiers.Count > 0 && string.IsNullOrEmpty(v.AppliedModifiersJson) ? "compensating control recorded"
                 : c.Modifiers.Count == 0 && !string.IsNullOrEmpty(v.AppliedModifiersJson) ? "compensating control removed or expired"
                 : "inputs changed";
+            // a vendor statement decided it, or was withdrawn: say that rather than "fixed version observed"
+            if (VexAssessor.TierReason(v.EvidenceJson, c.Evidence, c.Decision.Tier) is { } vendorReason) reason = vendorReason;
             // carried on the tier line too, which is what the digest's "Changed" section reads
             if (reopenWhy is not null) reason = (v.Tier == VerdictTier.NotAffected ? reopenWhy : reason) + " (re-opened)";
             v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "tier", From = v.Tier.ToString(), To = c.Decision.Tier.ToString(), Reason = reason });
@@ -830,7 +873,9 @@ public sealed partial class VerdictEvaluator
             // connector saw; for a watchlist entry it is the version someone recorded after upgrading, which is how
             // one upgrade (7.5 to 7.8, say) settles every CVE the new version fixes, not only the one marked done.
             // Snoozed and accepted-risk items close too: the risk they were parked for no longer exists.
-            else if (c.Decision.Tier == VerdictTier.NotAffected && v.Tier > VerdictTier.NotAffected
+            // A vendor not-affected statement is the exception: nothing was patched, so the verdict stays listed as
+            // Not affected with the statement in its evidence, and comes back by itself if the vendor withdraws it.
+            else if (c.Decision.Tier == VerdictTier.NotAffected && v.Tier > VerdictTier.NotAffected && !VexAssessor.Applied(c.Evidence)
                      && v.State is VerdictState.Open or VerdictState.Snoozed or VerdictState.AcceptedRisk)
             {
                 var source = s.SoftwareInstanceId is not null ? "fixed version observed" : "watchlist now records";
@@ -919,6 +964,8 @@ public sealed partial class VerdictEvaluator
                 : "reported again" + (s.Version is null ? "" : " at " + s.Version);
         if (v.StateOwner == "system")
             return "affected again" + (s.Version is null ? "" : " at " + s.Version);
+        // closed by a person while the vendor said not affected: the vendor taking that back is news to them
+        if (VexAssessor.TierReason(v.EvidenceJson, c.Evidence, c.Decision.Tier) is { } vendorReason) return vendorReason;
         if (c.InKev && !v.InKev) return "now in CISA KEV";
         if (c.Inputs.Exploitation == Exploitation.Active && v.Exploitation != Exploitation.Active) return "now exploited in the wild";
         if (c.Decision.Tier == VerdictTier.FixToday && v.Tier < VerdictTier.FixToday) return "promoted to " + c.Decision.Tier.Plain();

@@ -219,7 +219,7 @@ public sealed class BundleService
                     // flat archive only: the six data files plus manifest.json at the root
                     if (entry.FullName.EndsWith('/') || entry.Name.Length == 0) continue;
                     var name = Path.GetFileName(entry.FullName);
-                    if (name != BundleFiles.Manifest && !BundleFiles.Required.Contains(name)) continue;
+                    if (name != BundleFiles.Manifest && !BundleFiles.Required.Contains(name) && !BundleFiles.Optional.Contains(name)) continue;
                     entry.ExtractToFile(Path.Combine(dir, name), true);
                 }
             }
@@ -243,7 +243,8 @@ public sealed class BundleService
 
     private static string Describe(BundleApplyResult r) =>
         "Applied bundle " + r.Version + ": " + r.Cves.ToString("N0") + " CVEs, " + r.Kev.ToString("N0") + " KEV, " + r.Epss.ToString("N0") + " EPSS, "
-        + r.Signals.ToString("N0") + " exploit signals, " + r.AliasesAdded.ToString("N0") + " new aliases, " + r.Narratives.ToString("N0") + " narratives.";
+        + r.Signals.ToString("N0") + " exploit signals, " + r.AliasesAdded.ToString("N0") + " new aliases, " + r.Narratives.ToString("N0") + " narratives"
+        + (r.Vex is { } vex ? ", " + vex.ToString("N0") + " vendor VEX statements" : "") + (r.Eol is { } eol ? ", " + eol.ToString("N0") + " end-of-life cycles" : "") + ".";
 
     private async Task AuditAsync(string actor, string action, string target, string detail, CancellationToken ct)
     {

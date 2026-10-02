@@ -88,7 +88,7 @@ Updates are opt-in. `./update.sh [tag]` (in the Compose folder, or `/opt/vulnver
 
 ## Air-gapped sites
 
-Set no bundle URL and upload a signed feed bundle under **Licence and updates** (see `docs/security.md` for how bundles are signed and verified). The console refuses unsigned or older bundles.
+Set no bundle URL and upload a signed feed bundle under **Licence and updates** (see `docs/security.md` for how bundles are signed and verified). The console refuses unsigned or older bundles. While it is fed by bundles no feed calls out, including the vendor VEX and end-of-life feeds; that data arrives in the bundle when the central service includes it.
 
 ## Backups
 

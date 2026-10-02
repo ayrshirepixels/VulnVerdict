@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VulnVerdict.Core.Data;
 using VulnVerdict.Core.Engine;
+using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Core.Feeds.Psirt;
 
 /// <summary>
-/// Cisco PSIRT openVuln API (OAuth2 client credentials). Optional: credentials are read from the AppSetting rows
-/// "psirt:cisco:clientId" and "psirt:cisco:clientSecret" (plain values); when either is missing the feed reports
-/// "not configured" without error. Advisories last updated between the cursor date and today are fetched via
+/// Cisco PSIRT openVuln API (OAuth2 client credentials). Optional: the client id and secret are settings, stored
+/// encrypted like every other secret (CiscoClientId, CiscoClientSecret; an earlier release's plain "psirt:cisco:*" rows
+/// are moved there on first read); when either is missing the feed reports "not configured" without error.
+/// Advisories last updated between the cursor date and today are fetched via
 /// /all/lastpublished?startDate=&amp;endDate=. Cursor: yyyy-MM-dd of the newest lastUpdated seen.
 /// </summary>
 public sealed class CiscoOpenVulnFeed : IFeed
@@ -22,24 +24,21 @@ public sealed class CiscoOpenVulnFeed : IFeed
     public const string Vendor = "cisco";
     public const string TokenUrl = "https://id.cisco.com/oauth2/default/v1/token";
     public const string ApiBase = "https://apix.cisco.com/security/advisories/v2/";
-    public const string ClientIdKey = "psirt:cisco:clientId";
-    public const string ClientSecretKey = "psirt:cisco:clientSecret";
     public const string NotConfigured = "not configured (Cisco API credentials missing)";
 
     public int InitialDays { get; init; } = 30;
 
+    private readonly SettingsService _settings;
+    public CiscoOpenVulnFeed(SettingsService settings) => _settings = settings;
+
     public async Task<FeedResult> RunAsync(FeedContext ctx, CancellationToken ct)
     {
-        var settings = await ctx.Db.Settings.AsNoTracking().Where(s => s.Key == ClientIdKey || s.Key == ClientSecretKey).ToListAsync(ct);
-        var id = settings.FirstOrDefault(s => s.Key == ClientIdKey);
-        var secret = settings.FirstOrDefault(s => s.Key == ClientSecretKey);
-        if (string.IsNullOrWhiteSpace(id?.Value) || string.IsNullOrWhiteSpace(secret?.Value))
+        var settings = await _settings.LoadAsync(ct);
+        if (string.IsNullOrWhiteSpace(settings.CiscoClientId) || string.IsNullOrWhiteSpace(settings.CiscoClientSecret))
             return new FeedResult(0, ctx.Cursor, NotConfigured);
-        if (id.Encrypted || secret.Encrypted)
-            return new FeedResult(0, ctx.Cursor, "not configured (Cisco API credential rows must be stored as plain state values)");
 
         var now = DateTime.UtcNow;
-        var token = await GetTokenAsync(ctx.Http, id.Value.Trim(), secret.Value.Trim(), ct);
+        var token = await GetTokenAsync(ctx.Http, settings.CiscoClientId.Trim(), settings.CiscoClientSecret.Trim(), ct);
         var cursor = PsirtStore.ParseDate(ctx.Cursor, "yyyy-MM-dd");
         var start = (cursor ?? now.AddDays(-InitialDays)).Date;
         var url = ApiBase + $"all/lastpublished?startDate={start:yyyy-MM-dd}&endDate={now:yyyy-MM-dd}";

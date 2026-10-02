@@ -19,7 +19,11 @@ internal static class TestBundleWriter
     public const string DefaultSigner = "VulnVerdict Central";
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
-    public static async Task<BundleManifest> WriteAsync(VvDbContext db, string outDir, ECDsa privateKey, CancellationToken ct, string signer = DefaultSigner, string? version = null, DateTime? builtAt = null)
+    /// <summary>
+    /// <paramref name="extras"/>: whether to add the optional files (vendor VEX statements, end-of-life dates) with their
+    /// own signature. Null adds them when the database holds any such rows.
+    /// </summary>
+    public static async Task<BundleManifest> WriteAsync(VvDbContext db, string outDir, ECDsa privateKey, CancellationToken ct, string signer = DefaultSigner, string? version = null, DateTime? builtAt = null, bool? extras = null)
     {
         Directory.CreateDirectory(outDir);
         var now = DateTime.SpecifyKind(builtAt ?? DateTime.UtcNow, DateTimeKind.Utc);
@@ -54,9 +58,26 @@ internal static class TestBundleWriter
             manifest.Files.Add(new BundleFile(name, await BundleHash.FileSha256Async(path, ct), new FileInfo(path).Length));
         }
         manifest.Signature = Convert.ToBase64String(privateKey.SignData(Encoding.UTF8.GetBytes(manifest.Canonical()), HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+
+        if (extras ?? (await db.VexStatements.AnyAsync(ct) || await db.EolCycles.AnyAsync(ct)))
+        {
+            var vex = await db.VexStatements.AsNoTracking().OrderBy(s => s.CveId).ThenBy(s => s.Id).ToListAsync(ct);
+            await File.WriteAllLinesAsync(Path.Combine(outDir, BundleFiles.Vex), vex.Select(s => JsonSerializer.Serialize(BundleVexStatement.From(s), BundleJson.Options)), Utf8NoBom, ct);
+            var eol = await db.EolCycles.AsNoTracking().OrderBy(c => c.Slug).ThenBy(c => c.Cycle).ToListAsync(ct);
+            await File.WriteAllTextAsync(Path.Combine(outDir, BundleFiles.Eol), JsonSerializer.Serialize(eol.Select(BundleEolCycle.From).ToList(), BundleJson.Options), Utf8NoBom, ct);
+            foreach (var name in BundleFiles.Optional)
+            {
+                var path = Path.Combine(outDir, name);
+                manifest.Extras.Add(new BundleFile(name, await BundleHash.FileSha256Async(path, ct), new FileInfo(path).Length));
+            }
+            SignExtras(manifest, privateKey);
+        }
         await File.WriteAllTextAsync(Path.Combine(outDir, BundleFiles.Manifest), manifest.ToJson(), Utf8NoBom, ct);
         return manifest;
     }
+
+    public static void SignExtras(BundleManifest manifest, ECDsa privateKey) =>
+        manifest.ExtrasSignature = Convert.ToBase64String(privateKey.SignData(Encoding.UTF8.GetBytes(manifest.CanonicalExtras()), HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
 }
 
 internal static class TestLicence

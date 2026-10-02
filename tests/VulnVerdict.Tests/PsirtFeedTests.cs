@@ -179,7 +179,7 @@ public class PsirtFeedTests
     public async Task Cisco_without_credentials_reports_not_configured()
     {
         await using var db = await OpenDbAsync();
-        var feed = new CiscoOpenVulnFeed();
+        var feed = new CiscoOpenVulnFeed(TestSettings.For(db));
         var result = await feed.RunAsync(new FeedContext { Db = db, Http = new HttpClient(), Log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, DataDir = Path.GetTempPath(), Cursor = "2026-01-01" }, CancellationToken.None);
         Assert.Equal(0, result.Records);
         Assert.Equal("2026-01-01", result.Cursor);
