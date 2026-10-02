@@ -4,15 +4,51 @@ The console holds a map of your weakest points. It is a target, and it is built 
 
 ## Access
 
-- A local administrator is created at install. OpenID Connect (Microsoft Entra, Google Workspace, generic OIDC) with group-to-role mapping for everyone else.
-- Roles: Administrator (everything), Operator (verdict workflow, watchlist, connectors, suppressions), Viewer (read only), Reporter (digest recipient without a login).
-- Every state change is written to the audit log with actor, time and before/after.
-- Login is rate limited; sessions are cookie-based, HttpOnly, SameSite=Lax, 12 hours sliding.
+- A local administrator is created at install, on a first page that needs a one-time setup token printed in the console's log and kept in the data volume, so whoever reaches the console first over the network cannot claim it. Only one administrator can be created that way, even from two requests at once. OpenID Connect (Microsoft Entra, Google Workspace, generic OIDC) with group-to-role mapping for everyone else.
+- Roles: Administrator (everything, including adding, editing, testing and deleting connectors), Operator (verdict workflow, watchlist, mapping, suppressions, running connectors and AI explanations), Viewer (read only), Reporter (digest recipient without a login). Every action checks the role on the server, not only by hiding the button.
+- Every state change is written to the audit log with actor, time and before/after. The last administrator cannot be deleted or demoted.
+- Login is rate limited; sessions are cookie-based, HttpOnly, SameSite=Lax, 12 hours sliding. Each account has a security stamp that changes when it is deleted, its role changes or its password is reset: its cookies stop working on the next request and open console tabs lose access within five minutes. Signing out is a POST with an antiforgery token.
+- The API has a read-only token and a read-write token (imports). Only their SHA-256 hashes are stored, compared in constant time; a token is shown once when generated. Every API write is in the audit log.
+- Besides the per-address login rate limit, each local account locks for 15 minutes after 10 wrong passwords in a row, wherever they come from. The right password does not unlock it early; an administrator resetting the password does.
+
+## Two-factor sign-in for local accounts
+
+Single sign-on users get two-factor from their identity provider. Local accounts, the first administrator included, have their own: a time-based code from an authenticator app (TOTP, RFC 6238: SHA-1, six digits, 30 seconds, which every authenticator app supports).
+
+- **Setting it up.** Under **My account**, or straight after creating the first administrator (it can be skipped there). The console shows a QR code and the key to type by hand, and turns two-factor on only once a code from the app confirms it. The QR code is drawn by the console itself; nothing is sent to an image service. Ten recovery codes are shown once: each signs in once when the phone is not to hand.
+- **Signing in.** After the right password the console asks for the code (or a recovery code). Until the code is accepted nothing is signed in: the browser holds only a five-minute token for that one step, tied to the account and its security stamp, which is not a session cookie. The current code and the one either side of it are accepted, so a phone clock up to 30 seconds out works; a code that has been used is refused. Five wrong codes in a row lock the second step for 15 minutes.
+- **Storage.** The secret is encrypted with Data Protection under its own purpose and is never sent to the browser again after enrolment. Recovery codes are stored as salted SHA-256 hashes.
+- **Policy.** **Users > Require two-factor for local accounts** is off unless you turn it on. When on, a local user without two-factor must set it up at the next sign-in before reaching anything else, local users without it are signed out when the policy is switched on, and it cannot be turned off under My account.
+- **Changes.** Turning your own two-factor off takes the password and a current code. An administrator can reset another user's two-factor (a lost phone) on the Users page. Turning it on or off, a reset, new recovery codes, each recovery code used and each lockout are in the audit log; turning it on, off or resetting it changes the security stamp, which ends that account's other sessions.
+
+### If the last administrator is locked out
+
+When nobody can sign in to reset it (the only administrator lost the phone and the recovery codes), reset it from the host. Whoever can do this already has the data volume and the database, so it asks for nothing more:
+
+```
+docker compose exec web dotnet VulnVerdict.Web.dll reset-2fa <username>
+```
+
+The all-in-one image (and the appliance, which runs it) sets its database settings in its start script, so pass them with the command. With the default embedded database:
+
+```
+docker exec -u vulnverdict -w /app \
+  -e Database__Provider=postgres \
+  -e "Database__ConnectionString=Host=/var/run/postgresql;Database=vulnverdict;Username=vulnverdict" \
+  <container> dotnet VulnVerdict.Web.dll reset-2fa <username>
+```
+
+The console keeps running while the command runs. It removes that local account's two-factor and recovery codes, clears its lockouts, ends its sessions and writes `user.2fa.reset` by `console` to the audit log. The account then signs in with its password, and sets two-factor up again at once if the policy requires it. It does not change the password.
+- `/metrics` (Prometheus) is off by default and never anonymous: once an administrator turns it on it needs its own metrics token, stored and compared the same way and good for nothing else, or a scraper address on the allow-list. While it is off it answers 404. Its labels carry no asset names, hostnames, addresses or CVE identifiers (see [metrics](metrics.md)).
 
 ## Secrets
 
-- Connector credentials, mail passwords, API keys, the webhook secret and the MSP token are encrypted with ASP.NET Data Protection before they reach the database. The key ring lives in the `data` volume; keep it on an encrypted disk and back it up with the database.
+- Connector credentials, mail passwords, API keys, the webhook secret, the MSP token and the licence key are encrypted with ASP.NET Data Protection before they reach the database. The key ring lives in the `data` volume; keep it on an encrypted disk and back it up with the database.
+- **Key-ring secret (optional, recommended).** Set `VV_KEY_SECRET` in `.env` to a long random string (`openssl rand -hex 32`) and the keys in the key ring are themselves encrypted at rest (AES-256-GCM, key derived from the secret). A copy of the data volume, or of a backup, then opens no saved credential without the secret, which lives outside both. Keys already on disk are encrypted at the next start. Keep a copy of the secret somewhere else, such as a password manager: a restore onto a new machine needs it, and if it is lost the saved credentials have to be typed in again. The console refuses to start with a missing or different secret rather than start a new key ring. The all-in-one image takes the same `VV_KEY_SECRET`; a Docker secret can be used instead with `KeyProtection__SecretFile`. Without a secret the keys are stored as before and the console says so in its log at start.
+- Saved secrets are never sent back to the browser: the forms show that one is saved, and a blank field keeps it. A blank connector password is only reused while the connector's address, account and TLS setting are unchanged, so a changed address cannot be tested with the saved password. Pinning an SSH host key does not count as a change; a different host or port does.
+- SSH connectors only sign in to hosts whose key is pinned. An administrator pins a key from the connector test (one click, audited with the fingerprint); a key that differs from the pinned one is never accepted in bulk and has to be replaced host by host. See [connectors](connectors.md#ssh-host-keys).
 - Credentials never appear in configuration files or logs. Every adapter uses read-only accounts and never writes to the source.
+- A backup holds the database and the key ring, because one is useless without the other: together they open every stored credential. The backups folder is created for the console's user only; put it on storage only administrators can read, and set an archive passphrase (AES-256-GCM, key derived with PBKDF2-HMAC-SHA256) if the backups leave the machine. Backups, the passphrase and restores are administrator-only and audited. See [backup](backup.md).
 
 ## Network
 
@@ -21,11 +57,11 @@ The console holds a map of your weakest points. It is a target, and it is built 
 
 ## Headers and browser
 
-Content Security Policy (scripts only from the console itself, no inline scripts), X-Content-Type-Options, X-Frame-Options same-origin, Referrer-Policy, Permissions-Policy. Antiforgery tokens on every form. No external CDNs: fonts and styles are served locally so an air-gapped console renders the same.
+Content Security Policy (scripts only from the console itself, no inline scripts, connections only to the console, forms only to the console and the configured identity provider), X-Content-Type-Options, X-Frame-Options same-origin, Referrer-Policy, Permissions-Policy. Antiforgery tokens on every form. No external CDNs: fonts and styles are served locally so an air-gapped console renders the same.
 
 ## Feed bundles and licences
 
-The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
+The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. An uploaded bundle is checked before it is unpacked: the manifest is read and its signature verified first, then only the files the signed manifest lists are extracted, each stopped at its signed size and hashed as it is written. A zip that holds anything else, a file larger than its signed size (a zip bomb) or an upload over 2 GB is refused. Vendor VEX statements and end-of-life dates travel as two optional files with their own signature over their hashes, checked the same way; a console that predates them ignores them. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
 
 ## Supply chain
 
@@ -33,7 +69,7 @@ Every push and release checks the NuGet packages, direct and transitive, for kno
 
 Nothing runs as root inside the containers. Postgres and the console run as their own users; Caddy runs as the console user with only the capability to bind 443. The Compose database image is Postgres 16 without gosu, running as postgres from the start, and the proxy image is Caddy compiled with the current Go release and dependencies, because the published Postgres and Caddy images can lag behind Go security fixes.
 
-Image updates are opt-in with a changelog and a one-command rollback; `deploy/update.sh` moves the database and proxy images along with the console.
+Image updates are opt-in with a changelog. `deploy/update.sh` moves the database and proxy images along with the console, takes and verifies a database dump before the new version starts (no dump, no update), and puts all four images and, if the schema moved, the database back by itself when the new version does not come up; `deploy/rollback.sh` does the same by hand.
 
 ## Reporting a vulnerability in VulnVerdict
 

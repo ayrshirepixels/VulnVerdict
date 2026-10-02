@@ -1,7 +1,15 @@
 @inherits LayoutComponentBase
 
 <div class="shell">
-    <aside class="sidebar">
+    @* Phone only: the top bar and its menu button. console.js opens and closes the drawer; see app.css. *@
+    <header class="topbar">
+        <button type="button" class="nav-toggle" data-nav-toggle aria-label="Menu" aria-controls="sidebar" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <a class="brand" href="/"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></a>
+    </header>
+    <div class="nav-backdrop" data-nav-close></div>
+    <aside class="sidebar" id="sidebar">
         <a class="brand" href="/"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></a>
         <div class="tagline">Cut the noise. Know your risk.</div>
         <nav>
@@ -23,8 +31,14 @@
             </AuthorizeView>
         </nav>
         <div class="sidebar-foot">
+            <div class="theme-toggle" role="group" aria-label="Colour theme">
+                <button type="button" data-theme-set="auto" title="Follow this device">Auto</button>
+                <button type="button" data-theme-set="light">Light</button>
+                <button type="button" data-theme-set="dark">Dark</button>
+            </div>
             <AuthorizeView>
                 <div class="who">@context.User.Identity?.Name<br /><small>@(context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)</small></div>
+                <a class="account-link" href="/account">My account</a>
                 <form method="post" action="/auth/logout">
                     <AntiforgeryToken />
                     <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>

@@ -1,0 +1,136 @@
+@page "/account"
+@attribute [ExcludeFromInteractiveRouting]
+@inject UserService Users
+@inject TwoFactorService TwoFactor
+@inject NavigationManager Nav
+
+<PageTitle>My account - VulnVerdict</PageTitle>
+
+@* A static page with plain forms: enabling or disabling two-factor rotates the security stamp, and the endpoint that
+   does it has to set a fresh session cookie, which an interactive circuit cannot. *@
+<div class="page">
+    <h1>My account</h1>
+    @if (_user is not null)
+    {
+        @if (First is not null && _codes is null && !_user.TwoFactorEnabled)
+        {
+            <div class="alert alert-info"><b>Account created.</b> This console will hold the credentials for your firewalls and servers, so add two-factor sign-in to it now. It takes a minute; you can also skip it and do it later from here.</div>
+        }
+        @if (Notice == "recovery")
+        {
+            <div class="alert alert-warn">You signed in with a recovery code. It will not work again; @TwoFactorService.RecoveryCodesLeft(_user) left. If the authenticator app is gone for good, turn two-factor off below and set it up again. @if (_next != "/account") { <a href="@_next">Continue to where you were going</a> }</div>
+        }
+        @if (Notice == "off") { <div class="alert alert-ok">Two-factor is off. Your other sessions have been signed out.</div> }
+        @if (Error == "code") { <div class="alert alert-error">That code is not right. Check the phone's clock is set automatically, then type the code the app shows now.</div> }
+        @if (Error == "disable") { <div class="alert alert-error">Two-factor is still on: the password or the code was not right.</div> }
+        @if (Error == "required") { <div class="alert alert-error">This console requires two-factor for local accounts, so it cannot be turned off.</div> }
+
+        @if (_codes is not null)
+        {
+            <div class="card">
+                <h2>Two-factor is on. Keep these recovery codes</h2>
+                <p>Each code signs you in once if the authenticator app is not to hand. They are shown this one time: print them or put them in a password manager, not on the device that has the app.</p>
+                <ul class="recovery-codes">
+                    @foreach (var c in _codes) { <li><code>@c</code></li> }
+                </ul>
+                <p class="muted">Your other sessions have been signed out.</p>
+                <div class="btn-row"><a class="btn" href="@_next">@(_next == "/account" ? "Done" : "Continue")</a></div>
+            </div>
+        }
+
+        <div class="card">
+            <h2>Account</h2>
+            <dl class="kv">
+                <dt>Username</dt><dd>@_user.Username</dd>
+                <dt>Role</dt><dd>@_user.Role</dd>
+                <dt>Signs in with</dt><dd>@(_local ? "a password kept by this console" : "single sign-on")</dd>
+            </dl>
+        </div>
+
+        <div class="card">
+            <h2>Two-factor sign-in</h2>
+            @if (!_local)
+            {
+                <p class="muted" style="margin:0">You sign in through your organisation's identity provider, which does two-factor itself. There is nothing to set up here.</p>
+            }
+            else if (_user.TwoFactorEnabled)
+            {
+                <p>On since @(_user.TotpEnabledAt?.ToString("d MMM yyyy")). Signing in takes the password and a code from your authenticator app. @TwoFactorService.RecoveryCodesLeft(_user) of @TwoFactorService.RecoveryCodeCount recovery codes left.</p>
+                <form method="post" action="/auth/2fa/recovery-codes" class="form twofactor-form">
+                    <AntiforgeryToken />
+                    <h3>New recovery codes</h3>
+                    <div class="help">Replaces the old ones, which stop working.</div>
+                    <div class="row">
+                        <div><label for="regen-code">Code from the app</label><input id="regen-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required /></div>
+                        <div class="btn-row" style="align-self:end"><button type="submit" class="btn btn-secondary">Make new codes</button></div>
+                    </div>
+                </form>
+                <form method="post" action="/auth/2fa/disable" class="form twofactor-form">
+                    <AntiforgeryToken />
+                    <h3>Turn two-factor off</h3>
+                    @if (_required)
+                    {
+                        <div class="help">Not available: this console requires two-factor for local accounts. An administrator can reset yours if the app is lost.</div>
+                    }
+                    else
+                    {
+                        <div class="help">Takes your password and a current code (or a recovery code). The account is then protected by the password alone.</div>
+                        <div class="row">
+                            <div><label for="off-password">Password</label><input id="off-password" name="password" type="password" autocomplete="current-password" required /></div>
+                            <div><label for="off-code">Code from the app</label><input id="off-code" name="code" type="text" autocomplete="one-time-code" required /></div>
+                        </div>
+                        <div class="btn-row"><button type="submit" class="btn btn-danger">Turn off two-factor</button></div>
+                    }
+                </form>
+            }
+            else if (_enrolment is not null)
+            {
+                <TwoFactorEnrol Enrolment="_enrolment" Action="/auth/2fa/enable" ReturnUrl="@ReturnUrl">
+                    <a class="btn btn-secondary" href="@_next">@(First is not null ? "Skip for now" : "Cancel")</a>
+                </TwoFactorEnrol>
+            }
+            else
+            {
+                <p>Off. Signing in takes only the password. With two-factor on, it also takes a six-digit code from an authenticator app on your phone, so a stolen or guessed password is not enough.</p>
+                <div class="btn-row"><a class="btn" href="/account?enrol=1">Set up two-factor</a></div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+    [SupplyParameterFromQuery] public string? First { get; set; }
+    [SupplyParameterFromQuery] public string? Enrol { get; set; }
+    [SupplyParameterFromQuery] public string? Notice { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    private AppUser? _user;
+    private bool _local, _required;
+    private TwoFactorEnrolment? _enrolment;
+    private string[]? _codes;
+    private string _next = "/account";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Http is null || !Guid.TryParse(Http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id)) return;
+        _user = await Users.FindAsync(id);
+        if (_user is null) { Nav.NavigateTo("/login"); return; }
+        _local = _user.Provider == "local";
+        _required = await TwoFactor.IsRequiredAsync();
+        // after first-run setup the next stop is the settings page, enrolled or not
+        if (First is not null) ReturnUrl = "/settings?first=1";
+        _next = AuthService.SafeReturnUrl(ReturnUrl) is { Length: > 1 } url ? url : "/account";
+
+        // recovery codes made a moment ago by one of the two-factor endpoints: shown this once, then the cookie goes
+        if (Http.Request.Cookies[TwoFactorEndpoints.CodesCookie] is { Length: > 0 } token)
+        {
+            Http.Response.Cookies.Delete(TwoFactorEndpoints.CodesCookie);
+            if (TwoFactor.ReadPending(token, TwoFactorService.PurposeCodes) is { } handed && handed.UserId == _user.Id)
+                _codes = handed.Payload.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        }
+        if (_local && !_user.TwoFactorEnabled && (Enrol is not null || First is not null))
+            _enrolment = await TwoFactor.BeginEnrolmentAsync(_user.Id);
+        if (_codes is not null || _enrolment is not null) Http.Response.Headers.CacheControl = "no-store";
+    }
+}

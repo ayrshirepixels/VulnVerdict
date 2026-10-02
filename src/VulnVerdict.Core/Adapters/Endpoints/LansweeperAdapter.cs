@@ -42,6 +42,8 @@ public sealed class LansweeperAdapter : IInventoryAdapter
     private readonly IHttpClientFactory _http;
     private readonly ILogger _log;
     public Func<TimeSpan, CancellationToken, Task>? Delay { get; set; }
+    /// <summary>Page cap; a listing that reaches it is reported as partial instead of being taken for the whole site.</summary>
+    public int MaxPages { get; set; } = 50_000;
 
     public LansweeperAdapter(IHttpClientFactory http, ILogger<LansweeperAdapter>? log = null)
     {
@@ -82,11 +84,13 @@ public sealed class LansweeperAdapter : IInventoryAdapter
     {
         var (api, siteId, url) = Open(credentials);
         var result = new CollectResult { FullSnapshot = true };
-        string? cursor = null; var stale = 0; var noPatchLevel = 0;
-        for (var pages = 0; pages < 50_000; pages++)
+        string? cursor = null; var stale = 0; var noPatchLevel = 0; long read = 0;
+        for (var pages = 0; ; pages++)
         {
+            if (pages >= MaxPages) { result.MarkPartial(EndpointPaging.CapHit("assets", MaxPages)); break; }
             var page = await PageAsync(api, url, siteId, cursor, PageSize, ct);
             var items = EpJson.Arr(page, "items");
+            read += items.Count;
             foreach (var item in items)
             {
                 if (EndpointNaming.IsStale(EpJson.Str(item, "assetBasicInfo.lastSeen"))) { stale++; continue; }
@@ -96,10 +100,18 @@ public sealed class LansweeperAdapter : IInventoryAdapter
                 if (mapped.Value.Os is not null) result.Software.Add(mapped.Value.Os);
                 else if (mapped.Value.Asset.OsVendor == "Microsoft") noPatchLevel++;
                 result.Software.AddRange(mapped.Value.Apps);
+                // no softwares field is "not scanned", not "nothing installed": keep what an earlier run recorded
+                if (EpJson.At(item, "softwares") is not { ValueKind: JsonValueKind.Array }) result.IncompleteSoftware.Add(mapped.Value.Asset.ExternalId);
             }
-            progress?.Report(result.Assets.Count + " of " + (EpJson.Int(page, "total")?.ToString() ?? "?") + " assets");
+            var total = EpJson.Int(page, "total");
+            progress?.Report(result.Assets.Count + " of " + (total?.ToString() ?? "?") + " assets");
+            // the cursor decides, not the page length; a listing that stops before the stated total is partial
             var next = EpJson.Str(page, "pagination.next");
-            if (items.Count == 0 || next is null || next == cursor) break;
+            if (items.Count == 0 || next is null || next == cursor)
+            {
+                if (total is not null && read < total) result.MarkPartial(EndpointPaging.EndedShort("asset", read, total.Value));
+                break;
+            }
             cursor = next;
         }
         if (stale > 0) result.Warnings.Add(stale + " asset(s) not seen by Lansweeper for " + EndpointNaming.StaleDays + " days were left out.");

@@ -67,9 +67,51 @@ public sealed class CollectResult
     public HashSet<string> IncompleteSoftware { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>False for adapters that only add to what they saw last time (deltas); true means software not in this run was removed from the source.</summary>
     public bool FullSnapshot { get; set; } = true;
+    /// <summary>A findings read failed part-way: findings not seen this run are kept, not purged as resolved.</summary>
+    public bool FindingsIncomplete { get; set; }
+    /// <summary>
+    /// Asset external id to software ExternalId prefixes that could not be read this run ("container:" when docker was
+    /// unreadable). Rows with those prefixes are kept on that asset; the rest of its list is still a full snapshot.
+    /// </summary>
+    public Dictionary<string, List<string>> IncompleteRows { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// The run is not a complete picture of the source: a listing was truncated, a page cap or rate limit was hit, or a
+    /// section could not be read. Distinct from <see cref="Warnings"/>, which are informational. Nothing is marked
+    /// removed, no finding is purged, and assets this connector did not see do not age towards the stale close.
+    /// </summary>
+    public bool Partial { get; set; }
+    /// <summary>
+    /// Exposure evidence (VIPs, NAT, policies, VPN listeners) could not be read this run. Exposure is only ever raised, so
+    /// earlier evidence stays; servers published since the last good read keep the Internal default until it can be read.
+    /// </summary>
+    public bool ExposureUnknown { get; private set; }
+
+    /// <summary>Marks the run partial with a warning that says why.</summary>
+    public void MarkPartial(string warning)
+    {
+        Partial = true;
+        if (!Warnings.Contains(warning)) Warnings.Add(warning);
+    }
+
+    /// <summary>Exposure could not be read: the run is partial and the warning goes first, so it is never cut off the connector's status line.</summary>
+    public void ExposureNotRead(string what)
+    {
+        Partial = true;
+        if (ExposureUnknown) return;
+        ExposureUnknown = true;
+        Warnings.Insert(0, "Exposure could not be read (" + what + "): newly published servers will not be marked internet-facing until it can be");
+    }
+
+    /// <summary>Software rows on <paramref name="assetExternalId"/> whose ExternalId starts with <paramref name="prefix"/> are kept this run.</summary>
+    public void KeepRows(string assetExternalId, string prefix) =>
+        (IncompleteRows.TryGetValue(assetExternalId, out var l) ? l : IncompleteRows[assetExternalId] = new()).Add(prefix);
 }
 
-public sealed record TestResult(bool Ok, string Message);
+public sealed record TestResult(bool Ok, string Message)
+{
+    /// <summary>SSH host keys the test met, for the console's one-click trust prompt. Empty for sources that do not use SSH.</summary>
+    public IReadOnlyList<Linux.PresentedHostKey> HostKeys { get; init; } = Array.Empty<Linux.PresentedHostKey>();
+}
 
 /// <summary>
 /// Every inventory source implements this. Read-only credentials only; never writes to the source.

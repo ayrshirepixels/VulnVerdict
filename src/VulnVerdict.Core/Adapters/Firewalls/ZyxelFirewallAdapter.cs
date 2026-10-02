@@ -74,7 +74,10 @@ public sealed partial class ZyxelFirewallAdapter : IInventoryAdapter
         progress?.Report("Reading virtual servers");
         var wan = ZoneMembers((await s.RunAsync(ShowWanZone, ct)).Output);
         if (wan.Count == 0) r.Warnings.Add("'show zone WAN' listed no interfaces; interfaces named wan* are treated as WAN.");
-        var servers = ParseVirtualServers((await s.RunAsync(ShowVirtualServers, ct)).Output);
+        var listing = await s.RunAsync(ShowVirtualServers, ct);
+        var servers = ParseVirtualServers(listing.Output);
+        // an empty listing is "no virtual servers"; one the CLI refused (privilege, unknown command on this firmware) is not
+        if (CliRefused(listing) is { } why) r.ExposureNotRead("'" + ShowVirtualServers + "' failed: " + why);
 
         var id = serial ?? target.Host;
         var (primary, alternates) = ProductNames(model);
@@ -87,6 +90,15 @@ public sealed partial class ZyxelFirewallAdapter : IInventoryAdapter
     }
 
     // ------------------------------------------------------------------ parsing
+
+    /// <summary>Why the CLI refused a command (a non-zero exit, or a "% ..." / "ERROR ..." line as the shell prints them), or null when it ran.</summary>
+    public static string? CliRefused(SshCommandResult c)
+    {
+        var error = ApplianceSsh.CleanTerminal(c.Output).Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith('%') || l.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase));
+        if (error is not null) return error;
+        return c.ExitStatus > 0 ? (c.Error.Trim() is { Length: > 0 } e ? e : "exit " + c.ExitStatus) : null;
+    }
 
     // [ \t] rather than \s so an empty value ("original end port:") never runs on into the next line
     [GeneratedRegex(@"^[ \t]*([A-Za-z][A-Za-z0-9 ._()-]*?)[ \t]*:[ \t]*(.*?)[ \t]*\r?$", RegexOptions.Multiline)] private static partial Regex KeyValueRx();

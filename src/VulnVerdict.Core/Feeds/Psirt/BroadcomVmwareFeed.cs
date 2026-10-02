@@ -12,6 +12,8 @@ namespace VulnVerdict.Core.Feeds.Psirt;
 /// (POST getSecurityAdvisoryList, no authentication) returns the VMSA id, title, CVE list, severity, dates, products and URL
 /// per segment (VC = VMware Cloud Foundation, VA = application networking and security, VT = Tanzu). Affected and fixed
 /// versions are only on the advisory pages, so rows carry product names only. Cursor: ISO 8601 of the newest "updated" seen.
+/// The list is not sorted by "updated" (a revised VMSA keeps its place by publication), so every page of every segment is
+/// read, up to MaxPagesPerSegment, and only rows updated after the cursor are stored.
 /// </summary>
 public sealed partial class BroadcomVmwareFeed : IFeed
 {
@@ -60,10 +62,13 @@ public sealed partial class BroadcomVmwareFeed : IFeed
                 var fresh = cursor is null ? rows : rows.Where(r => r.Updated is null || r.Updated > cursor).ToList();
                 total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, fresh, ct);
                 foreach (var r in fresh) if (r.Updated is { } u && (newest is null || u > newest)) newest = u;
-                if (fresh.Count == 0 || page >= lastPage) break;
+                if (page >= lastPage) break;
+                if (page == MaxPagesPerSegment - 1) notes.Add($"{segment} capped at {MaxPagesPerSegment} pages");
             }
         }
-        return new FeedResult(total, (newest ?? now).ToString("o"), notes.Count > 0 ? string.Join("; ", notes) : null);
+        // a capped segment may hold unread revisions: keep the old cursor so they are looked for again
+        var cursorOut = notes.Count > 0 && cursor is not null ? cursor.Value : newest ?? now;
+        return new FeedResult(total, cursorOut.ToString("o"), notes.Count > 0 ? string.Join("; ", notes) : null);
     }
 
     [GeneratedRegex(@"VMSA-\d{4}-\d{4}", RegexOptions.IgnoreCase)] private static partial Regex Vmsa();

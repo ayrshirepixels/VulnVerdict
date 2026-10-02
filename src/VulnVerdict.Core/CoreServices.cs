@@ -76,6 +76,9 @@ public static class CoreServices
         services.AddSingleton<LicenseService>();
         services.AddSingleton<TelemetryService>();
         services.AddSingleton<MspReportService>();
+        services.AddSingleton<ChatNotificationService>().AddSingleton<DigestActionTokens>().AddSingleton<DigestActionService>();
+        // operations: backups, /metrics, SLA trends
+        services.AddSingleton<BackupService>().AddSingleton<MetricsService>().AddSingleton<MetricsAuth>().AddSingleton<SlaReportService>();
 
         services.AddSingleton<IFeed, KevFeed>();
         services.AddSingleton<IFeed, EpssFeed>();
@@ -103,6 +106,7 @@ public static class CoreServices
     public static async Task InitialiseDatabaseAsync(IServiceProvider sp, CancellationToken ct = default)
     {
         var factory = sp.GetRequiredService<IDbContextFactory<VvDbContext>>();
+        MetricCounters.Use(factory);
         await using var db = await factory.CreateDbContextAsync(ct);
         for (var i = 0; i < 30; i++)
         {

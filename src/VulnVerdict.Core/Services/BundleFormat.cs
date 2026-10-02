@@ -24,6 +24,16 @@ public static class BundleFiles
 
     /// <summary>Every data file a bundle must carry, in the order they are written.</summary>
     public static readonly string[] Required = { Cves, Kev, Epss, Signals, Aliases, Narratives };
+
+    public const string Vex = "vex.jsonl";
+    public const string Eol = "eol.json";
+
+    /// <summary>
+    /// Data files a bundle may carry as well: vendor VEX statements and end-of-life dates. They are listed in the
+    /// manifest's extras, not its files, because a console from before they existed checks every entry of files against
+    /// the six it unpacks and would refuse the bundle.
+    /// </summary>
+    public static readonly string[] Optional = { Vex, Eol };
 }
 
 public static class BundleJson
@@ -48,6 +58,13 @@ public sealed class BundleManifest
     public List<BundleFile> Files { get; set; } = new();
     public string? Signature { get; set; }
     public string? Signer { get; set; }
+    /// <summary>
+    /// Optional data files (see <see cref="BundleFiles.Optional"/>), with their own signature over
+    /// <see cref="CanonicalExtras"/>. An older console does not read either property, so the same bundle still verifies
+    /// and applies there; this one refuses a bundle whose extras are not signed.
+    /// </summary>
+    public List<BundleFile> Extras { get; set; } = new();
+    public string? ExtrasSignature { get; set; }
 
     public string Canonical()
     {
@@ -56,13 +73,26 @@ public sealed class BundleManifest
     }
 
 
-    /// <summary>False for an unsigned manifest, a malformed signature or a signature by any other key.</summary>
+    /// <summary>What the extras signature covers: the bundle version and build time (so extras cannot be moved to another bundle) and the extra files sorted by name.</summary>
+    public string CanonicalExtras()
+    {
+        var extras = Extras.OrderBy(f => f.Name, StringComparer.Ordinal).Select(f => new { name = f.Name, sha256 = f.Sha256, bytes = f.Bytes });
+        return JsonSerializer.Serialize(new { version = Version, builtAt = DateTime.SpecifyKind(BuiltAt, DateTimeKind.Utc).ToString("O"), extras, signer = Signer });
+    }
+
+    /// <summary>False for an unsigned manifest, a malformed signature or a signature by any other key; also when extras are listed and their signature is not good.</summary>
     public bool Verify(ECDsa publicKey)
     {
-        if (string.IsNullOrWhiteSpace(Signature)) return false;
+        if (!VerifySignature(publicKey, Signature, Canonical())) return false;
+        return Extras.Count == 0 || VerifySignature(publicKey, ExtrasSignature, CanonicalExtras());
+    }
+
+    private static bool VerifySignature(ECDsa publicKey, string? signature, string canonical)
+    {
+        if (string.IsNullOrWhiteSpace(signature)) return false;
         byte[] sig;
-        try { sig = Convert.FromBase64String(Signature); } catch { return false; }
-        try { return publicKey.VerifyData(Encoding.UTF8.GetBytes(Canonical()), sig, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation); }
+        try { sig = Convert.FromBase64String(signature); } catch { return false; }
+        try { return publicKey.VerifyData(Encoding.UTF8.GetBytes(canonical), sig, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation); }
         catch { return false; }
     }
 
@@ -217,4 +247,75 @@ public sealed class BundleNarrative
 
     public static BundleNarrative From(Narrative n) => new() { Key = n.Key, Text = n.Text, Provider = n.Provider, Model = n.Model, PromptVersion = n.PromptVersion, CreatedAt = n.CreatedAt };
     public Narrative ToEntity() => new() { Key = Key, Text = Text, Provider = Provider, Model = Model, PromptVersion = PromptVersion, CreatedAt = CreatedAt };
+}
+
+/// <summary>One line of vex.jsonl: a vendor VEX statement as the central service parsed it.</summary>
+public sealed class BundleVexStatement
+{
+    public string Provider { get; set; } = "";
+    public string DocumentId { get; set; } = "";
+    public string CveId { get; set; } = "";
+    public VexStatus Status { get; set; }
+    public string Vendor { get; set; } = "";
+    public string Product { get; set; } = "";
+    public string VendorNorm { get; set; } = "";
+    public string ProductNorm { get; set; } = "";
+    public string? Version { get; set; }
+    public string? VersionRange { get; set; }
+    public string? Platform { get; set; }
+    public string? PlatformNorm { get; set; }
+    public string? PlatformCpe { get; set; }
+    public string? Cpe { get; set; }
+    public string? Purl { get; set; }
+    public string? Justification { get; set; }
+    public string? Detail { get; set; }
+    public string? Url { get; set; }
+    public DateTime? DocumentDate { get; set; }
+    public string? Revision { get; set; }
+    public DateTime RetrievedAt { get; set; }
+
+    public static BundleVexStatement From(VexStatement s) => new()
+    {
+        Provider = s.Provider, DocumentId = s.DocumentId, CveId = s.CveId, Status = s.Status, Vendor = s.Vendor, Product = s.Product, VendorNorm = s.VendorNorm, ProductNorm = s.ProductNorm,
+        Version = s.Version, VersionRange = s.VersionRange, Platform = s.Platform, PlatformNorm = s.PlatformNorm, PlatformCpe = s.PlatformCpe, Cpe = s.Cpe, Purl = s.Purl,
+        Justification = s.Justification, Detail = s.Detail, Url = s.Url, DocumentDate = s.DocumentDate, Revision = s.Revision, RetrievedAt = s.RetrievedAt
+    };
+
+    public VexStatement ToEntity() => new()
+    {
+        Provider = Provider, DocumentId = DocumentId, CveId = CveId.ToUpperInvariant(), Status = Status, Vendor = Vendor, Product = Product, VendorNorm = VendorNorm, ProductNorm = ProductNorm,
+        Version = Version, VersionRange = VersionRange, Platform = Platform, PlatformNorm = PlatformNorm, PlatformCpe = PlatformCpe, Cpe = Cpe, Purl = Purl,
+        Justification = Justification, Detail = Detail, Url = Url, DocumentDate = DocumentDate, Revision = Revision, RetrievedAt = RetrievedAt
+    };
+}
+
+/// <summary>One element of eol.json: a release cycle and its support end dates.</summary>
+public sealed class BundleEolCycle
+{
+    public string Slug { get; set; } = "";
+    public string ProductLabel { get; set; } = "";
+    public string? Aliases { get; set; }
+    public string Cycle { get; set; } = "";
+    public string? CycleLabel { get; set; }
+    public DateTime? ReleaseDate { get; set; }
+    public bool IsEol { get; set; }
+    public DateTime? EolFrom { get; set; }
+    public DateTime? EoasFrom { get; set; }
+    public DateTime? EoesFrom { get; set; }
+    public bool IsMaintained { get; set; }
+    public string? Latest { get; set; }
+    public string? Link { get; set; }
+    public DateTime RetrievedAt { get; set; }
+
+    public static BundleEolCycle From(EolCycle c) => new()
+    {
+        Slug = c.Slug, ProductLabel = c.ProductLabel, Aliases = c.Aliases, Cycle = c.Cycle, CycleLabel = c.CycleLabel, ReleaseDate = c.ReleaseDate, IsEol = c.IsEol, EolFrom = c.EolFrom,
+        EoasFrom = c.EoasFrom, EoesFrom = c.EoesFrom, IsMaintained = c.IsMaintained, Latest = c.Latest, Link = c.Link, RetrievedAt = c.RetrievedAt
+    };
+
+    public EolCycle ToEntity() => new()
+    {
+        Slug = Slug, ProductLabel = ProductLabel, Aliases = Aliases, Cycle = Cycle, CycleLabel = CycleLabel, ReleaseDate = ReleaseDate, IsEol = IsEol, EolFrom = EolFrom,
+        EoasFrom = EoasFrom, EoesFrom = EoesFrom, IsMaintained = IsMaintained, Latest = Latest, Link = Link, RetrievedAt = RetrievedAt
+    };
 }

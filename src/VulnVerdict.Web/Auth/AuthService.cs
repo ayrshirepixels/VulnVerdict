@@ -1,87 +1,22 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
 using VulnVerdict.Core.Data;
 using VulnVerdict.Core.Services;
 
 namespace VulnVerdict.Web;
 
-/// <summary>Local administrator created at install, OIDC for everything else, roles from groups.</summary>
+/// <summary>Local administrator created at install, OIDC for everything else, roles from groups. Accounts live in <see cref="UserService"/>.</summary>
 public sealed class AuthService
 {
     public const string OidcScheme = "oidc";
-    private static readonly PasswordHasher<AppUser> Hasher = new();
-    private readonly IDbContextFactory<VvDbContext> _factory;
+    public const string StampClaim = "vv:stamp";
     private readonly IOptionsMonitorCache<OpenIdConnectOptions> _oidcCache;
 
-    public AuthService(IDbContextFactory<VvDbContext> factory, IOptionsMonitorCache<OpenIdConnectOptions> oidcCache)
-    {
-        _factory = factory; _oidcCache = oidcCache;
-    }
-
-    public async Task<bool> HasUsersAsync(CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        return await db.Users.AnyAsync(ct);
-    }
-
-    public async Task<List<AppUser>> ListUsersAsync(CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        return await db.Users.AsNoTracking().OrderBy(u => u.Username).ToListAsync(ct);
-    }
-
-    public async Task<AppUser> CreateLocalUserAsync(string username, string password, UserRole role, string? email, string actor, CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        username = username.Trim();
-        if (await db.Users.AnyAsync(u => u.Username == username, ct)) throw new InvalidOperationException("That username already exists");
-        var user = new AppUser { Id = Guid.NewGuid(), Username = username, Email = email, Role = role, Provider = "local", CreatedAt = DateTime.UtcNow };
-        user.PasswordHash = Hasher.HashPassword(user, password);
-        db.Users.Add(user);
-        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = actor, Action = "user.create", Target = username, After = role.ToString() });
-        await db.SaveChangesAsync(ct);
-        return user;
-    }
-
-    public async Task UpdateUserAsync(Guid id, UserRole role, string? newPassword, string actor, CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct) ?? throw new KeyNotFoundException();
-        var before = user.Role.ToString();
-        user.Role = role;
-        if (!string.IsNullOrEmpty(newPassword)) user.PasswordHash = Hasher.HashPassword(user, newPassword);
-        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = actor, Action = "user.update", Target = user.Username, Before = before, After = role + (string.IsNullOrEmpty(newPassword) ? "" : ", password reset") });
-        await db.SaveChangesAsync(ct);
-    }
-
-    public async Task DeleteUserAsync(Guid id, string actor, CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
-        if (user is null) return;
-        if (user.Role == UserRole.Administrator && await db.Users.CountAsync(u => u.Role == UserRole.Administrator, ct) == 1)
-            throw new InvalidOperationException("Cannot delete the last administrator");
-        db.Users.Remove(user);
-        db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = actor, Action = "user.delete", Target = user.Username });
-        await db.SaveChangesAsync(ct);
-    }
-
-    public async Task<AppUser?> ValidateLocalAsync(string username, string password, CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username.Trim() && u.Provider == "local", ct);
-        if (user?.PasswordHash is null) return null;
-        var result = Hasher.VerifyHashedPassword(user, user.PasswordHash, password);
-        if (result == PasswordVerificationResult.Failed) return null;
-        if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = Hasher.HashPassword(user, password);
-        user.LastLoginAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return user;
-    }
+    public AuthService(IOptionsMonitorCache<OpenIdConnectOptions> oidcCache) => _oidcCache = oidcCache;
 
     public static ClaimsPrincipal BuildPrincipal(AppUser user)
     {
@@ -91,21 +26,42 @@ public sealed class AuthService
         identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.ToString()));
         if (!string.IsNullOrEmpty(user.Email)) identity.AddClaim(new Claim(ClaimTypes.Email, user.Email));
         identity.AddClaim(new Claim("provider", user.Provider));
+        identity.AddClaim(new Claim(StampClaim, user.SecurityStamp));
         return new ClaimsPrincipal(identity);
     }
 
     public static string SafeReturnUrl(string? returnUrl) =>
         !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") ? returnUrl : "/";
 
+    /// <summary>The identity provider's origin while single sign-on is on, for the form-action content security policy.</summary>
+    public string? OidcOrigin { get; private set; }
+
     /// <summary>Force the OIDC options to be re-read from settings on next use.</summary>
-    public void ReloadOidc() => _oidcCache.TryRemove(OidcScheme);
+    public void ReloadOidc(AppSettings s)
+    {
+        _oidcCache.TryRemove(OidcScheme);
+        OidcOrigin = s.OidcEnabled && Uri.TryCreate(s.OidcAuthority, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps ? u.GetLeftPart(UriPartial.Authority) : null;
+    }
+
+    /// <summary>
+    /// Every cookie-authenticated request: the account must still exist with the stamp the cookie was issued with.
+    /// Deleting a user, changing their role or resetting their password ends their sessions; so does a cookie from
+    /// before stamps existed (one sign-in again after the upgrade).
+    /// </summary>
+    public static async Task ValidatePrincipalAsync(CookieValidatePrincipalContext ctx)
+    {
+        var users = ctx.HttpContext.RequestServices.GetRequiredService<UserService>();
+        var p = ctx.Principal;
+        if (p is not null && await users.IsSessionValidAsync(p.FindFirst(ClaimTypes.NameIdentifier)?.Value, p.FindFirst(StampClaim)?.Value, ctx.HttpContext.RequestAborted)) return;
+        ctx.RejectPrincipal();
+        await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    }
 
     /// <summary>Map the identity provider's groups to a role and record the user. Default role is Viewer.</summary>
     public static async Task OnOidcTokenValidatedAsync(TokenValidatedContext ctx)
     {
         var sp = ctx.HttpContext.RequestServices;
         var settings = await sp.GetRequiredService<SettingsService>().LoadAsync();
-        var factory = sp.GetRequiredService<IDbContextFactory<VvDbContext>>();
         var p = ctx.Principal!;
         var name = p.FindFirst("preferred_username")?.Value ?? p.FindFirst(ClaimTypes.Email)?.Value ?? p.FindFirst("email")?.Value ?? p.Identity?.Name ?? p.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "oidc-user";
         var email = p.FindFirst(ClaimTypes.Email)?.Value ?? p.FindFirst("email")?.Value;
@@ -113,19 +69,28 @@ public sealed class AuthService
         var role = !string.IsNullOrWhiteSpace(settings.OidcAdminGroup) && groups.Contains(settings.OidcAdminGroup) ? UserRole.Administrator
                  : !string.IsNullOrWhiteSpace(settings.OidcOperatorGroup) && groups.Contains(settings.OidcOperatorGroup) ? UserRole.Operator
                  : UserRole.Viewer;
-
-        await using var db = await factory.CreateDbContextAsync();
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == name && u.Provider == "oidc");
-        if (user is null)
-        {
-            user = new AppUser { Id = Guid.NewGuid(), Username = name, Email = email, Provider = "oidc", Role = role, CreatedAt = DateTime.UtcNow };
-            db.Users.Add(user);
-            db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = name, Action = "user.oidc-first-login", Target = name, After = role.ToString() });
-        }
-        else { user.Role = role; user.Email = email ?? user.Email; }
-        user.LastLoginAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        var user = await sp.GetRequiredService<UserService>().RecordOidcSignInAsync(name, email, role);
         ctx.Principal = BuildPrincipal(user);
+    }
+}
+
+/// <summary>
+/// Open Blazor circuits re-check the account every few minutes with the same rule as the cookie, so a deleted or
+/// demoted user's open tab loses access without a page load.
+/// </summary>
+public sealed class RevalidatingAuthStateProvider : Microsoft.AspNetCore.Components.Server.RevalidatingServerAuthenticationStateProvider
+{
+    private readonly UserService _users;
+
+    public RevalidatingAuthStateProvider(ILoggerFactory loggerFactory, UserService users) : base(loggerFactory) => _users = users;
+
+    protected override TimeSpan RevalidationInterval => TimeSpan.FromMinutes(5);
+
+    protected override async Task<bool> ValidateAuthenticationStateAsync(AuthenticationState state, CancellationToken ct)
+    {
+        var p = state.User;
+        if (p.Identity?.IsAuthenticated != true) return true;
+        return await _users.IsSessionValidAsync(p.FindFirst(ClaimTypes.NameIdentifier)?.Value, p.FindFirst(AuthService.StampClaim)?.Value, ct);
     }
 }
 
@@ -163,4 +128,10 @@ public static class Ui
     public static string Actor(System.Security.Claims.ClaimsPrincipal? user) => user?.Identity?.Name ?? "unknown";
     public static bool CanOperate(System.Security.Claims.ClaimsPrincipal? user) => user is not null && (user.IsInRole("Administrator") || user.IsInRole("Operator"));
     public static bool IsAdmin(System.Security.Claims.ClaimsPrincipal? user) => user is not null && user.IsInRole("Administrator");
+    // event handlers check the role themselves: a hidden button is not access control
+    public static async Task<bool> CanOperateAsync(Task<AuthenticationState> state) => CanOperate((await state).User);
+    public static async Task<bool> IsAdminAsync(Task<AuthenticationState> state) => IsAdmin((await state).User);
+
+    /// <summary>Only http and https links from CVE records are rendered as links.</summary>
+    public static bool IsWebLink(string? url) => Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp);
 }

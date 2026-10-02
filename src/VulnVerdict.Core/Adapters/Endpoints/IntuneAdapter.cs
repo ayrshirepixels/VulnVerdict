@@ -97,8 +97,15 @@ public sealed class IntuneAdapter : IInventoryAdapter
                 EndpointNaming.UniqueIds(apps);
                 result.Software.AddRange(apps);
             }
-            catch (EndpointApiException ex) when (ex.Status is 403 or 404)
+            catch (EndpointApiException ex) when (ex.Status == 404)
             {
+                // this device only (retired or removed mid-run); later devices are still read
+                if (result.Warnings.Count < 200) result.Warnings.Add("Detected apps for " + asset.DisplayName + " could not be read (" + ex.Message + ").");
+                result.IncompleteSoftware.Add(asset.ExternalId);
+            }
+            catch (EndpointApiException ex) when (ex.Status == 403)
+            {
+                // the permission is missing for every device: stop asking
                 result.Warnings.Add("Detected apps are not readable (" + ex.Message + "); devices and OS versions were still read.");
                 includeApps = false; appsFailed = true; result.IncompleteSoftware.Add(asset.ExternalId);
             }

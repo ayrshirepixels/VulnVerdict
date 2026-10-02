@@ -61,7 +61,7 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
         if (ports.Count == 0) { result.Warnings.Add("No valid ports."); return result; }
 
         var gate = new SemaphoreSlim(concurrency);
-        var done = 0; var found = 0;
+        var done = 0; var found = 0; var unread = 0;
         var tasks = addresses.Select(async a =>
         {
             await gate.WaitAsync(ct);
@@ -74,6 +74,8 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
                     found++;
                     result.Assets.Add(host.Asset);
                     result.Software.AddRange(host.Software);
+                    // an open port that gave no banner this time is "unknown": the service row from an earlier sweep stays
+                    if (host.BannerUnread) { unread++; result.IncompleteSoftware.Add(host.Asset.ExternalId); }
                 }
             }
             finally
@@ -86,13 +88,14 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
         await Task.WhenAll(tasks);
 
         result.Warnings.Add(found + " of " + addresses.Count + " addresses answered on at least one port.");
+        if (unread > 0) result.Warnings.Add(unread + " host(s) had an open port whose banner could not be read (timeout or reset); services found there earlier are kept.");
         _log.LogInformation("Discovery sweep: {Found} of {Total} addresses answered", found, addresses.Count);
         return result;
     }
 
     // ------------------------------------------------------------------ one host
 
-    private sealed record HostResult(AssetRecord Asset, List<SoftwareRecord> Software);
+    private sealed record HostResult(AssetRecord Asset, List<SoftwareRecord> Software, bool BannerUnread);
 
     private async Task<HostResult?> ProbeHostAsync(IPAddress ip, List<int> ports, int timeout, CancellationToken ct)
     {
@@ -108,6 +111,8 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
         var hostnames = new List<string>();
         if (rdns is not null) hostnames.Add(rdns);
 
+        // a port that answered the connect but gave nothing back (timeout, reset, failed handshake) is unread, not empty
+        var unread = false;
         foreach (var port in open)
         {
             ct.ThrowIfCancellationRequested();
@@ -116,25 +121,30 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
                 switch (port)
                 {
                     case 22:
-                        if (BannerParser.FromSsh(ipText, await ReadSshAsync(ip, port, timeout, ct), port) is { } ssh) software.Add(ssh);
+                        var ident = await ReadSshAsync(ip, port, timeout, ct);
+                        if (string.IsNullOrWhiteSpace(ident)) unread = true;
+                        if (BannerParser.FromSsh(ipText, ident, port) is { } ssh) software.Add(ssh);
                         break;
                     case 80 or 8080:
-                        if (BannerParser.FromServerHeader(ipText, await HttpServerHeaderAsync(ip, port, rdns, timeout, ct), port) is { } web) software.Add(web);
+                        var (header, answered) = await HttpServerHeaderAsync(ip, port, rdns, timeout, ct);
+                        if (!answered) unread = true;
+                        if (BannerParser.FromServerHeader(ipText, header, port) is { } web) software.Add(web);
                         break;
                     case 443 or 8443:
-                        var (server, certName) = await TlsServerHeaderAsync(ip, port, rdns, timeout, ct);
+                        var (server, certName, tlsAnswered) = await TlsServerHeaderAsync(ip, port, rdns, timeout, ct);
+                        if (!tlsAnswered) unread = true;
                         if (BannerParser.FromServerHeader(ipText, server, port) is { } tls) software.Add(tls);
                         if (certName is not null && rdns is null && !hostnames.Contains(certName, StringComparer.OrdinalIgnoreCase)) hostnames.Add(certName);
                         break;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception ex) { _log.LogDebug("Banner read {Ip}:{Port} failed: {Error}", ip, port, ex.Message); }
+            catch (Exception ex) { unread = true; _log.LogDebug("Banner read {Ip}:{Port} failed: {Error}", ip, port, ex.Message); }
         }
 
         var kind = GuessKind(open);
         var asset = new AssetRecord(ipText, rdns ?? ipText, kind, hostnames.ToArray(), new[] { ipText }, Array.Empty<string>());
-        return new HostResult(asset, software);
+        return new HostResult(asset, software, unread);
     }
 
     public static AssetKind GuessKind(IReadOnlyCollection<int> open)
@@ -157,18 +167,19 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
         return await TcpProbe.ReadSomeAsync(stream, 255, Math.Max(timeout * 3, 1500), ct);
     }
 
-    private static async Task<string?> HttpServerHeaderAsync(IPAddress ip, int port, string? host, int timeout, CancellationToken ct)
+    /// <summary>The Server header, and whether the port answered at all (an answer without a Server header is a real "none").</summary>
+    private static async Task<(string? Server, bool Answered)> HttpServerHeaderAsync(IPAddress ip, int port, string? host, int timeout, CancellationToken ct)
     {
         using var socket = await TcpProbe.OpenAsync(ip, port, timeout, ct);
-        if (socket is null) return null;
+        if (socket is null) return (null, false);
         await using var stream = new NetworkStream(socket, ownsSocket: false);
         return await HeadAsync(stream, host ?? ip.ToString(), timeout, ct);
     }
 
-    private static async Task<(string? Server, string? CertName)> TlsServerHeaderAsync(IPAddress ip, int port, string? host, int timeout, CancellationToken ct)
+    private static async Task<(string? Server, string? CertName, bool Answered)> TlsServerHeaderAsync(IPAddress ip, int port, string? host, int timeout, CancellationToken ct)
     {
         using var socket = await TcpProbe.OpenAsync(ip, port, timeout, ct);
-        if (socket is null) return (null, null);
+        if (socket is null) return (null, null, false);
         await using var net = new NetworkStream(socket, ownsSocket: false);
         // certificate validation is disabled on purpose: the certificate is read for its name, not trusted for anything
         await using var ssl = new SslStream(net, false, static (_, _, _, _) => true);
@@ -184,7 +195,7 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
             }, cts.Token);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return (null, null); }
+        catch (Exception) { return (null, null, false); }
 
         string? certName = null;
         try
@@ -197,19 +208,19 @@ public sealed class DiscoverySweepAdapter : IInventoryAdapter
             }
         }
         catch { }
-        var server = await HeadAsync(ssl, host ?? certName ?? ip.ToString(), timeout, ct);
-        return (server, certName);
+        var (server, answered) = await HeadAsync(ssl, host ?? certName ?? ip.ToString(), timeout, ct);
+        return (server, certName, answered);
     }
 
-    private static async Task<string?> HeadAsync(Stream stream, string host, int timeout, CancellationToken ct)
+    private static async Task<(string? Server, bool Answered)> HeadAsync(Stream stream, string host, int timeout, CancellationToken ct)
     {
         var request = Encoding.ASCII.GetBytes("HEAD / HTTP/1.0\r\nHost: " + host + "\r\nUser-Agent: VulnVerdict discovery\r\nConnection: close\r\n\r\n");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Math.Max(timeout * 3, 1500));
         try { await stream.WriteAsync(request, cts.Token); await stream.FlushAsync(cts.Token); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return null; }
+        catch (Exception) { return (null, false); }
         var text = await TcpProbe.ReadSomeAsync(stream, 4096, Math.Max(timeout * 3, 1500), ct, stopAtBlankLine: true);
-        return BannerParser.ServerHeader(text);
+        return (BannerParser.ServerHeader(text), text.Length > 0);
     }
 }

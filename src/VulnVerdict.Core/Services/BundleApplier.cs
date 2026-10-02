@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using VulnVerdict.Core.Data;
+using VulnVerdict.Core.Engine;
 using VulnVerdict.Core.Feeds;
+using VulnVerdict.Core.Feeds.Vex;
 
 namespace VulnVerdict.Core.Services;
 
@@ -21,6 +23,9 @@ public sealed class BundleApplyResult
     public int Signals { get; set; }
     public int AliasesAdded { get; set; }
     public int Narratives { get; set; }
+    /// <summary>Vendor VEX statements kept and end-of-life cycles applied; null when the bundle does not carry the file.</summary>
+    public int? Vex { get; set; }
+    public int? Eol { get; set; }
     public Dictionary<string, int> SignalsBySource { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -53,6 +58,16 @@ public static class BundleApplier
         foreach (var f in manifest.Files)
         {
             if (f.Name.Contains('/') || f.Name.Contains('\\') || f.Name.Contains("..")) return "Manifest entry '" + f.Name + "' has an invalid name";
+            var path = Path.Combine(dir, f.Name);
+            if (!File.Exists(path)) return "Bundle is missing " + f.Name;
+            var info = new FileInfo(path);
+            if (info.Length != f.Bytes) return f.Name + " is " + info.Length + " bytes, manifest says " + f.Bytes;
+            var sha = await BundleHash.FileSha256Async(path, ct);
+            if (!sha.Equals(f.Sha256, StringComparison.OrdinalIgnoreCase)) return f.Name + " does not match its manifest hash (tampered or corrupt)";
+        }
+        // optional files this console knows are held to the same checks; ones it does not know (a newer format) were not unpacked and are ignored
+        foreach (var f in manifest.Extras.Where(f => BundleFiles.Optional.Contains(f.Name)))
+        {
             var path = Path.Combine(dir, f.Name);
             if (!File.Exists(path)) return "Bundle is missing " + f.Name;
             var info = new FileInfo(path);
@@ -94,6 +109,16 @@ public static class BundleApplier
         result.AliasesAdded = await MergeAliasesAsync(db, Path.Combine(dir, BundleFiles.Aliases), ct);
         progress("Applying narratives");
         result.Narratives = await UpsertNarrativesAsync(db, Path.Combine(dir, BundleFiles.Narratives), ct);
+        if (manifest.Extras.Any(f => f.Name == BundleFiles.Vex))
+        {
+            progress("Applying vendor VEX statements");
+            result.Vex = await ApplyVexAsync(db, Path.Combine(dir, BundleFiles.Vex), ct);
+        }
+        if (manifest.Extras.Any(f => f.Name == BundleFiles.Eol))
+        {
+            progress("Applying end-of-life dates");
+            result.Eol = await ApplyEolAsync(db, Path.Combine(dir, BundleFiles.Eol), ct);
+        }
         progress("Rebuilding product catalogue");
         await CveListFeed.RebuildCatalogueAsync(db, ct);
 
@@ -121,6 +146,7 @@ public static class BundleApplier
         var insertOnly = !await db.Cves.AnyAsync(ct);
         var count = 0;
         var batch = new List<Cve>(BatchSize);
+        // spans the whole file, not one batch: a CVE repeated across batches would break the insert-only path's primary key
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var reader = new StreamReader(path);
         while (await reader.ReadLineAsync(ct) is { } line)
@@ -133,7 +159,7 @@ public static class BundleApplier
             if (batch.Count >= BatchSize)
             {
                 count += await FlushCvesAsync(db, batch, insertOnly, ct);
-                batch.Clear(); seen.Clear();
+                batch.Clear();
                 progress("Applied " + count.ToString("N0") + " CVE records");
             }
         }
@@ -312,6 +338,56 @@ public static class BundleApplier
         return count;
     }
 
+    // ------------------------------------------------------------------ vendor VEX statements, end-of-life dates
+
+    /// <summary>
+    /// Replace the stored VEX statements with the bundle's, keeping only those about products the watchlist or inventory
+    /// names: the central service publishes statements for every product, and this console needs the ones for its own.
+    /// Software added later gets its statements from the next bundle.
+    /// </summary>
+    private static async Task<int> ApplyVexAsync(VvDbContext db, string path, CancellationToken ct)
+    {
+        var wanted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var w in await db.Watchlist.AsNoTracking().Where(w => w.Enabled).Select(w => new { w.Product, w.ProductNorm }).ToListAsync(ct))
+        { wanted.Add(Normalizer.Norm(w.Product)); wanted.Add(w.ProductNorm); }
+        foreach (var s in await db.Software.AsNoTracking().Select(s => new { s.ProductNorm, s.MappedProductNorm }).Distinct().ToListAsync(ct))
+        { wanted.Add(s.ProductNorm); if (s.MappedProductNorm is not null) wanted.Add(s.MappedProductNorm); }
+        wanted.Remove("");
+        var relevant = new Dictionary<string, bool>(StringComparer.Ordinal);
+        bool Keep(string norm) => wanted.Contains(norm) || (relevant.TryGetValue(norm, out var known) ? known : relevant[norm] = CsafVexFeed.Relevant(wanted, norm));
+
+        await db.VexStatements.ExecuteDeleteAsync(ct);
+        await db.VexDocuments.ExecuteDeleteAsync(ct);
+        var count = 0;
+        var chunk = new List<VexStatement>(BatchSize);
+        using var reader = new StreamReader(path);
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (line.Length == 0) continue;
+            var dto = JsonSerializer.Deserialize<BundleVexStatement>(line, BundleJson.Options);
+            if (dto is null || string.IsNullOrEmpty(dto.CveId) || string.IsNullOrEmpty(dto.ProductNorm) || string.IsNullOrEmpty(dto.DocumentId) || !Keep(dto.ProductNorm)) continue;
+            chunk.Add(dto.ToEntity());
+            if (chunk.Count >= BatchSize) count += await FlushAsync(db, db.VexStatements, chunk, ct);
+        }
+        if (chunk.Count > 0) count += await FlushAsync(db, db.VexStatements, chunk, ct);
+        return count;
+    }
+
+    private static async Task<int> ApplyEolAsync(VvDbContext db, string path, CancellationToken ct)
+    {
+        await using var s = File.OpenRead(path);
+        var rows = await JsonSerializer.DeserializeAsync<List<BundleEolCycle>>(s, BundleJson.Options, ct) ?? new List<BundleEolCycle>();
+        await db.EolCycles.ExecuteDeleteAsync(ct);
+        var entities = rows.Where(r => !string.IsNullOrEmpty(r.Slug) && !string.IsNullOrEmpty(r.Cycle)).DistinctBy(r => (r.Slug, r.Cycle)).Select(r => r.ToEntity()).ToList();
+        foreach (var chunk in entities.Chunk(BatchSize))
+        {
+            db.EolCycles.AddRange(chunk);
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+        }
+        return entities.Count;
+    }
+
     // ------------------------------------------------------------------ feed status
 
     private static async Task RecordFeedStatusAsync(VvDbContext db, BundleManifest manifest, BundleApplyResult r, DateTime now, CancellationToken ct)
@@ -324,6 +400,8 @@ public static class BundleApplier
             [FeedNames.Metasploit] = r.SignalsBySource.GetValueOrDefault("metasploit"),
             [FeedNames.Nuclei] = r.SignalsBySource.GetValueOrDefault("nuclei")
         };
+        if (r.Vex is { } vex) records[CsafVexFeed.FeedName] = vex;
+        if (r.Eol is { } eol) records[EndOfLifeFeed.FeedName] = eol;
         var names = records.Keys.ToList();
         var rows = await db.FeedStatuses.Where(f => names.Contains(f.Name)).ToDictionaryAsync(f => f.Name, ct);
         foreach (var (name, n) in records)

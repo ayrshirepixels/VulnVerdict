@@ -206,6 +206,9 @@ public sealed partial class OpnSenseAdapter : IInventoryAdapter
         catch (Exception ex) when (ex is FirewallApiException { Status: not 401 } or JsonException)
         {
             r.Warnings.Add("Skipped " + path + ": " + (ex is FirewallApiException { Status: 404 } && hint404 is not null ? hint404 : ex.Message));
+            // 404 is a page this release does not have; a 403, a 5xx or an unparsable answer is a read that failed, and
+            // every page read through here (interfaces, rules, NAT) feeds exposure
+            if (ex is not FirewallApiException { Status: 404 }) r.ExposureNotRead(path[(path.IndexOf('/') + 1)..]);
             return default;
         }
     }

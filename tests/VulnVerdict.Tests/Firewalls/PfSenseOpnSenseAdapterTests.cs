@@ -73,7 +73,14 @@ public class PfSenseOpnSenseAdapterTests
         var r = await Pf(PfSession(configReadable: false)).CollectAsync(pinned, null, null, CancellationToken.None);
         Assert.Equal("2.7.2", r.Software.Single().Version);
         Assert.Empty(r.Exposures);
-        Assert.Equal(new[] { "config.xml is not readable by this account (cat: /conf/config.xml: Permission denied); exposure not collected." }, r.Warnings);
+        // exposure unknown is said first and marks the run partial, so it never reads as "nothing is published"
+        Assert.Equal(new[]
+        {
+            "Exposure could not be read (config.xml is not readable): newly published servers will not be marked internet-facing until it can be",
+            "config.xml is not readable by this account (cat: /conf/config.xml: Permission denied); exposure not collected.",
+        }, r.Warnings);
+        Assert.True(r.Partial);
+        Assert.True(r.ExposureUnknown);
 
         var t = await Pf(PfSession(configReadable: false)).TestAsync(pinned, CancellationToken.None);
         Assert.True(t.Ok);

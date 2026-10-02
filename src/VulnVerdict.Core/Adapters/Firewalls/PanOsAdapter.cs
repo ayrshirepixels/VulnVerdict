@@ -7,7 +7,8 @@ using VulnVerdict.Core.Data;
 namespace VulnVerdict.Core.Adapters.Firewalls;
 
 /// <summary>
-/// Palo Alto Networks PA-series (and VM-series) over the PAN-OS XML API, without Panorama. `show system info` gives
+/// Palo Alto Networks PA-series (and VM-series) over the PAN-OS XML API, without talking to Panorama (rules Panorama
+/// pushed are read from the firewall itself). `show system info` gives
 /// the PAN-OS version, model and serial; the running configuration gives exposure: a management profile allowing
 /// HTTPS/SSH on an interface in an internet zone, or a GlobalProtect portal or gateway on one, marks the firewall
 /// internet-facing; a destination NAT rule from an internet zone that an allow rule from that zone matches marks the
@@ -19,6 +20,9 @@ namespace VulnVerdict.Core.Adapters.Firewalls;
 public sealed class PanOsAdapter : IInventoryAdapter
 {
     public const string ShowSystemInfo = "<show><system><info></info></system></show>";
+    /// <summary>The policy Panorama pushed to this firewall (pre- and post-rulebase, shared objects): it is not under the vsys xpath.</summary>
+    public const string ShowPushedPolicy = "<show><config><pushed-shared-policy></pushed-shared-policy></config></show>";
+    public const string ShowPanoramaStatus = "<show><panorama-status></panorama-status></show>";
     public static string DeviceXpath => "/config/devices/entry[@name='localhost.localdomain']";
     public static string VsysXpath(string vsys) => DeviceXpath + "/vsys/entry[@name='" + vsys + "']";
 
@@ -119,6 +123,18 @@ public sealed class PanOsAdapter : IInventoryAdapter
         foreach (var kv in ParseAddresses(await api.ConfigAsync("/config/shared/address", r, ct))) addresses.TryAdd(kv.Key, kv.Value);
         var nat = ParseNatRules(await api.ConfigAsync(VsysXpath(vsys) + "/rulebase/nat/rules", r, ct));
         var security = ParseSecurityRules(await api.ConfigAsync(VsysXpath(vsys) + "/rulebase/security/rules", r, ct));
+
+        // rules pushed from Panorama live outside the vsys xpath: on a managed firewall they are most of the policy
+        var (pushed, pushedError) = await api.TryOpAsync(ShowPushedPolicy, ct);
+        if (pushed is not null)
+        {
+            var p = ParsePushedPolicy(pushed);
+            foreach (var kv in p.Addresses) addresses.TryAdd(kv.Key, kv.Value);
+            nat = p.PreNat.Concat(nat).Concat(p.PostNat).ToList();
+            security = p.PreSecurity.Concat(security).Concat(p.PostSecurity).ToList();
+        }
+        else if ((await api.TryOpAsync(ShowPanoramaStatus, ct)).Result is { } status && status.Value.Contains("Panorama Server", StringComparison.OrdinalIgnoreCase))
+            r.ExposureNotRead("this firewall is managed by Panorama and the rules it pushed could not be read: " + pushedError);
         r.Exposures.AddRange(InternetExposures(internetZones, nat, security, addresses));
 
         _log.LogInformation("PAN-OS {Host}: {Exposures} exposure records", hostname, r.Exposures.Count);
@@ -249,6 +265,20 @@ public sealed class PanOsAdapter : IInventoryAdapter
         new SecurityRule(e.Attribute("name")?.Value ?? "?", Members(e.Element("from")), Members(e.Element("destination")), Members(e.Element("service")),
             e.Element("action")!.Value.Trim().Equals("allow", StringComparison.OrdinalIgnoreCase), Yes(e.Element("disabled")))).ToList();
 
+    public sealed record PushedPolicy(List<NatRule> PreNat, List<NatRule> PostNat, List<SecurityRule> PreSecurity, List<SecurityRule> PostSecurity, Dictionary<string, string> Addresses);
+
+    /// <summary>`show config pushed-shared-policy`: the pre- and post-rulebase NAT and security rules and the address objects Panorama pushed.</summary>
+    public static PushedPolicy ParsePushedPolicy(XElement result)
+    {
+        List<T> Rules<T>(string rulebase, string kind, Func<XElement, List<T>> parse) =>
+            result.Descendants(rulebase).SelectMany(rb => rb.Elements(kind)).SelectMany(parse).ToList();
+        var addresses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var block in result.Descendants("address").Where(a => a.Elements("entry").Any()))
+            foreach (var kv in ParseAddresses(block)) addresses.TryAdd(kv.Key, kv.Value);
+        return new PushedPolicy(Rules("pre-rulebase", "nat", ParseNatRules), Rules("post-rulebase", "nat", ParseNatRules),
+            Rules("pre-rulebase", "security", ParseSecurityRules), Rules("post-rulebase", "security", ParseSecurityRules), addresses);
+    }
+
     /// <summary>
     /// A destination NAT rule from an internet zone (or any) whose translated address is a single host is exposure when an
     /// enabled allow rule from an internet zone (or any) matches its original destination (PAN-OS security rules see the
@@ -324,12 +354,27 @@ public sealed class PanOsAdapter : IInventoryAdapter
 
         public async Task<XElement> OpAsync(string cmd, CancellationToken ct) => Envelope("op " + cmd, await Get("type=op&cmd=" + Uri.EscapeDataString(cmd), ct));
 
-        /// <summary>Running configuration at an xpath; a missing node (feature not configured) is an empty result, other errors a warning.</summary>
+        /// <summary>An op command that may not exist or apply on this firewall: null and the reason instead of an exception.</summary>
+        public async Task<(XElement? Result, string? Error)> TryOpAsync(string cmd, CancellationToken ct)
+        {
+            try { return (await OpAsync(cmd, ct), null); }
+            catch (Exception ex) when (ex is FirewallApiException or System.Xml.XmlException) { return (null, ex.Message); }
+        }
+
+        /// <summary>
+        /// Running configuration at an xpath; a missing node (feature not configured) is an empty result. Any other error
+        /// is a warning and, since every xpath read here feeds exposure, makes exposure unknown for the run.
+        /// </summary>
         public async Task<XElement> ConfigAsync(string xpath, CollectResult r, CancellationToken ct)
         {
             try { return Envelope("config " + xpath, await Get("type=config&action=show&xpath=" + Uri.EscapeDataString(xpath), ct)); }
             catch (FirewallApiException ex) when (ex.Status is 7 or 200 && ex.Message.Contains("No such node", StringComparison.OrdinalIgnoreCase)) { return new XElement("result"); }
-            catch (FirewallApiException ex) when (ex.Status != 401 && ex.Status != 403) { r.Warnings.Add("Skipped " + xpath + ": " + ex.Message); return new XElement("result"); }
+            catch (FirewallApiException ex) when (ex.Status != 401 && ex.Status != 403)
+            {
+                r.Warnings.Add("Skipped " + xpath + ": " + ex.Message);
+                r.ExposureNotRead(xpath[(xpath.LastIndexOf("']", StringComparison.Ordinal) + 2)..].TrimStart('/'));
+                return new XElement("result");
+            }
         }
     }
 }

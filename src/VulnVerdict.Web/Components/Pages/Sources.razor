@@ -19,6 +19,7 @@
             <dt>Watchlist entries</dt><dd>@_entries</dd>
             <dt>Verdicts stored</dt><dd>@_verdicts.ToString("N0")</dd>
             <dt>CVE records</dt><dd>@_cves.ToString("N0") (@_products.ToString("N0") distinct vendor/product pairs)</dd>
+            <BackupHealthLine />
         </dl>
     </div>
 
@@ -50,6 +51,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
     private List<FeedStatus> _status = new();
     private bool _alive;
     private string? _activity;
@@ -79,6 +81,7 @@
 
     private async Task RunNow(string name)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await using var db = await Db.CreateDbContextAsync();
         await db.FeedStatuses.Where(f => f.Name == name).ExecuteUpdateAsync(u => u.SetProperty(f => f.RunRequested, true));
         await LoadAsync();

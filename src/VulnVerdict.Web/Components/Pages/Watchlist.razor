@@ -125,6 +125,7 @@
             </tbody>
         </table>
     }
+    <EndOfLifeList Scope="watchlist" />
 </div>
 
 @code {
@@ -183,7 +184,7 @@
 
     private async Task SaveAsync()
     {
-        if (_edit is null) return;
+        if (_edit is null || !await Ui.CanOperateAsync(AuthState)) return;
         _busy = true; _error = null;
         try
         {
@@ -198,7 +199,7 @@
 
     private async Task DeleteAsync()
     {
-        if (_edit is null || _edit.Id == Guid.Empty) return;
+        if (_edit is null || _edit.Id == Guid.Empty || !await Ui.CanOperateAsync(AuthState)) return;
         await WatchlistSvc.DeleteAsync(_edit.Id, await ActorAsync());
         _notice = "Deleted."; _edit = null;
         await LoadAsync();
@@ -206,6 +207,7 @@
 
     private async Task ImportAsync()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         _busy = true; _error = null;
         try { var n = await WatchlistSvc.ImportJsonAsync(_importJson, await ActorAsync()); _notice = n + " entries imported and evaluated."; _showImport = false; _importJson = ""; await LoadAsync(); }
         catch (Exception ex) { _error = "Import failed: " + ex.Message; }
@@ -216,6 +218,7 @@
 
     private async Task ReEvaluate()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         _busy = true;
         await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
         _notice = "Re-evaluation requested; the worker runs it within a minute.";

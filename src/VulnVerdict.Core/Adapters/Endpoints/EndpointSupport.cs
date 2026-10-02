@@ -183,6 +183,20 @@ public static class OAuthTokens
         pairs.Select(p => new KeyValuePair<string, string>(p.Key, p.Value));
 }
 
+/// <summary>
+/// Wording for a device listing that did not reach its end. The paging rule the endpoint adapters share: a total, a
+/// next link or a cursor decides when the listing is over; where the API gives only a page size, an empty page does.
+/// A short page never does, because servers cap page sizes below what was asked for.
+/// </summary>
+public static class EndpointPaging
+{
+    public static string CapHit(string what, int pages) =>
+        "Stopped reading " + what + " after " + pages + " pages; the listing is partial, so nothing is marked removed or aged out this run.";
+
+    public static string EndedShort(string what, long read, long total) =>
+        "The " + what + " listing ended at " + read + " of " + total + "; it is partial, so nothing is marked removed or aged out this run.";
+}
+
 /// <summary>Tolerant JSON access: dotted paths ("general.name"), several candidate names, numbers and booleans read as strings.</summary>
 public static class EpJson
 {

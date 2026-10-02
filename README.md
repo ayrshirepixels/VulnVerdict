@@ -2,7 +2,7 @@
 
 Cut the noise. Know your risk.
 
-Verdicts are advisory: read the [advisory notice](docs/disclaimer.md). Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. It is offered free and without warranty; if you want to help, see [CONTRIBUTING.md](CONTRIBUTING.md) or email hello@ayrshirepixels.co.uk. The VulnVerdict name and logo are trademarks (`TRADEMARK.md`).
+Verdicts are advisory: read the [advisory notice](docs/disclaimer.md). Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. It is offered free and without warranty; if you want to help, see [CONTRIBUTING.md](CONTRIBUTING.md) or email hello@ayrshirepixels.co.uk. The VulnVerdict name and logo are trademarks: see [TRADEMARK.md](TRADEMARK.md).
 
 An on-premises vulnerability triage console for organisations with one IT person and no security team. It pulls the public vulnerability feeds, matches them against what you actually run, works out how an attacker would have to reach each one in your estate, and emails a short verdict in plain words: **Fix today**, **Fix this week**, **Next patch cycle**, or ignore. It is a prioritisation layer, not a scanner and not a patch tool.
 
@@ -19,12 +19,15 @@ This repository holds the whole console: the feeds, watchlist, decision table an
 - **Self-monitoring**: feed health on the Sources page and in the digest footer; stale feeds, a stopped worker or an unsendable digest email the administrator.
 - **Inventory connectors** (each one credential form, read-only, never writes to the source): FortiClient EMS, endpoint management, MDM and RMM tools (Microsoft Intune, Defender for Endpoint, Configuration Manager, Jamf Pro, Kandji, NinjaOne, Datto RMM, N-able N-central, Lansweeper and PDQ Connect), Windows servers over WinRM or OpenSSH (roles, features, listeners, IIS, SQL Server, .NET, Hyper-V VM list), FortiGate (firmware, switches, APs, and exposure from VIPs, policies and WAN services), the other common small-business firewalls with the same exposure model (Palo Alto Networks PAN-OS, SonicWall SonicOS 7, Sophos Firewall, Cisco Meraki MX, UniFi gateways, pfSense, OPNsense and Zyxel USG FLEX / ATP; WatchGuard Firebox and Check Point Quantum Spark for firmware), VMware vCenter, Linux over SSH (packages matched through OSV), SBOM upload or URL (CycloneDX, SPDX), SNMP for the management network, a pure .NET discovery sweep, and an external cross-check with optional Shodan. Assets are merged across sources; unmapped software goes to the Needs mapping queue; stale assets fall out of digests after 30 days and are archived after 90.
 - **Vendor advisories**: Fortinet PSIRT, Microsoft MSRC (with its history back to 2016), Cisco openVuln (with credentials), Broadcom/VMware, Ubuntu, Debian and Red Hat feed the evidence chain and the "exploited in the wild" signal. Microsoft's fixed builds, the cumulative Windows build history and the Microsoft 365 Apps update history settle Windows and Office CVEs whose records give "publication" or a link instead of a version.
+- **Vendor VEX statements**: machine-readable "affected / fixed / not affected / under investigation" statements from CSAF providers (Red Hat and SUSE by default; more are a settings entry). A fixed version and a known-affected statement go into the evidence; a not-affected statement lowers a verdict only when it names the installed product and version exactly, never for a CVE that is exploited in the wild, and the verdict stays listed with the vendor's reason. See [docs/vex-and-end-of-life.md](docs/vex-and-end-of-life.md).
+- **End of life**: release cycles from endoflife.date flag products that are past vendor support, or will be within 180 days, on the watchlist, the inventory and every verdict for them ("No fix will be released for this version: upgrade or replace"), with one line in the digest. A flag, not a verdict tier.
 - **Ticketing**: email, or native adapters for Jira, ServiceNow, Freshservice, Zendesk, Azure DevOps, HaloPSA and Autotask, with a stable correlation key and search-first idempotency.
 - **Signed feed bundles** (optional): instead of pulling the public feeds, a console can take them as a signed bundle from a central service, or have one uploaded by hand on a site with no internet access. It verifies the ECDSA signature and every file hash and refuses unsigned or downgraded bundles. Without a bundle URL the console pulls the public feeds itself, which is the normal setup.
 - **Mail**: SMTP, Microsoft 365 through Microsoft Graph (an app registration allowed to send as one mailbox, since Exchange Online is retiring password sign-in for SMTP), or the SendGrid or Brevo HTTP API, chosen in Settings. See [docs/mail.md](docs/mail.md).
 - **AI explanations (optional, BYOM: bring your own model)**: "Explain in plain English" per CVE and "How an attacker would have to do it here" per verdict, from Anthropic, OpenAI or any OpenAI-compatible endpoint (Ollama for fully offline sites). The model never decides a verdict; it explains one. Only the product, version, exposure level and public CVE text are sent, never asset names or addresses. Results are cached with provider, model and prompt version recorded.
-- **Security**: local admin created at install, optional OpenID Connect (Entra, Google, generic) with group-to-role mapping, three roles, audit log, encrypted secrets, CSP and security headers, login rate limiting, only port 443 exposed through Caddy.
-- **API**: token-authenticated read endpoints for verdicts, watchlist and digest, plus watchlist import.
+- **Security**: local admin created at install, optional OpenID Connect (Entra, Google, generic) with group-to-role mapping, three roles, audit log, encrypted secrets, CSP and security headers, login rate limiting, and only Caddy exposed: port 443 for the console, plus port 80, which does nothing but redirect to HTTPS.
+- **API and webhooks**: token-authenticated read endpoints for verdicts, assets, watchlist and digest, plus watchlist and SBOM import with the read-write token; signed webhooks when a verdict is created, promoted or closed. See [docs/api.md](docs/api.md).
+- **On a phone, and in the dark**: the console lays itself out for a phone, with the menu behind a button and wide tables scrolling sideways. It follows the device's light or dark setting, or you can pin either. It can be installed from the browser as an app; it still needs its connection to the server, so there is no offline mode.
 
 ## Run it with Docker Compose
 
@@ -39,7 +42,7 @@ docker compose up -d
 
 That fetches the latest release's Compose files and runs its published images; the appliance (OVA) and the single all-in-one container are the other routes, see [docs/install.md](docs/install.md). To build from source, run `docker compose up -d --build` in `deploy/` with `VV_IMAGE` commented out of `.env`.
 
-Open `https://<VV_HOSTNAME>/`, create the administrator account, set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
+Open `https://<VV_HOSTNAME>/` and create the administrator account with the setup token from the console log (`docker compose logs web | grep -i "setup token"`), then set the mail server and digest recipients under Settings, then add what you run under Watchlist (or import `watchlist.example.json`). The first CVE baseline is about 600 MB and takes 10 to 20 minutes to load; the Sources page shows progress. Verdicts appear as soon as it is in, and the first digest goes at the next scheduled time.
 
 The same stack ships three ways, all supported: this Compose file for people who already run Docker, a single all-in-one container (`Dockerfile.allinone`) for people who want one `docker run`, and an OVA appliance (Ubuntu LTS with Docker and this Compose pre-installed, first-boot wizard for hostname and admin account) for people who do not run Docker at all. All three point at the same signed feed bundle from the central service when one is configured. See `docs/install.md`.
 
@@ -74,11 +77,20 @@ Settings that a customer changes live in the console (Settings page) and in the 
 ## Layout
 
 ```
-src/VulnVerdict.Core    domain model, EF Core context, feeds, decision engine, evaluator, digest, workflow, worker
+src/VulnVerdict.Core    domain model, EF Core context, feeds, adapters, decision engine, evaluator, digest, workflow, worker
 src/VulnVerdict.Web     Blazor Server console, auth, API, Program.cs
-tests/VulnVerdict.Tests decision table (all 16 rules), version comparison and matching, CVE record parsing, sentence
-deploy/                 docker-compose.yml, Caddyfile, .env.example
+tests/VulnVerdict.Tests decision table (all 16 rules), version comparison and matching, CVE record parsing, sentence;
+                        feeds and vendor advisories, the inventory, firewall and ticket adapters against recorded
+                        fixtures, signed bundles and licences, webhooks, access control
+docs/                   install, connectors, digest, mail, API, security, advisory notice
+deploy/                 docker-compose.yml, Caddyfile, .env.example, update.sh, rollback.sh, make-compose-bundle.sh
+deploy/allinone/        Caddyfile and entrypoint for the single all-in-one container
+deploy/ova/             the appliance build: Packer template, first-boot wizard, OVF packaging
+deploy/entra/           PowerShell script that creates the Entra app registrations
+deploy/images/          the database and proxy images released with each version
+site/                   the public website
 Dockerfile              single image for web and worker
+Dockerfile.allinone     the all-in-one image: PostgreSQL, console, worker and Caddy in one container
 watchlist.example.json  a starter watchlist to import
 ```
 
@@ -95,4 +107,4 @@ The decision table in `DecisionTable.cs` is evaluated top to bottom, first match
 
 ## Data licensing
 
-CVE List V5 is CC0 (CVE is a registered trademark of The MITRE Corporation, used as a data reference only). CISA KEV is public. EPSS is free with attribution to FIRST, which every digest carries. Exploit-DB, Metasploit and Nuclei data are referenced and linked, never redistributed.
+CVE List V5 is CC0 (CVE is a registered trademark of The MITRE Corporation, used as a data reference only). CISA KEV is public. EPSS is free with attribution to FIRST, which every digest carries. Exploit-DB, Metasploit and Nuclei data are referenced and linked, never redistributed. Vendor VEX statements are each vendor's own (Red Hat's under CC BY 4.0): the statements about installed products are stored with a link to the vendor's document, and the documents are not redistributed. End-of-life dates are from [endoflife.date](https://endoflife.date), used under the MIT licence.

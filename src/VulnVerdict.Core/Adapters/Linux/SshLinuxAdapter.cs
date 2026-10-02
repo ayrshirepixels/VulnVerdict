@@ -71,6 +71,8 @@ public sealed class LinuxHostFacts
     /// <summary>"dpkg", "rpm", "apk" or null when none was found.</summary>
     public string? PackageManager { get; set; }
     public string PackageList { get; set; } = "";
+    /// <summary>Why the package listing failed (exit status and the first line of stderr), or null when it ran cleanly.</summary>
+    public string? PackageListError { get; set; }
     /// <summary>"ss" or "netstat", or null when neither exists.</summary>
     public string? SocketTool { get; set; }
     public string Sockets { get; set; } = "";
@@ -81,7 +83,11 @@ public sealed class LinuxHostFacts
     public bool HostKeyPinned { get; set; }
 }
 
-public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> Software, List<string> Warnings);
+/// <summary>
+/// Incomplete: the package listing failed or came back empty, so nothing may be marked removed from the host.
+/// ContainersUnread: docker is there but the list was not readable, so container rows from earlier runs are kept.
+/// </summary>
+public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> Software, List<string> Warnings, bool Incomplete = false, bool ContainersUnread = false);
 
 /// <summary>
 /// Linux over SSH. Reads os-release, the installed package list (dpkg, rpm or apk), listening
@@ -89,18 +95,18 @@ public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> So
 /// nothing is written to the host. Packages carry an OSV ecosystem string and a purl so they are matched through
 /// OSV rather than through CNA product names.
 /// </summary>
-public sealed class SshLinuxAdapter : IInventoryAdapter
+public sealed partial class SshLinuxAdapter : IInventoryAdapter
 {
     public const string Id = "ssh-linux";
 
-    public const string DpkgCommand = @"dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\t${Source}\t${db:Status-Status}\n' 2>/dev/null";
-    public const string RpmCommand = @"rpm -qa --qf '%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\n' 2>/dev/null";
-    public const string ApkListCommand = "apk list -I 2>/dev/null";
-    public const string ApkInfoCommand = "apk info -v 2>/dev/null";
+    public const string DpkgCommand = @"dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\t${Source}\t${db:Status-Status}\n'";
+    public const string RpmCommand = @"rpm -qa --qf '%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\n'";
+    public const string ApkListCommand = "apk list -I";
+    public const string ApkInfoCommand = "apk info -v";
     public const string ApkArchCommand = "apk --print-arch 2>/dev/null";
     public const string SsCommand = "ss -tlnp 2>/dev/null";
     public const string NetstatCommand = "netstat -tlnp 2>/dev/null";
-    public const string DockerCommand = "docker ps --format '{{.Names}}\\t{{.Image}}' 2>/dev/null";
+    public const string DockerCommand = "docker ps --format '{{.Names}}\\t{{.Image}}'";
     public const string OsReleaseCommand = "cat /etc/os-release 2>/dev/null || cat /usr/lib/os-release 2>/dev/null";
     public const string FqdnCommand = "hostname -f 2>/dev/null || hostname 2>/dev/null";
     public const string HostnameIpsCommand = "hostname -I 2>/dev/null || hostname -i 2>/dev/null || true";
@@ -130,8 +136,8 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
             new CredentialField("password", "Password", CredentialTypes.Password, "Leave empty when authenticating with a private key.", Required: false),
             new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.TextArea, "OpenSSH or PEM private key. Leave empty when authenticating with a password.", Required: false),
             new CredentialField("passphrase", "Key passphrase", CredentialTypes.Password, "Only when the private key is encrypted.", Required: false),
-            new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended): host keys are pinned in the list below and a changed key is reported instead of connecting.", Required: false, Default: "false"),
-            new CredentialField("knownHostKeys", "Known host keys", CredentialTypes.TextArea, "One per line: host SHA256:fingerprint. Test connection prints the lines to paste for hosts seen for the first time.", Required: false),
+            new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended): only hosts pinned in the list below are connected to; an unpinned or changed key is refused before the password is sent.", Required: false, Default: "false"),
+            new CredentialField("knownHostKeys", "Known host keys", CredentialTypes.TextArea, "One per line: host SHA256:fingerprint. Test connection prints the lines to paste for hosts seen for the first time; a host is not collected until its line is here.", Required: false),
             new CredentialField("timeoutSeconds", "Timeout (seconds)", CredentialTypes.Number, "Per connection and per command.", Required: false, Default: "30"),
         },
         "an ordinary user account (no sudo); package lists and listening sockets are world-readable",
@@ -161,11 +167,17 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
                 if (session.HostKeyFingerprint is { Length: > 0 } fp && !acceptAny && !IsPinned(known, t)) toPin.Add(t.AsTyped + " " + FormatFingerprint(fp));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (HostKeyNotPinnedException ex)
+            {
+                failures++;
+                lines.Add(t.AsTyped + ": host key not pinned yet, so the credentials were not sent");
+                toPin.Add(SshHostKeys.KnownHostsLine(t.AsTyped, ex.Fingerprint));
+            }
             catch (Exception ex) { failures++; lines.Add(t.AsTyped + ": " + ex.Message); }
         }
         if (toPin.Count > 0)
         {
-            lines.Add("Host keys seen for the first time. Paste these lines into Known host keys so a changed key is detected next time:");
+            lines.Add("Host keys seen for the first time. Check each against the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then trust them below (or paste these lines into Known host keys) and test again:");
             lines.AddRange(toPin);
         }
         return new(failures == 0, string.Join("\n", lines));
@@ -206,6 +218,8 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
                 result.Assets.Add(m.Asset);
                 result.Software.AddRange(m.Software);
                 result.Warnings.AddRange(m.Warnings);
+                if (m.Incomplete) result.IncompleteSoftware.Add(m.Asset.ExternalId);
+                if (m.ContainersUnread) result.KeepRows(m.Asset.ExternalId, ContainerIdPrefix);
             }
             else if (errors.TryGetValue(i, out var err)) result.Warnings.Add(targets[i].AsTyped + ": " + err);
         }
@@ -227,8 +241,9 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         f.IpAddr = (await s.RunAsync(IpAddrCommand, ct)).Output;
         f.IpLink = (await s.RunAsync(IpLinkCommand, ct)).Output;
 
-        if (tools.Contains("dpkg-query")) { f.PackageManager = "dpkg"; f.PackageList = (await s.RunAsync(DpkgCommand, ct)).Output; }
-        else if (tools.Contains("rpm")) { f.PackageManager = "rpm"; f.PackageList = (await s.RunAsync(RpmCommand, ct)).Output; }
+        // stderr is not discarded: a listing that exits non-zero (a locked or damaged package database) is not a full list
+        if (tools.Contains("dpkg-query")) { f.PackageManager = "dpkg"; f.PackageList = PackageOutput(await s.RunAsync(DpkgCommand, ct), f); }
+        else if (tools.Contains("rpm")) { f.PackageManager = "rpm"; f.PackageList = PackageOutput(await s.RunAsync(RpmCommand, ct), f); }
         else if (tools.Contains("apk"))
         {
             f.PackageManager = "apk";
@@ -236,9 +251,10 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
             if (list.Ok && list.HasOutput) f.PackageList = list.Output;
             else
             {
+                // older apk has no "list"; "info -v" is the fallback and its exit status is the one that counts
                 var info = await s.RunAsync(ApkInfoCommand, ct);
                 var arch = (await s.RunAsync(ApkArchCommand, ct)).Output.Trim();
-                f.PackageList = (arch != "" ? "#arch=" + arch + "\n" : "") + info.Output;
+                f.PackageList = (arch != "" ? "#arch=" + arch + "\n" : "") + PackageOutput(info, f);
             }
         }
 
@@ -253,6 +269,19 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         }
         return f;
     }
+
+    /// <summary>stdout of a package listing. An exit status above zero is recorded (-1 is a server that sent none, which says nothing).</summary>
+    private static string PackageOutput(SshCommandResult r, LinuxHostFacts f)
+    {
+        if (r.ExitStatus > 0)
+        {
+            var stderr = r.Error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            f.PackageListError = "exit " + r.ExitStatus + (stderr is null ? "" : ": " + (stderr.Length > 200 ? stderr[..200] : stderr));
+        }
+        return r.Output;
+    }
+
+    public const string ContainerIdPrefix = "container:";
 
     // ------------------------------------------------------------------ mapping
 
@@ -304,11 +333,17 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         };
 
         var purlType = f.PackageManager switch { "dpkg" => "deb", "rpm" => "rpm", "apk" => "apk", _ => "generic" };
+        // one row per source package, architecture and version: binaries built from one source usually share a version,
+        // but a partial upgrade or several installed kernels must not hide the older (vulnerable) one
+        var versionsBySource = packages.GroupBy(p => p.Source + ":" + p.Architecture, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(p => p.Version).Distinct(StringComparer.Ordinal).Count(), StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var p in packages)
         {
             var key = purlType + ":" + p.Source + ":" + p.Architecture;
-            if (!seen.Add(key)) continue; // one row per source package and architecture; binaries built from it share the version
+            if (!seen.Add(key + "@" + p.Version)) continue;
+            // the plain key while there is one version, so the common case keeps a stable id across runs
+            if (versionsBySource[p.Source + ":" + p.Architecture] > 1) key += "@" + p.Version;
             software.Add(new SoftwareRecord(externalId, distro.Name, p.Source, p.Version, SoftwareKind.Package,
                 Purl: BuildPurl(purlType, distro.PurlNamespace, p.Source, p.Version, p.Architecture, distro.DistroQualifier),
                 Ecosystem: distro.Ecosystem,
@@ -318,16 +353,20 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         foreach (var c in containers)
         {
             var (image, tag) = SplitImage(c.Image);
-            software.Add(new SoftwareRecord(externalId, "container", image, tag, SoftwareKind.Application, ExternalId: "container:" + c.Name));
+            software.Add(new SoftwareRecord(externalId, "container", image, tag, SoftwareKind.Application, ExternalId: ContainerIdPrefix + c.Name));
         }
 
+        // a failed or empty listing is "unknown", never "everything was uninstalled": the host is incomplete this run
+        var incomplete = false;
         if (f.PackageManager is null) warnings.Add(externalId + ": no dpkg, rpm or apk found; no package list collected");
-        else if (packages.Count == 0) warnings.Add(externalId + ": " + f.PackageManager + " returned no packages");
+        else if (f.PackageListError is not null) { incomplete = true; warnings.Add(externalId + ": " + f.PackageManager + " failed (" + f.PackageListError + "); the package list is incomplete, so nothing is marked removed from this host"); }
+        else if (packages.Count == 0) { incomplete = true; warnings.Add(externalId + ": " + f.PackageManager + " returned no packages; treated as a failed read, so nothing is marked removed from this host"); }
         if (f.SocketTool is null) warnings.Add(externalId + ": neither ss nor netstat is available; listening ports not collected");
-        if (f.DockerPresent && !f.DockerReadable) warnings.Add(externalId + ": docker is installed but the account cannot read the container list (docker group membership is needed)");
+        var containersUnread = f.DockerPresent && !f.DockerReadable;
+        if (containersUnread) warnings.Add(externalId + ": docker is installed but the account cannot read the container list (docker group membership is needed); containers collected earlier are kept");
         if (distro.Ecosystem is null && packages.Count > 0) warnings.Add(externalId + ": " + distro.Name + " has no OSV ecosystem; packages are recorded but not matched");
         if (!f.HostKeyPinned && f.HostKeyFingerprint is { Length: > 0 } fp) warnings.Add(externalId + ": host key " + FormatFingerprint(fp) + " is not pinned in Known host keys");
-        return new LinuxHostMapping(asset, software, warnings);
+        return new LinuxHostMapping(asset, software, warnings, incomplete, containersUnread);
     }
 
     /// <summary>Parses os-release (KEY=value, quoted or bare).</summary>
@@ -474,12 +513,20 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         return list;
     }
 
-    private static (string Name, string Version) SplitApkNameVersion(string s)
+    /// <summary>"font-adobe-100dpi-1.0.4-r2" to ("font-adobe-100dpi", "1.0.4-r2"): the version is the last segment before the -rN suffix, as names may contain "-digit" themselves.</summary>
+    public static (string Name, string Version) SplitApkNameVersion(string s)
     {
+        var rel = ApkRelease().Match(s);
+        var stem = rel.Success ? s[..rel.Index] : s;
+        var dash = stem.LastIndexOf('-');
+        if (dash > 0 && dash < stem.Length - 1 && char.IsDigit(stem[dash + 1])) return (s[..dash], s[(dash + 1)..]);
+        // no -rN suffix: fall back to the first "-digit"
         for (var i = 1; i < s.Length - 1; i++)
             if (s[i] == '-' && char.IsDigit(s[i + 1])) return (s[..i], s[(i + 1)..]);
         return (s, "");
     }
+
+    [GeneratedRegex(@"-r\d+$")] private static partial Regex ApkRelease();
 
     private static readonly Regex LocalAddr = new(@"^(?<bind>.+):(?<port>\d+)$", RegexOptions.Compiled);
     private static readonly Regex SsProcess = new("\\(\\(\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -723,29 +770,20 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
 
         var info = new ConnectionInfo(t.Host, t.Port, o.Username, methods.ToArray()) { Timeout = o.Timeout };
         var client = new SshClient(info);
-        string? presented = null; string? rejected = null;
-        client.HostKeyReceived += (_, e) =>
-        {
-            presented = e.FingerPrintSHA256;
-            if (o.AcceptAnyHostKey || o.ExpectedFingerprint is null) { e.CanTrust = true; return; }
-            if (FingerprintEquals(o.ExpectedFingerprint, presented)) e.CanTrust = true;
-            else { rejected = presented; e.CanTrust = false; }
-        };
+        // an unpinned key is refused at key exchange, before any password or key signature is sent
+        var guard = new SshHostKeys.Guard(client, t.AsTyped, o.ExpectedFingerprint, o.AcceptAnyHostKey,
+            fp => "add this line to Known host keys: " + SshHostKeys.KnownHostsLine(t.AsTyped, fp));
         try
         {
             await client.ConnectAsync(ct);
         }
-        catch (SshConnectionException ex) when (rejected is not null)
+        catch (Exception ex)
         {
             client.Dispose();
-            throw new InvalidOperationException("Host key for " + t.AsTyped + " has changed: expected " + FormatFingerprint(o.ExpectedFingerprint!) + ", received " + FormatFingerprint(rejected) + ". Verify the server before updating Known host keys.", ex);
-        }
-        catch
-        {
-            client.Dispose();
+            if (guard.Explain(ex) is { } why) throw why;
             throw;
         }
-        return new SshNetSession(client, presented, o.Timeout);
+        return new SshNetSession(client, guard.Presented, o.Timeout);
     }
 
     private sealed class SshNetSession : ISshSession

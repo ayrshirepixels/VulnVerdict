@@ -40,43 +40,66 @@ public sealed class WorkerService : BackgroundService
         _ = Task.Run(() => HeartbeatLoopAsync(ct), ct);
         while (!ct.IsCancellationRequested)
         {
-            try
-            {
-                // with a central bundle configured, the bundle replaces the public feeds
-                bool feedsRan;
-                using (var bundleScope = _sp.CreateScope())
-                {
-                    var bundles = bundleScope.ServiceProvider.GetRequiredService<BundleService>();
-                    var check = await bundles.CheckAndApplyAsync(ct);
-                    feedsRan = check.Outcome == BundleOutcome.Applied || (!bundles.BundleModeEnabled && await RunDueFeedsAsync(ct));
-                }
-                var connectorsRan = await RunDueConnectorsAsync(ct);
-                var evaluateRequested = await EvaluateRequestedAsync(ct);
-                if (feedsRan || connectorsRan || evaluateRequested || await EvaluationDueAsync(ct))
-                {
-                    using var scope = _sp.CreateScope();
-                    _activity = "evaluating verdicts";
-                    await scope.ServiceProvider.GetRequiredService<VerdictEvaluator>().EvaluateAllAsync(ct);
-                    await scope.ServiceProvider.GetRequiredService<SettingsService>().SetStateAsync(SettingsService.Keys.EvaluateRequested, null, ct);
-                }
-                await NotifyAsync(ct);
-                await DailyDigestIfDueAsync(ct);
-                await WeeklyReportIfDueAsync(ct);
-                await FeedHealthAlertAsync(ct);
-                using (var scope = _sp.CreateScope())
-                {
-                    await scope.ServiceProvider.GetRequiredService<TelemetryService>().SendIfDueAsync(ct);
-                    await scope.ServiceProvider.GetRequiredService<MspReportService>().SendIfDueAsync(ct);
-                }
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "Worker loop error");
-            }
+            await RunPassAsync(ct);
             _activity = "idle";
             try { await Task.Delay(TimeSpan.FromSeconds(_opt.LoopSeconds), ct); } catch (OperationCanceledException) { }
         }
+    }
+
+    /// <summary>
+    /// One pass of the loop. Each step has its own error handling, so a failed evaluation still lets the immediate
+    /// emails, tickets, the daily digest and the weekly report go out, and a failed send does not stop the next step.
+    /// Public for tests.
+    /// </summary>
+    public async Task RunPassAsync(CancellationToken ct)
+    {
+        var feedsRan = false;
+        await StepAsync("feeds", async () =>
+        {
+            // with a central bundle configured, the bundle replaces the public feeds
+            using var bundleScope = _sp.CreateScope();
+            var bundles = bundleScope.ServiceProvider.GetRequiredService<BundleService>();
+            var check = await bundles.CheckAndApplyAsync(ct);
+            feedsRan = check.Outcome == BundleOutcome.Applied || (!bundles.BundleModeEnabled && await RunDueFeedsAsync(ct));
+        }, ct);
+        var connectorsRan = false;
+        await StepAsync("connectors", async () => connectorsRan = await RunDueConnectorsAsync(ct), ct);
+        await StepAsync("evaluation", async () =>
+        {
+            using var scope = _sp.CreateScope();
+            var evaluator = scope.ServiceProvider.GetRequiredService<VerdictEvaluator>();
+            if (feedsRan || connectorsRan || await EvaluateRequestedAsync(ct) || await EvaluationDueAsync(ct))
+            {
+                _activity = "evaluating verdicts";
+                await evaluator.EvaluateAllAsync(ct);
+                await scope.ServiceProvider.GetRequiredService<SettingsService>().SetStateAsync(SettingsService.Keys.EvaluateRequested, null, ct);
+            }
+            else
+            {
+                // subjects the last run could not evaluate, on their own back-off rather than a full run every minute
+                _activity = "re-evaluating failed subjects";
+                await evaluator.RetryFailedAsync(ct);
+            }
+        }, ct);
+        await StepAsync("notifications", () => NotifyAsync(ct), ct);
+        await StepAsync("daily digest", () => DailyDigestIfDueAsync(ct), ct);
+        await StepAsync("weekly report", () => WeeklyReportIfDueAsync(ct), ct);
+        await StepAsync("feed health alert", () => FeedHealthAlertAsync(ct), ct);
+        await StepAsync("backup and SLA snapshot", () => OperationsJobs.RunAsync(_sp, _log, ct), ct);
+        await StepAsync("telemetry", async () =>
+        {
+            using var scope = _sp.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<TelemetryService>().SendIfDueAsync(ct);
+            await scope.ServiceProvider.GetRequiredService<MspReportService>().SendIfDueAsync(ct);
+        }, ct);
+    }
+
+    private async Task StepAsync(string name, Func<Task> step, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested) return;
+        try { await step(); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex) { _log.LogError(ex, "Worker step {Step} failed", name); }
     }
 
     private volatile string _activity = "idle";
@@ -163,6 +186,7 @@ public sealed class WorkerService : BackgroundService
             {
                 status.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 status.Progress = null;
+                MetricCounters.Add(MetricCounters.FeedFailures, feed.Name);
                 _log.LogError(ex, "Feed {Feed} failed", feed.Name);
             }
             finally
@@ -246,7 +270,8 @@ public sealed class WorkerService : BackgroundService
         if (n > 0) _log.LogInformation("Sent immediate Fix-today email for {Count} verdict(s)", n);
         var t = await digest.SendTicketsAsync(ct);
         if (t > 0) _log.LogInformation("Raised {Count} ticket(s)", t);
-        await scope.ServiceProvider.GetRequiredService<WebhookService>().FlushPendingAsync(ct);
+        var gaveUp = await scope.ServiceProvider.GetRequiredService<WebhookService>().FlushPendingAsync(ct);
+        if (gaveUp.Count > 0) await AdminAlertAsync(scope.ServiceProvider, "Notifications could not be delivered", string.Join("\n", gaveUp), ct);
     }
 
     private async Task DailyDigestIfDueAsync(CancellationToken ct)
@@ -266,6 +291,7 @@ public sealed class WorkerService : BackgroundService
         {
             // still record that the day's digest was generated so the Today page can show it, without sending
             await settingsSvc.SetStateAsync(SettingsService.Keys.LastDailyDigest, DateTime.UtcNow.ToString("O"), ct);
+            await scope.ServiceProvider.GetRequiredService<DigestService>().QueueChatSummaryAsync(ct);   // Teams and Slack do not need mail
             return;
         }
         var digest = scope.ServiceProvider.GetRequiredService<DigestService>();
@@ -303,6 +329,7 @@ public sealed class WorkerService : BackgroundService
             .Where(f => Feeds.FeedHealth.IsOverdue(f, now)).ToList();
         if (stale.Count == 0) return;
         var body = string.Join("\n", stale.Select(f => f.DisplayName + ": last success " + (f.LastSuccess?.ToString("u") ?? "never") + ", last error: " + (f.LastError ?? "none")));
+        await scope.ServiceProvider.GetRequiredService<ChatNotificationService>().QueueFeedHealthAsync(stale.Select(f => f.DisplayName).ToList(), ct);
         await AdminAlertAsync(scope.ServiceProvider, "Feeds overdue", body, ct);
     }
 

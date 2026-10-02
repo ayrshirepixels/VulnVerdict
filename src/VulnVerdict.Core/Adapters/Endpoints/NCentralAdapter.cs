@@ -23,6 +23,8 @@ public sealed class NCentralAdapter : IInventoryAdapter
     private readonly IHttpClientFactory _http;
     private readonly ILogger _log;
     public Func<TimeSpan, CancellationToken, Task>? Delay { get; set; }
+    /// <summary>Page cap; a listing that reaches it is reported as partial instead of being taken for every device.</summary>
+    public int MaxPages { get; set; } = 5000;
 
     public NCentralAdapter(IHttpClientFactory http, ILogger<NCentralAdapter>? log = null)
     {
@@ -65,13 +67,16 @@ public sealed class NCentralAdapter : IInventoryAdapter
         var result = new CollectResult { FullSnapshot = true };
         progress?.Report("Listing devices");
         var devices = new List<JsonElement>();
-        for (var page = 1; page < 5000; page++)
+        for (var page = 1; ; page++)
         {
+            if (page > MaxPages) { result.MarkPartial(EndpointPaging.CapHit("devices", MaxPages)); break; }
             var root = await api.GetJsonAsync(DevicesPath(page), ct);
             var batch = EpJson.Items(root);
             devices.AddRange(batch);
+            // totalPages decides when the server gives it (a short page in the middle is not the end); otherwise an empty page does
             var pages = EpJson.Int(root, "totalPages");
-            if (batch.Count < PageSize || (pages is not null && page >= pages)) break;
+            if (pages is null ? batch.Count == 0 : page >= pages) break;
+            if (batch.Count == 0) { result.MarkPartial("The device listing ended empty at page " + page + " of " + pages + "; it is partial, so nothing is marked removed or aged out this run."); break; }
         }
 
         var noPatchLevel = 0; var n = 0; var assetsReadable = true;

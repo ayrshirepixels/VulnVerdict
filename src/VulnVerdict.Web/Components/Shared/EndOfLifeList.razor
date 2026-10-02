@@ -1,0 +1,58 @@
+@inject IDbContextFactory<VvDbContext> Db
+@inject SettingsService Settings
+
+@* Products past vendor support, or close to it. Renders nothing when there is nothing to flag. Scope: all | watchlist | inventory. *@
+@if (_flagged.Count > 0 || _possible.Count > 0)
+{
+    <div class="card">
+        <h2>End of life</h2>
+        <p class="muted" style="margin-top:0">Releases the vendor has stopped patching, or will stop within @_warnDays days. A CVE found in one of these will not get a fix: upgrade or replace it. Dates from <a href="https://endoflife.date" target="_blank" rel="noopener">endoflife.date</a>.</p>
+        @if (_flagged.Count > 0)
+        {
+            <table class="table">
+                <thead><tr><th>Product</th><th>Version</th><th>Where</th><th>Status</th><th>Vendor support</th></tr></thead>
+                <tbody>
+                    @foreach (var i in _flagged)
+                    {
+                        <tr>
+                            <td>@i.Product</td>
+                            <td>@(i.Version ?? "-")</td>
+                            <td>@i.Where</td>
+                            <td><span class="tier @(i.Finding.State == EolState.EndOfLife ? "tier-today" : "tier-week")">@i.Finding.Flag</span></td>
+                            <td>
+                                @i.Finding.Describe()
+                                @if (i.Finding.Link is not null) { <text> </text><a href="@i.Finding.Link" target="_blank" rel="noopener">source</a> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if (_possible.Count > 0)
+        {
+            <p class="muted" style="margin-bottom:0">Possibly also, matched by name only and not flagged anywhere: @string.Join("; ", _possible.Select(i => i.Product + (i.Version is null ? "" : " " + i.Version) + " (" + i.Finding.Describe() + ")")). Check these against the vendor's own support page.</p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Scope { get; set; } = "all";
+
+    private List<EolItem> _flagged = new(), _possible = new();
+    private int _warnDays = 180;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _warnDays = Math.Clamp((await Settings.LoadAsync()).EolWarnDays, 0, 3650);
+            await using var db = await Db.CreateDbContextAsync();
+            var items = await EndOfLifeReport.BuildAsync(db, DateTime.UtcNow, _warnDays, suggestions: true);
+            if (Scope == "watchlist") items = items.Where(i => i.WatchlistEntryId is not null).ToList();
+            else if (Scope == "inventory") items = items.Where(i => i.WatchlistEntryId is null).ToList();
+            _flagged = items.Where(i => i.Finding.Flagged).ToList();
+            _possible = items.Where(i => i.Finding.Suggestion).Take(10).ToList();
+        }
+        catch { _flagged = new(); _possible = new(); }   // a flag list must never take the page down
+    }
+}

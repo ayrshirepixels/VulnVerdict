@@ -12,8 +12,37 @@ public static partial class WindowsCollectorMapper
 {
     public const string Vendor = "Microsoft";
 
-    /// <summary>Map a collector document for the host typed as <paramref name="externalId"/> into <paramref name="result"/>. Returns the host's asset record.</summary>
+    /// <summary>
+    /// Map a collector document for the host typed as <paramref name="externalId"/> into <paramref name="result"/>. Returns the host's asset record.
+    /// All or nothing: the records are built aside and appended only when the whole document mapped, so a document that
+    /// throws half-way never leaves a partial row set that would read as uninstalls.
+    /// </summary>
     public static AssetRecord Map(string externalId, JsonElement root, CollectResult result)
+    {
+        var local = new CollectResult();
+        var asset = MapHost(externalId, root, local);
+
+        // a section the collector could not read is "unknown", not "nothing there": keep what earlier runs reported
+        var failed = Strings(root, "failedSections").ToList();
+        // (PowerShell 5.1 can unwrap a one-element array into an object; only a missing or null list is "unread")
+        if (Prop(root, "software").ValueKind is JsonValueKind.Undefined or JsonValueKind.Null && !failed.Contains("software")) failed.Add("software");
+        if (failed.Count > 0)
+        {
+            local.IncompleteSoftware.Add(externalId);
+            local.Warnings.Add(externalId + ": the collector could not read " + string.Join(", ", failed) + "; nothing is marked removed from this host this run");
+        }
+        // one unreadable Uninstall key keeps only its own row ("app:<arch>:<key>"), not the whole host
+        foreach (var key in Strings(root, "softwareUnread")) local.KeepRows(externalId, "app:" + key);
+
+        result.Assets.AddRange(local.Assets);
+        result.Software.AddRange(local.Software);
+        result.Warnings.AddRange(local.Warnings);
+        result.IncompleteSoftware.UnionWith(local.IncompleteSoftware);
+        foreach (var kv in local.IncompleteRows) foreach (var prefix in kv.Value) result.KeepRows(kv.Key, prefix);
+        return asset;
+    }
+
+    private static AssetRecord MapHost(string externalId, JsonElement root, CollectResult result)
     {
         var host = Prop(root, "host");
         var name = Str(host, "name") ?? externalId;
@@ -110,10 +139,13 @@ public static partial class WindowsCollectorMapper
 
         // ---- SQL Server instances
         var sqlInstances = Arr(root, "sql").ToList();
+        var sqlFailed = Strings(root, "failedSections").Contains("sql");
         foreach (var s in sqlInstances)
         {
             var instance = Str(s, "instance") ?? "MSSQLSERVER";
             var version = Str(s, "patchLevel") ?? Str(s, "version") ?? "";
+            // the Setup key was unreadable: leave the row an earlier run versioned alone rather than blanking it
+            if (version == "" && sqlFailed) continue;
             var serviceName = instance.Equals("MSSQLSERVER", StringComparison.OrdinalIgnoreCase) ? "MSSQLSERVER" : "MSSQL$" + instance;
             var own = Take(listeners, claimed, l => l.Service.Split(',').Any(x => x.Equals(serviceName, StringComparison.OrdinalIgnoreCase)));
             if (own.Length == 0 && sqlInstances.Count == 1) own = Take(listeners, claimed, l => l.Process.Equals("sqlservr", StringComparison.OrdinalIgnoreCase));

@@ -40,6 +40,7 @@ public sealed class CveListFeed : IFeed
         if (releases.Count == 0) throw new InvalidOperationException("No releases returned by GitHub");
 
         var latest = releases[0];
+        var stats = new LoadStats();
         int total = 0;
 
         if (cursorTag is null || !releases.Any(r => r.Tag == cursorTag))
@@ -53,30 +54,61 @@ public sealed class CveListFeed : IFeed
             var zipPath = Path.Combine(dir, asset.Name);
             await DownloadAsync(ctx, asset.Url, zipPath, asset.Size, ct);
 
-            ctx.Progress("Clearing previous CVE data");
-            await ctx.Db.CveAffected.ExecuteDeleteAsync(ct);
-            await ctx.Db.Cves.ExecuteDeleteAsync(ct);
+            // A reload upserts over the existing rows and never deletes them: verdicts cascade from their CVE, so a
+            // delete-and-reload took every verdict, its history and accepted-risk decisions with it. One transaction,
+            // so a load that fails part-way leaves the previous data as it was.
+            var reload = await ctx.Db.Cves.AnyAsync(ct);
+            await using var tx = ctx.Db.Database.CurrentTransaction is null ? await ctx.Db.Database.BeginTransactionAsync(ct) : null;
+            try { total += await LoadNestedZipAsync(ctx, zipPath, latest.Tag, insertOnly: !reload, stats, ct); }
+            finally { try { File.Delete(zipPath); } catch { } }
+            if (reload) await MarkAbsentAsync(ctx, stats, ct);
 
-            total += await LoadNestedZipAsync(ctx, zipPath, latest.Tag, ct);
-            try { File.Delete(zipPath); } catch { }
-
-            // then any delta after that midnight up to and including latest
+            // then any delta after that midnight up to and including latest; the cursor stops at the last one applied
             var midnightTag = "cve_" + baselineDate + "_0000Z";
-            foreach (var rel in releases.Where(r => string.CompareOrdinal(r.Tag, midnightTag) > 0).OrderBy(r => r.Tag))
-                total += await ApplyDeltaAsync(ctx, rel, dir, ct);
+            var applied = releases.Select(r => r.Tag).FirstOrDefault(t => string.CompareOrdinal(t, midnightTag) <= 0) ?? midnightTag;
+            var after = releases.Where(r => string.CompareOrdinal(r.Tag, midnightTag) > 0).OrderBy(r => r.Tag).ToList();
+            for (var i = 0; i < after.Count; i++)
+            {
+                var n = await ApplyDeltaAsync(ctx, after[i], dir, ct, stats, newerReleases: after.Count - 1 - i);
+                if (n is null) break;
+                total += n.Value; applied = after[i].Tag;
+            }
 
             ctx.Progress("Rebuilding product catalogue");
             await RebuildCatalogueAsync(ctx.Db, ct);
-            return new FeedResult(total, Cursor(latest.Tag), "baseline " + baselineDate);
+            if (tx is not null) await tx.CommitAsync(ct);
+            return new FeedResult(total, Cursor(applied), Note("baseline " + baselineDate, stats));
         }
 
         var pending = releases.Where(r => string.CompareOrdinal(r.Tag, cursorTag) > 0).OrderBy(r => r.Tag).ToList();
         var touched = new HashSet<(string, string)>();
-        foreach (var rel in pending)
-            total += await ApplyDeltaAsync(ctx, rel, dir, ct, touched);
+        var last = cursorTag;
+        var done = 0;
+        for (var i = 0; i < pending.Count; i++)
+        {
+            var n = await ApplyDeltaAsync(ctx, pending[i], dir, ct, stats, newerReleases: pending.Count - 1 - i, touched);
+            if (n is null) break;
+            total += n.Value; last = pending[i].Tag; done++;
+        }
         if (touched.Count > 0) await UpdateCatalogueAsync(ctx.Db, touched, ct);
-        return new FeedResult(total, Cursor(pending.LastOrDefault()?.Tag ?? cursorTag), pending.Count + " delta releases");
+        return new FeedResult(total, Cursor(last), Note(done + " delta releases" + (done < pending.Count ? ", waiting for " + pending[done].Tag : ""), stats));
     }
+
+    /// <summary>
+    /// A release with no delta asset yet is waited for (GitHub assets are uploaded after the release is made) unless
+    /// this many newer releases already exist, by which point it is never coming.
+    /// </summary>
+    private const int MissingDeltaPatience = 3;
+
+    /// <summary>Records seen and records unreadable across one run.</summary>
+    private sealed class LoadStats
+    {
+        public HashSet<string> Seen { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> Unreadable { get; } = new();
+    }
+
+    private static string Note(string what, LoadStats stats) =>
+        stats.Unreadable.Count == 0 ? what : what + "; " + stats.Unreadable.Count.ToString("N0") + " unreadable records skipped (see log)";
 
     /// <summary>Bump when a change to <see cref="Parse"/> should be applied to records already loaded.</summary>
     public const int ParserVersion = 2;
@@ -137,7 +169,7 @@ public sealed class CveListFeed : IFeed
         }
     }
 
-    private async Task<int> LoadNestedZipAsync(FeedContext ctx, string outerZipPath, string sourceRef, CancellationToken ct)
+    private async Task<int> LoadNestedZipAsync(FeedContext ctx, string outerZipPath, string sourceRef, bool insertOnly, LoadStats stats, CancellationToken ct)
     {
         using var outer = ZipFile.OpenRead(outerZipPath);
         var innerEntry = outer.Entries.FirstOrDefault(e => e.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -148,27 +180,33 @@ public sealed class CveListFeed : IFeed
         try
         {
             using var inner = ZipFile.OpenRead(innerPath);
-            return await LoadEntriesAsync(ctx, inner, sourceRef, insertOnly: true, touched: null, ct);
+            return await LoadEntriesAsync(ctx, inner, sourceRef, baseline: true, insertOnly, stats, touched: null, ct);
         }
         finally { try { File.Delete(innerPath); } catch { } }
     }
 
-    private async Task<int> ApplyDeltaAsync(FeedContext ctx, Release rel, string dir, CancellationToken ct, HashSet<(string, string)>? touched = null)
+    /// <summary>Apply one hourly delta. Null when the release has no delta asset yet: stop there and retry next run.</summary>
+    private async Task<int?> ApplyDeltaAsync(FeedContext ctx, Release rel, string dir, CancellationToken ct, LoadStats stats, int newerReleases, HashSet<(string, string)>? touched = null)
     {
         var asset = rel.Assets.FirstOrDefault(a => a.Name.Contains("_delta_CVEs_", StringComparison.OrdinalIgnoreCase) && a.Name.EndsWith(".zip"));
-        if (asset.Name is null) return 0;
+        if (asset.Name is null)
+        {
+            if (newerReleases < MissingDeltaPatience) { ctx.Log.LogInformation("Release {Tag} has no delta asset yet; waiting for it", rel.Tag); return null; }
+            ctx.Log.LogWarning("Release {Tag} never got a delta asset; skipping it", rel.Tag);
+            return 0;
+        }
         var path = Path.Combine(dir, asset.Name);
         ctx.Progress("Applying delta " + rel.Tag);
         await DownloadAsync(ctx, asset.Url, path, asset.Size, ct);
         try
         {
             using var zip = ZipFile.OpenRead(path);
-            return await LoadEntriesAsync(ctx, zip, rel.Tag, insertOnly: false, touched, ct);
+            return await LoadEntriesAsync(ctx, zip, rel.Tag, baseline: false, insertOnly: false, stats, touched, ct);
         }
         finally { try { File.Delete(path); } catch { } }
     }
 
-    private async Task<int> LoadEntriesAsync(FeedContext ctx, ZipArchive zip, string sourceRef, bool insertOnly, HashSet<(string, string)>? touched, CancellationToken ct)
+    private async Task<int> LoadEntriesAsync(FeedContext ctx, ZipArchive zip, string sourceRef, bool baseline, bool insertOnly, LoadStats stats, HashSet<(string, string)>? touched, CancellationToken ct)
     {
         var db = ctx.Db;
         db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -178,16 +216,12 @@ public sealed class CveListFeed : IFeed
         var entries = zip.Entries.Where(e => e.Name.StartsWith("CVE-", StringComparison.OrdinalIgnoreCase) && e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)).ToList();
         var total = entries.Count;
         // deltas can contain the same CVE twice (published then updated); keep the last
-        var seen = new Dictionary<string, Cve>(StringComparer.OrdinalIgnoreCase);
+        var latest = new Dictionary<string, Cve>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
-            if (insertOnly && MinYear > 0)
-            {
-                var yr = entry.Name.Length > 8 && int.TryParse(entry.Name.AsSpan(4, 4), out var y) ? y : 0;
-                if (yr < MinYear) continue;
-            }
+            if (baseline && MinYear > 0 && YearOf(entry.Name) < MinYear) continue;
             Cve? cve;
             try
             {
@@ -195,38 +229,41 @@ public sealed class CveListFeed : IFeed
                 using var doc = await JsonDocument.ParseAsync(s, cancellationToken: ct);
                 cve = Parse(doc.RootElement, now, sourceRef);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                ctx.Log.LogWarning("Skipping {Entry}: {Error}", entry.FullName, ex.Message);
+                var id = Path.GetFileNameWithoutExtension(entry.Name).ToUpperInvariant();
+                stats.Unreadable.Add(id);
+                ctx.Log.LogWarning("Skipping unreadable CVE record {CveId} ({Entry}) in {Release}: {Error}", id, entry.FullName, sourceRef, ex.Message);
                 continue;
             }
             if (cve is null) continue;
-            if (insertOnly)
+            if (!baseline) { latest[cve.Id] = cve; continue; }
+            // the baseline holds each CVE once; the set spans the whole load, not one batch
+            if (!stats.Seen.Add(cve.Id)) continue;
+            batch.Add(cve);
+            if (batch.Count >= BatchSize)
             {
-                if (seen.ContainsKey(cve.Id)) continue;
-                seen[cve.Id] = cve;
-                batch.Add(cve);
-                if (batch.Count >= BatchSize)
-                {
-                    await InsertBatchAsync(db, batch, ct);
-                    count += batch.Count; batch.Clear(); seen.Clear();
-                    ctx.Progress("Loaded " + count.ToString("N0") + " of " + total.ToString("N0") + " CVE records");
-                }
-            }
-            else
-            {
-                seen[cve.Id] = cve;
+                if (insertOnly) await InsertBatchAsync(db, batch, ct); else await UpsertAsync(db, batch, null, ct);
+                count += batch.Count; batch.Clear();
+                ctx.Progress("Loaded " + count.ToString("N0") + " of " + total.ToString("N0") + " CVE records");
             }
         }
 
-        if (insertOnly)
+        if (baseline)
         {
-            if (batch.Count > 0) { await InsertBatchAsync(db, batch, ct); count += batch.Count; }
+            if (batch.Count > 0) { if (insertOnly) await InsertBatchAsync(db, batch, ct); else await UpsertAsync(db, batch, null, ct); count += batch.Count; }
             return count;
         }
+        await UpsertAsync(db, latest.Values, touched, ct);
+        return latest.Count;
+    }
 
-        // upsert path for deltas
-        foreach (var chunk in seen.Values.Chunk(500))
+    private static int YearOf(string name) => name.Length > 8 && int.TryParse(name.AsSpan(4, 4), out var y) ? y : 0;
+
+    /// <summary>Insert new CVEs and update existing ones in place, replacing their affected rows. Existing rows (and the verdicts on them) stay.</summary>
+    private static async Task UpsertAsync(VvDbContext db, IEnumerable<Cve> cves, HashSet<(string, string)>? touched, CancellationToken ct)
+    {
+        foreach (var chunk in cves.Chunk(500))
         {
             var ids = chunk.Select(c => c.Id).ToList();
             var existing = await db.Cves.Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
@@ -243,9 +280,27 @@ public sealed class CveListFeed : IFeed
             }
             await db.SaveChangesAsync(ct);
             db.ChangeTracker.Clear();
-            count += chunk.Length;
         }
-        return count;
+    }
+
+    /// <summary>
+    /// After a completed reload, a CVE List record the baseline no longer carries is marked rejected rather than deleted,
+    /// so its verdicts close through the evaluator instead of vanishing by cascade. Records this run could not read, years
+    /// excluded by <see cref="MinYear"/>, and rows from other sources (OSV package stubs) are left alone.
+    /// </summary>
+    private async Task MarkAbsentAsync(FeedContext ctx, LoadStats stats, CancellationToken ct)
+    {
+        var unreadable = stats.Unreadable.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ids = await ctx.Db.Cves.Where(c => c.SourceRef != null && c.SourceRef.StartsWith("cve_") && c.State != "REJECTED")
+            .Select(c => c.Id).ToListAsync(ct);
+        var absent = ids.Where(id => !stats.Seen.Contains(id) && !unreadable.Contains(id) && (MinYear <= 0 || YearOf(id) >= MinYear)).ToList();
+        if (absent.Count == 0) return;
+        ctx.Log.LogWarning("{Count} CVE records are no longer in the CVE List baseline; marking them rejected", absent.Count);
+        foreach (var chunk in absent.Chunk(500))
+        {
+            var c = chunk.ToList();
+            await ctx.Db.Cves.Where(x => c.Contains(x.Id)).ExecuteUpdateAsync(u => u.SetProperty(x => x.State, "REJECTED"), ct);
+        }
     }
 
     private static async Task InsertBatchAsync(VvDbContext db, List<Cve> batch, CancellationToken ct)

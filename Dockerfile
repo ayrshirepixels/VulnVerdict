@@ -12,8 +12,13 @@ RUN dotnet publish src/VulnVerdict.Web/VulnVerdict.Web.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home vulnverdict && mkdir -p /data && chown vulnverdict /data
+# pg_dump and pg_restore for the worker's nightly backup. The client's major version must be the database image's
+# (deploy/images/db.Dockerfile): an older pg_dump refuses a newer server, and a newer one writes dumps the database
+# container's own pg_restore cannot read back. Raise both together.
+ARG PG_MAJOR=16
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl postgresql-client-${PG_MAJOR} && rm -rf /var/lib/apt/lists/* \
+    # /data/backups exists in the image so a volume mounted there starts out owned by the console's user
+    && useradd --system --uid 10001 --create-home vulnverdict && mkdir -p /data/backups && chown vulnverdict /data /data/backups
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \

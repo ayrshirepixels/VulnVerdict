@@ -10,6 +10,13 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["VulnVerdict.Web.styles.css"]" />
     <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]" />
+    <link rel="apple-touch-icon" href="@Assets["apple-touch-icon.png"]" />
+    @* Installable as an app from the browser menu. There is deliberately no service worker: Blazor Server needs its live
+       connection to the console, so an offline shell would only show a page that cannot work. *@
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#1E222A" data-scheme="light" data-light="#1E222A" data-dark="#0F1114" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F1114" data-scheme="dark" data-light="#1E222A" data-dark="#0F1114" />
+    <script src="@Assets["console.js"]"></script>
     <HeadOutlet @rendermode="RenderModeForPage" />
 </head>
 

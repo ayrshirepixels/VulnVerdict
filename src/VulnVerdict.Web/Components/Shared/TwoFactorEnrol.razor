@@ -1,0 +1,28 @@
+@* Enrolment for an authenticator app: the QR code, the key to type by hand, and the code that proves it worked.
+   Rendered on the server as part of a static page; the secret is not shown again once two-factor is on. *@
+<div class="twofactor-enrol">
+    <p>Scan this with an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password, Aegis or any other that does time-based codes), then type the six-digit code it shows.</p>
+    <div class="qr" role="img" aria-label="QR code for the authenticator app">@((MarkupString)QrSvg.Render(Enrolment.Uri))</div>
+    <div class="help">Cannot scan it? Add an account by hand with this key: <code class="manual-key">@Totp.Grouped(Enrolment.ManualKey)</code> (time-based, SHA-1, 6 digits, 30 seconds).</div>
+    <form method="post" action="@Action" class="form">
+        <AntiforgeryToken />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <div>
+            <label for="code">Code from the app</label>
+            <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required autofocus />
+        </div>
+        <div class="btn-row">
+            <button type="submit" class="btn">Turn on two-factor</button>
+            @ChildContent
+        </div>
+    </form>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TwoFactorEnrolment Enrolment { get; set; } = default!;
+    /// <summary>Where the confirming code is posted: the signed-in endpoint, or the one for forced enrolment at sign-in.</summary>
+    [Parameter, EditorRequired] public string Action { get; set; } = "";
+    [Parameter] public string? ReturnUrl { get; set; }
+    /// <summary>Extra buttons beside the submit button, such as Skip.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

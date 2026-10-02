@@ -109,7 +109,7 @@ public sealed class FortiGateAdapter : IInventoryAdapter
         var interfaces = Results(Parse(await get(Paths.Interface, ct))).Select(ParseInterface).Where(i => i.Name.Length > 0).ToList();
         var wan = WanInterfaces(interfaces, r);
 
-        var sslvpn = (await Optional(get, Paths.SslVpnSettings, r, ct)).FirstOrDefault();
+        var sslvpn = (await Optional(get, Paths.SslVpnSettings, r, ct, exposure: "SSL-VPN settings")).FirstOrDefault();
 
         // ---- the FortiGate itself
         var ips = interfaces.Select(i => i.Ip).Where(ip => ip is not null).Distinct().Select(ip => ip!).ToArray();
@@ -139,23 +139,23 @@ public sealed class FortiGateAdapter : IInventoryAdapter
 
         // ---- what the internet can reach through it
         progress?.Report("Reading virtual IPs and policies");
-        var vips = (await Optional(get, Paths.Vip, r, ct)).Select(ParseVip).Where(v => v.Name.Length > 0).ToList();
-        var vipGroups = (await Optional(get, Paths.VipGroup, r, ct)).ToDictionary(g => Str(g, "name") ?? "", g => Names(g, "member"), StringComparer.OrdinalIgnoreCase);
-        var addresses = (await Optional(get, Paths.Address, r, ct)).Where(a => Str(a, "name") is not null).ToDictionary(a => Str(a, "name")!, a => a, StringComparer.OrdinalIgnoreCase);
-        var addrGroups = (await Optional(get, Paths.AddressGroup, r, ct)).ToDictionary(g => Str(g, "name") ?? "", g => Names(g, "member"), StringComparer.OrdinalIgnoreCase);
+        var vips = (await Optional(get, Paths.Vip, r, ct, exposure: "virtual IPs")).Select(ParseVip).Where(v => v.Name.Length > 0).ToList();
+        var vipGroups = (await Optional(get, Paths.VipGroup, r, ct, exposure: "virtual IP groups")).ToDictionary(g => Str(g, "name") ?? "", g => Names(g, "member"), StringComparer.OrdinalIgnoreCase);
+        var addresses = (await Optional(get, Paths.Address, r, ct, exposure: "address objects")).Where(a => Str(a, "name") is not null).ToDictionary(a => Str(a, "name")!, a => a, StringComparer.OrdinalIgnoreCase);
+        var addrGroups = (await Optional(get, Paths.AddressGroup, r, ct, exposure: "address groups")).ToDictionary(g => Str(g, "name") ?? "", g => Names(g, "member"), StringComparer.OrdinalIgnoreCase);
         var policies = Results(Parse(await get(Paths.Policy, ct))).Select(ParsePolicy).ToList();
         r.Exposures.AddRange(InternetExposures(wan, vips, vipGroups, addresses, addrGroups, policies));
 
         // ---- managed switches and access points
         progress?.Report("Reading managed switches and access points");
-        var switches = await Optional(get, Paths.ManagedSwitch, r, ct, fallback: Paths.ManagedSwitchLegacy);
+        var switches = await Optional(get, Paths.ManagedSwitch, r, ct, fallback: Paths.ManagedSwitchLegacy, assets: "managed switches");
         foreach (var s in switches)
         {
             var sw = MapSwitch(s);
             if (sw is null) continue;
             r.Assets.Add(sw.Value.Asset); r.Software.Add(sw.Value.Firmware);
         }
-        foreach (var a in await Optional(get, Paths.ManagedAp, r, ct))
+        foreach (var a in await Optional(get, Paths.ManagedAp, r, ct, assets: "managed access points"))
         {
             var ap = MapAccessPoint(a);
             if (ap is null) continue;
@@ -311,7 +311,11 @@ public sealed class FortiGateAdapter : IInventoryAdapter
     }
 
     /// <summary>Endpoints that are absent on some models or FortiOS builds (no switch controller, no WiFi, no SSL-VPN) become a warning, not a failure.</summary>
-    private async Task<List<JsonElement>> Optional(Func<string, CancellationToken, Task<string>> get, string path, CollectResult r, CancellationToken ct, string? fallback = null)
+    /// <remarks>
+    /// Only a 404 means "not there". Any other failure (403 from a narrow admin profile, a timeout, unparsable JSON) of a
+    /// read that feeds exposure makes exposure unknown for the run, and of a read that lists devices makes the run partial.
+    /// </remarks>
+    private async Task<List<JsonElement>> Optional(Func<string, CancellationToken, Task<string>> get, string path, CollectResult r, CancellationToken ct, string? fallback = null, string? exposure = null, string? assets = null)
     {
         try { return Results(Parse(await get(path, ct))); }
         catch (Exception ex) when (ex is FortinetApiException or JsonException or HttpRequestException)
@@ -322,6 +326,11 @@ public sealed class FortiGateAdapter : IInventoryAdapter
                 catch (Exception ex2) when (ex2 is FortinetApiException or JsonException or HttpRequestException) { ex = ex2; }
             }
             r.Warnings.Add("Skipped " + path + ": " + ex.Message);
+            if (ex is not FortinetApiException { Status: 404 })
+            {
+                if (exposure is not null) r.ExposureNotRead(exposure);
+                if (assets is not null) r.MarkPartial("The " + assets + " could not be listed; they are not aged out this run.");
+            }
             _log.LogWarning("FortiGate {Path} skipped: {Error}", path, ex.Message);
             return new List<JsonElement>();
         }

@@ -11,6 +11,7 @@
     <h1>Today</h1>
     <p class="lead">The digest, live. What to fix today, what to fix this week, what changed.</p>
 
+    <SetupChecklist />
     @if (_licenceWarning is not null)
     {
         <div class="alert alert-warn">@_licenceWarning <a href="/licence">Licence and updates</a>.</div>
@@ -166,6 +167,7 @@
 
     private async Task Snooze(Guid id)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await Workflow.SnoozeAsync(id, await ActorAsync(), DateTime.UtcNow.AddDays(7), "snoozed from Today");
         _notice = "Snoozed for 7 days.";
         await LoadAsync();
@@ -173,6 +175,7 @@
 
     private async Task SendNow()
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         _busy = true; _notice = null; _error = null;
         try
         {

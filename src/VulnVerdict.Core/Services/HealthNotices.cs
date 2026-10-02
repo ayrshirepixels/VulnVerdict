@@ -30,7 +30,34 @@ public sealed class HealthNotices
         var list = new List<Notice>();
         if (await MailFailureAsync(ct) is { } mail) list.Add(mail);
         list.AddRange(await SecretsAsync(DateTime.UtcNow, ct));
+        list.AddRange(await WebhookService.FailureNoticesAsync(_factory, ct));
+        list.AddRange(await HostKeysAsync(ct));
         return list;
+    }
+
+    /// <summary>
+    /// Connectors whose last run met SSH hosts it would not talk to: a key nobody has pinned, or one that differs
+    /// from the pinned key. The link opens the review prompt on the Connectors page.
+    /// </summary>
+    public async Task<List<Notice>> HostKeysAsync(CancellationToken ct = default)
+    {
+        var list = new List<Notice>();
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        foreach (var c in await db.Connectors.AsNoTracking().Where(c => c.Enabled && c.PendingHostKeysJson != null).ToListAsync(ct))
+        {
+            var keys = ConnectorService.PendingHostKeys(c);
+            var changed = keys.Count(k => k.Status == Adapters.Linux.HostKeyStatus.Changed);
+            var unpinned = keys.Count - changed;
+            if (keys.Count == 0) continue;
+            var link = "/connectors?review=" + c.Id;
+            if (changed > 0)
+                list.Add(new Notice(true, "Connector " + c.DisplayName + ": " + Hosts(changed) + " presented a different SSH host key from the pinned one. Check the server before replacing the key.", link));
+            if (unpinned > 0)
+                list.Add(new Notice(false, "Connector " + c.DisplayName + ": " + Hosts(unpinned) + (unpinned == 1 ? " has" : " have") + " no pinned SSH host key and " + (unpinned == 1 ? "was" : "were") + " not collected.", link));
+        }
+        return list;
+
+        static string Hosts(int n) => n + " host" + (n == 1 ? "" : "s");
     }
 
     /// <summary>Mail failed more recently than it last worked.</summary>

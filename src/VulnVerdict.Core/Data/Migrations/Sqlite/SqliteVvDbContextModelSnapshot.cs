@@ -107,6 +107,12 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("FailedPasswordCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FailedSecondFactorCount")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("TEXT");
 
@@ -114,13 +120,38 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                         .HasMaxLength(512)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("PasswordLockedUntil")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RecoveryCodeHashes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Role")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("SecondFactorLockedUntil")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TotpEnabledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TotpLastStep")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TotpSecret")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -450,6 +481,9 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.Property<DateTime?>("LastSuccess")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PendingHostKeysJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Progress")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
@@ -645,6 +679,72 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.HasIndex("GeneratedAt");
 
                     b.ToTable("DigestRuns");
+                });
+
+            modelBuilder.Entity("VulnVerdict.Core.Data.EolCycle", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Aliases")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Cycle")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CycleLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EoasFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EoesFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EolFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEol")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsMaintained")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Latest")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Link")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProductLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReleaseDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug", "Cycle")
+                        .IsUnique();
+
+                    b.ToTable("EolCycles");
                 });
 
             modelBuilder.Entity("VulnVerdict.Core.Data.EpssScore", b =>
@@ -849,6 +949,27 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.ToTable("Kev");
                 });
 
+            modelBuilder.Entity("VulnVerdict.Core.Data.MetricCounter", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Value")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Name", "Label");
+
+                    b.ToTable("MetricCounters");
+                });
+
             modelBuilder.Entity("VulnVerdict.Core.Data.Narrative", b =>
                 {
                     b.Property<string>("Key")
@@ -914,6 +1035,55 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.ToTable("OfficeReleases");
                 });
 
+            modelBuilder.Entity("VulnVerdict.Core.Data.OutboxMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FailedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("VerdictId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextAttemptAt");
+
+                    b.ToTable("Outbox", (string)null);
+                });
+
             modelBuilder.Entity("VulnVerdict.Core.Data.PackageVulnCache", b =>
                 {
                     b.Property<string>("Key")
@@ -958,6 +1128,44 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.HasIndex("AliasNorm");
 
                     b.ToTable("Aliases");
+                });
+
+            modelBuilder.Entity("VulnVerdict.Core.Data.SlaSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AcceptedRisk")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Backfilled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Open")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Overdue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Snoozed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day", "Tier")
+                        .IsUnique();
+
+                    b.ToTable("SlaSnapshots");
                 });
 
             modelBuilder.Entity("VulnVerdict.Core.Data.SoftwareInstance", b =>
@@ -1341,6 +1549,161 @@ namespace VulnVerdict.Core.Data.Migrations.Sqlite
                     b.HasIndex("VerdictId", "At");
 
                     b.ToTable("VerdictHistory");
+                });
+
+            modelBuilder.Entity("VulnVerdict.Core.Data.VexDocument", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CveId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DocumentId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Statements")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Provider", "Path")
+                        .IsUnique();
+
+                    b.ToTable("VexDocuments");
+                });
+
+            modelBuilder.Entity("VulnVerdict.Core.Data.VexStatement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Cpe")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CveId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DocumentDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DocumentId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Justification")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Platform")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlatformCpe")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlatformNorm")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProductNorm")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Purl")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Revision")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Vendor")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VendorNorm")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VersionRange")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CveId");
+
+                    b.HasIndex("Provider", "DocumentId");
+
+                    b.ToTable("VexStatements");
                 });
 
             modelBuilder.Entity("VulnVerdict.Core.Data.WatchlistEntry", b =>

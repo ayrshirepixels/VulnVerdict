@@ -33,7 +33,7 @@ public sealed record Subject(
 /// </summary>
 public static class SentenceBuilder
 {
-    public static string Build(Subject subject, DecisionInputs inputs, CvssVector? cvss, VerdictTier tier, string? fixedIn, MatchConfidence confidence, bool versionUnknown, IReadOnlyList<string>? modifiers = null)
+    public static string Build(Subject subject, DecisionInputs inputs, CvssVector? cvss, VerdictTier tier, string? fixedIn, MatchConfidence confidence, bool versionUnknown, IReadOnlyList<string>? modifiers = null, string? fixAdvice = null)
     {
         var head = subject.ProductText + (string.IsNullOrWhiteSpace(subject.Version) ? "" : " " + subject.Version) + (string.IsNullOrWhiteSpace(subject.AssetName) ? "" : " on " + subject.AssetName);
 
@@ -58,7 +58,9 @@ public static class SentenceBuilder
             _ => "not installed"
         };
 
-        var fix = !string.IsNullOrWhiteSpace(fixedIn) ? " Fixed in " + fixedIn + "."
+        // fixAdvice stands in for the fixed version when there will not be one (the release is past vendor support)
+        var fix = fixAdvice is not null ? " " + fixAdvice
+                : !string.IsNullOrWhiteSpace(fixedIn) ? " Fixed in " + fixedIn + "."
                 : tier >= VerdictTier.NextPatchCycle ? " Check the vendor advisory for the fix." : "";
 
         var modifier = modifiers is { Count: > 0 } ? " Lowered one step because " + string.Join(" and ", modifiers) + "." : "";

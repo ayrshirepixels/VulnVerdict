@@ -24,13 +24,18 @@
                     <td class="num">@g.Instances</td>
                     <td>@g.Version</td>
                     <td>
-                        <div class="suggest">
-                            <input class="input" type="text" value="@_search.GetValueOrDefault(key)" @oninput="e => Suggest(key, e.Value?.ToString() ?? string.Empty)" placeholder="@g.Product" autocomplete="off" />
-                            @if (_suggestions.TryGetValue(key, out var list) && list.Count > 0)
-                            {
-                                <ul>@foreach (var s in list) { <li @onclick="() => Accept(g, s)">@s.Vendor / @s.Product <small>@s.CveCount CVEs</small></li> }</ul>
-                            }
-                        </div>
+                        <AuthorizeView Roles="Administrator,Operator" Context="auth">
+                            <Authorized>
+                                <div class="suggest">
+                                    <input class="input" type="text" value="@_search.GetValueOrDefault(key)" @oninput="e => Suggest(key, e.Value?.ToString() ?? string.Empty)" placeholder="@g.Product" autocomplete="off" />
+                                    @if (_suggestions.TryGetValue(key, out var list) && list.Count > 0)
+                                    {
+                                        <ul>@foreach (var s in list) { <li @onclick="() => Accept(g, s)">@s.Vendor / @s.Product <small>@s.CveCount CVEs</small></li> }</ul>
+                                    }
+                                </div>
+                            </Authorized>
+                            <NotAuthorized><span class="muted">an operator maps this</span></NotAuthorized>
+                        </AuthorizeView>
                     </td>
                     <td><AuthorizeView Roles="Administrator,Operator" Context="auth"><button class="btn btn-secondary btn-sm" @onclick="() => Ignore(g)">Ignore</button></AuthorizeView></td>
                 </tr>
@@ -71,6 +76,7 @@
 
     private async Task Accept(Group g, CnaProduct target)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await Inventory.AcceptMappingAsync(g.VendorNorm, g.ProductNorm, target.VendorNorm, target.ProductNorm, await ActorAsync());
         await Settings.SetStateAsync(SettingsService.Keys.EvaluateRequested, "1");
         _notice = g.Product + " now maps to " + target.Vendor + " / " + target.Product + " (" + g.Instances + " installs). Verdicts follow within a minute.";
@@ -80,6 +86,7 @@
 
     private async Task Ignore(Group g)
     {
+        if (!await Ui.CanOperateAsync(AuthState)) return;
         await Inventory.IgnoreMappingAsync(g.VendorNorm, g.ProductNorm, await ActorAsync());
         _notice = g.Product + " ignored.";
         await LoadAsync();

@@ -23,8 +23,10 @@ exec_as_user() {
   HOME="$(getent passwd "$u" | cut -d: -f6)" exec setpriv --reuid="$u" --regid="$u" --init-groups -- "$@"
 }
 
-mkdir -p "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
+mkdir -p "$DATA/keys" "$DATA/caddy" "$DATA/cvelist" "$DATA/backups"
 chown -R vulnverdict:vulnverdict "$DATA/keys" "$DATA/caddy" "$DATA/cvelist"
+# not recursive and not fatal: the backups folder may be a mounted share with its own ownership
+{ chown vulnverdict:vulnverdict "$DATA/backups" && chmod 700 "$DATA/backups"; } 2>/dev/null || log "Could not set the owner of $DATA/backups; backups need it writable by uid $(id -u vulnverdict)"
 
 # ---------------------------------------------------------------- database
 case "${VV_DB:-embedded}" in
@@ -87,6 +89,8 @@ trap shutdown TERM INT
 
 # ---------------------------------------------------------------- application (console + worker)
 export Worker__CveMinYear="${CVE_MIN_YEAR:-0}"
+# optional: encrypt the console's encryption keys at rest (docs/security.md)
+if [ -n "${VV_KEY_SECRET:-}" ]; then export KeyProtection__Secret="$VV_KEY_SECRET"; fi
 # Behind Caddy the app listens on loopback only. With VV_TLS=off there is no Caddy, so it must listen
 # on the container's interface or the published port 8080 reaches nothing.
 if [ "${VV_TLS:-internal}" = "off" ]; then export ASPNETCORE_URLS="http://0.0.0.0:8080"; fi

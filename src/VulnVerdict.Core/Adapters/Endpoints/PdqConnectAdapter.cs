@@ -20,6 +20,8 @@ public sealed class PdqConnectAdapter : IInventoryAdapter
     private readonly IHttpClientFactory _http;
     private readonly ILogger _log;
     public Func<TimeSpan, CancellationToken, Task>? Delay { get; set; }
+    /// <summary>Page cap; a listing that reaches it is reported as partial instead of being taken for the whole fleet.</summary>
+    public int MaxPages { get; set; } = 10_000;
 
     public PdqConnectAdapter(IHttpClientFactory http, ILogger<PdqConnectAdapter>? log = null)
     {
@@ -58,13 +60,20 @@ public sealed class PdqConnectAdapter : IInventoryAdapter
     {
         var api = Open(credentials);
         var result = new CollectResult { FullSnapshot = true };
-        var noPatchLevel = 0; var stale = 0;
-        for (var page = 1; page < 10_000; page++)
+        var noPatchLevel = 0; var stale = 0; var noSoftware = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (var page = 1; ; page++)
         {
+            if (page > MaxPages) { result.MarkPartial(EndpointPaging.CapHit("devices", MaxPages)); break; }
             progress?.Report("Reading devices, page " + page);
             var batch = EpJson.Items(await api.GetJsonAsync(DevicesPath(page), ct));
+            // the API gives no total: the listing ends at an empty page (or one that repeats devices already read),
+            // never at a short one
+            var fresh = 0;
             foreach (var d in batch)
             {
+                if (EpJson.Str(d, "id") is { } deviceId && !ids.Add(deviceId)) continue;
+                fresh++;
                 if (EndpointNaming.IsStale(EpJson.Str(d, "lastSeenAt", "lastSeen", "lastOnlineAt"))) { stale++; continue; }
                 var mapped = MapDevice(d);
                 if (mapped is null) continue;
@@ -72,9 +81,12 @@ public sealed class PdqConnectAdapter : IInventoryAdapter
                 if (mapped.Value.Os is not null) result.Software.Add(mapped.Value.Os);
                 else if (mapped.Value.Asset.OsVendor == "Microsoft") noPatchLevel++;
                 result.Software.AddRange(mapped.Value.Apps);
+                // no software array is "not reported", not "nothing installed": keep what an earlier run recorded
+                if (EpJson.At(d, "software") is not { ValueKind: JsonValueKind.Array }) { noSoftware++; result.IncompleteSoftware.Add(mapped.Value.Asset.ExternalId); }
             }
-            if (batch.Count < PageSize) break;
+            if (fresh == 0) break;
         }
+        if (noSoftware > 0) result.Warnings.Add(noSoftware + " device(s) came back without a software list; what an earlier run recorded for them is kept.");
         if (stale > 0) result.Warnings.Add(stale + " device(s) not seen for " + EndpointNaming.StaleDays + " days were left out.");
         if (noPatchLevel > 0) result.Warnings.Add(noPatchLevel + " Windows device(s) without the update revision: their OS CVEs are assessed only where another connector (WinRM, Intune, Defender, ConfigMgr) sees them.");
         _log.LogInformation("PDQ Connect: {Devices} devices, {Software} software records", result.Assets.Count, result.Software.Count);

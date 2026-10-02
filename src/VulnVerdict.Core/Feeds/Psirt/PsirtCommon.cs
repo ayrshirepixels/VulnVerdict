@@ -106,7 +106,8 @@ public static partial class PsirtStore
 
     /// <summary>
     /// Insert or update advisories by (Vendor, AdvisoryId) in one transaction. Idempotent. Null incoming Title, Url, dates,
-    /// AffectedJson and Severity keep the stored value; an empty CVE list keeps a stored non-empty list.
+    /// AffectedJson and Severity keep the stored value; an empty CVE list keeps a stored non-empty list. See <see cref="Merge"/>
+    /// for older incoming rows and the exploitation flag.
     /// </summary>
     public static async Task<int> UpsertAsync(VvDbContext db, string vendor, IEnumerable<Advisory> rows, CancellationToken ct)
     {
@@ -130,8 +131,24 @@ public static partial class PsirtStore
         return unique.Count;
     }
 
+    /// <summary>
+    /// Fold an incoming advisory into the stored one. An incoming row older than the stored one (a history backfill reading
+    /// an earlier monthly document after a later one) only fills blanks, so it cannot roll back fixed builds.
+    /// ExploitedInTheWild is sticky: once any source said yes, a later row without the statement does not clear it.
+    /// </summary>
     private static void Merge(Advisory from, Advisory to)
     {
+        to.ExploitedInTheWild |= from.ExploitedInTheWild;
+        if (from.Updated is { } fu && to.Updated is { } tu && fu < tu)
+        {
+            to.Title ??= from.Title;
+            to.Url ??= from.Url;
+            to.Published ??= from.Published;
+            if (to.CveIdsJson is null or "" or "[]" && from.CveIdsJson is { Length: > 0 } ids && ids != "[]") to.CveIdsJson = ids;
+            if (to.AffectedJson is null or "" or "[]") to.AffectedJson = from.AffectedJson ?? to.AffectedJson;
+            to.Severity ??= from.Severity;
+            return;
+        }
         to.Title = from.Title ?? to.Title;
         to.Url = from.Url ?? to.Url;
         to.Published = from.Published ?? to.Published;
@@ -139,7 +156,6 @@ public static partial class PsirtStore
         if (from.CveIdsJson is not (null or "" or "[]") || string.IsNullOrEmpty(to.CveIdsJson)) to.CveIdsJson = from.CveIdsJson;
         to.AffectedJson = from.AffectedJson ?? to.AffectedJson;
         to.Severity = from.Severity ?? to.Severity;
-        to.ExploitedInTheWild = from.ExploitedInTheWild;
         to.RetrievedAt = from.RetrievedAt;
     }
 

@@ -13,7 +13,13 @@ cp .env.example .env        # set DB_PASSWORD and VV_HOSTNAME
 docker compose up -d
 ```
 
-That downloads the latest release's Compose files (the compose file, Caddyfile, `.env.example` set to that release's images, and the update and rollback scripts) and runs the published, scanned images. Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account.
+That downloads the latest release's Compose files (the compose file, Caddyfile, `.env.example` set to that release's images, and the update and rollback scripts) and runs the published, scanned images. Open `https://<VV_HOSTNAME>/`. The first page creates the local administrator account and asks for the setup token, a one-time code the console prints in its log on first start so that only someone with access to the server can claim the console:
+
+```bash
+docker compose logs web | grep -i "setup token"
+```
+
+The token is also in the file `setup-token` in the data volume until the account exists (`docker compose exec web cat /data/setup-token`), and stops working once it does.
 
 To build from source instead: clone the repository, `cd deploy`, comment out `VV_IMAGE` in `.env`, and run `docker compose up -d --build`.
 
@@ -29,6 +35,8 @@ docker run -d --name vulnverdict --restart unless-stopped \
   ghcr.io/ayrshirepixels/vulnverdict:allinone
 ```
 
+The setup token for the first page is in the container log: `docker logs vulnverdict 2>&1 | grep -i "setup token"`.
+
 Build it with `docker build -f Dockerfile.allinone -t vulnverdict:allinone .`. Options: `VV_TLS=public` for Let's Encrypt on a public name, `VV_TLS=off` to expose plain HTTP on 8080 behind your own proxy, `VV_DB=sqlite` to skip Postgres for small estates, `VV_DB=external` with `Database__ConnectionString` to use your own Postgres. Back up the `vulnverdict` volume; it holds the database, the keys and the CA. The trade-off against Option A is that the database lifecycle (major-version upgrades, separate backups) is tied to the application container; the Compose stack is the better fit when someone already runs Postgres.
 
 ## Option B: the appliance (a VM)
@@ -41,7 +49,7 @@ Download `vulnverdict-<version>.ova` and its `.sha256` from the [latest release]
 - **Proxmox:** `qm importovf <vmid> vulnverdict-<version>.ovf <storage>` after unpacking the OVA with `tar -xf`.
 - **Hyper-V:** convert the OVA's disk (the Hyper-V disk is too large to attach to a release): `tar -xf vulnverdict-<version>.ova`, then `qemu-img convert -O vhdx -o subformat=dynamic vulnverdict-<version>-disk1.vmdk vulnverdict.vhdx`. Attach it to a **generation 1** VM with 2 vCPU, 4096 MB static memory and one network adapter.
 
-Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL. SSH is off until the wizard has run, so the build's default password is never reachable over the network.
+Start it and answer the questions on its console: the hostname the console will answer on, and a password for the local `vulnverdict` account. The wizard then gives this appliance its own database password, SSH host keys and machine ID, turns SSH on, starts the stack and prints the URL and the setup token the console's first page asks for (later, `cd /opt/vulnverdict && sudo docker compose logs web | grep -i "setup token"` shows it again). SSH is off until the wizard has run, so the build's default password is never reachable over the network.
 
 The appliance installs Ubuntu's security updates automatically. The first run starts a few minutes after first boot, so a reboot in that window can take several minutes to complete while it finishes; later reboots are quick.
 
@@ -54,6 +62,10 @@ To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: P
 3. **Connectors**: add the sources you have, in the order they pay off: endpoint management, Windows servers (WinRM), your firewall, hypervisor, Linux (SSH), SBOMs from CI, SNMP for the management network, a discovery sweep, the external cross-check. Each needs a hostname and a read-only account; the form tells you the minimum permission.
 4. Check **Needs mapping** once the first collections land: anything a connector reported that could not be tied to a vendor's CVE naming is listed there for a one-click mapping.
 5. **Sources** shows feed health and what each feed is doing.
+
+Until all of that is done, **Today** shows administrators a short setup checklist: mail, digest recipients, something to match (a watchlist entry or a connector), the CVE baseline, the first evaluation and the first digest. Each line links to the page that settles it, and the card can be hidden per browser.
+
+The console works on a phone (the menu is behind the button in the top bar) and follows the device's light or dark setting; the Auto / Light / Dark switch at the foot of the menu pins one for that browser. It can also be installed from the browser's menu ("Install app" or "Add to Home Screen"). An installed console is the same site in its own window: it needs its connection to the server and has no offline mode.
 
 ### What the first hour looks like
 
@@ -72,12 +84,29 @@ Caddy issues a certificate from its internal CA for an internal hostname (import
 
 ## Updating and rolling back
 
-Updates are opt-in. `./update.sh [tag]` (in the Compose folder, or `/opt/vulnverdict` on the appliance) pulls the new image, keeps the previous one, moves the database and proxy to the images released with it, restarts web and worker, and rolls back automatically if the console does not answer within a minute. `./rollback.sh` returns the console to the previous image. Database migrations are additive, so an older image runs against a newer schema. The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume.
+Updates are opt-in. In the Compose folder, or `/opt/vulnverdict` on the appliance (with `sudo`):
+
+```bash
+./update.sh            # to the latest release; ./update.sh 1.4.0 for a particular one
+./update.sh --dry-run  # show what it would do
+```
+
+`update.sh` notes which images are running (console, worker, database, proxy), pulls the new ones, and keeps the old ones under `:rollback` tags. It then stops the console and worker, dumps the database to `backups/pre-update-<time>.dump` in the same folder and checks that the dump reads back; if it cannot take that backup it starts the old version again and stops. Only then does it start the new images, the database first, then the console and worker (migrations run on start), then the proxy. If any of them does not come up, it rolls everything back by itself. Expect the console to be away for a minute or two. Running it again with the same release does nothing.
+
+`./rollback.sh` puts all four images back by hand, for the release that came up but turned out wrong. A newer console may have changed the database schema, which the older one cannot be assumed to run against, so when the schema has moved it asks whether to restore the pre-update dump (everything recorded since the update is lost); `--restore-db` or `--keep-db` answers in advance, and with nobody to ask and neither given it changes nothing. The last three pre-update dumps are kept; they hold your data, so the `backups` folder is readable by root only.
+
+On an air-gapped site, load the release's images with `docker load` and run `./update.sh --no-pull <tag>`.
+
+The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume. Press **Back up now** (Settings, Backups) first, or copy the latest file from the backups folder: rolling back means recreating the container from the previous image and, if the schema moved, restoring that backup with `restore.sh --container` (see [backup](backup.md)).
 
 ## Air-gapped sites
 
-Set no bundle URL and upload a signed feed bundle under **Licence and updates** (see `docs/security.md` for how bundles are signed and verified). The console refuses unsigned or older bundles.
+Set no bundle URL and upload a signed feed bundle under **Licence and updates** (see `docs/security.md` for how bundles are signed and verified). The console refuses unsigned or older bundles. While it is fed by bundles no feed calls out, including the vendor VEX and end-of-life feeds; that data arrives in the bundle when the central service includes it.
 
 ## Backups
 
-Back up the `db` volume (Postgres) and the `data` volume (data-protection keys, which encrypt stored credentials and secrets). Without the keys a restored database cannot decrypt connector credentials; everything else survives.
+The worker backs up the database and the data-protection keys every night at 02:30 into the `backups` folder of the data volume, checks each backup, keeps 14 daily and 8 weekly, and tells you (Sources page, digest footer, administrator alert) when one fails or the last good one is older than 48 hours. By default that folder is a Docker volume on the same machine: set `VV_BACKUP_DIR` in `.env` to a mounted share or another disk so the backups survive the machine, and consider the archive passphrase, because a backup and its keys together open every stored credential. `./restore.sh` puts one back. All of it, including restoring onto a new machine, is in [backup](backup.md).
+
+## Monitoring
+
+`GET /metrics` serves Prometheus metrics (backlog by tier, overdue, feed and connector freshness, mail, backup age) once an administrator turns it on under Settings; it needs the metrics token or a listed scraper address. See [metrics](metrics.md) for the list, a scrape configuration and a starter Grafana dashboard.

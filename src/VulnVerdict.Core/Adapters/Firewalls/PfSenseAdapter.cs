@@ -78,9 +78,13 @@ public sealed partial class PfSenseAdapter : IInventoryAdapter
         if (cfg.Ok && cfg.Output.Contains("<pfsense", StringComparison.Ordinal))
         {
             try { config = XElement.Parse(cfg.Output); }
-            catch (System.Xml.XmlException ex) { r.Warnings.Add("config.xml could not be parsed: " + ex.Message); }
+            catch (System.Xml.XmlException ex) { r.Warnings.Add("config.xml could not be parsed: " + ex.Message); r.ExposureNotRead("config.xml could not be parsed"); }
         }
-        else r.Warnings.Add("config.xml is not readable by this account (" + (cfg.Error.Trim() is { Length: > 0 } e ? e : "exit " + cfg.ExitStatus) + "); exposure not collected.");
+        else
+        {
+            r.Warnings.Add("config.xml is not readable by this account (" + (cfg.Error.Trim() is { Length: > 0 } e ? e : "exit " + cfg.ExitStatus) + "); exposure not collected.");
+            r.ExposureNotRead("config.xml is not readable");
+        }
 
         var id = hostname.Length > 0 ? hostname : target.Host;
         var device = new DeviceExposure();

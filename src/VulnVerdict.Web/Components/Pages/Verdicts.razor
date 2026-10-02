@@ -1,5 +1,6 @@
 @page "/verdicts"
 @inject IDbContextFactory<VvDbContext> Db
+@inject VerdictWorkflow Workflow
 @inject NavigationManager Nav
 
 <PageTitle>Verdicts - VulnVerdict</PageTitle>
@@ -9,7 +10,7 @@
     <p class="lead">Every CVE matched against the watchlist, including the ones dismissed. Not affected verdicts keep their evidence so a bad match can be spotted.</p>
 
     <div class="filters">
-        <select @bind="_tier" @bind:after="Reload">
+        <select @bind="_tier" @bind:after="FilterChanged" aria-label="Verdict">
             <option value="">Any verdict</option>
             <option value="FixToday">Fix today</option>
             <option value="FixThisWeek">Fix this week</option>
@@ -17,7 +18,7 @@
             <option value="IgnoreTracked">Ignore (tracked)</option>
             <option value="NotAffected">Not affected</option>
         </select>
-        <select @bind="_state" @bind:after="Reload">
+        <select @bind="_state" @bind:after="FilterChanged" aria-label="State">
             <option value="">Any state</option>
             <option value="Open">Open</option>
             <option value="Closed">Closed</option>
@@ -25,15 +26,44 @@
             <option value="Suppressed">Suppressed</option>
             <option value="AcceptedRisk">Accepted risk</option>
         </select>
-        <select @bind="_confidence" @bind:after="Reload">
+        <select @bind="_confidence" @bind:after="FilterChanged" aria-label="Match confidence">
             <option value="">Any confidence</option>
             <option value="Exact">Exact</option>
             <option value="Likely">Likely</option>
             <option value="Possible">Check this</option>
         </select>
-        <input type="text" placeholder="CVE id, product or asset" @bind="_search" @bind:event="oninput" @bind:after="Reload" style="min-width:240px" />
-        <span class="muted">@_total match@(_total == 1 ? "" : "es")@(_total > PageSize ? ", first " + PageSize + " shown" : "")</span>
+        <input type="text" placeholder="CVE id" aria-label="CVE id" @bind="_cve" @bind:event="oninput" @bind:after="FilterChanged" style="width:150px" />
+        <input type="text" placeholder="Product" aria-label="Product" @bind="_product" @bind:event="oninput" @bind:after="FilterChanged" style="width:150px" />
+        <input type="text" placeholder="Asset" aria-label="Asset" @bind="_asset" @bind:event="oninput" @bind:after="FilterChanged" style="width:150px" />
+        <input type="text" placeholder="Search all of these" aria-label="Search CVE id, product or asset" @bind="_search" @bind:event="oninput" @bind:after="FilterChanged" style="min-width:180px" />
+        <span class="muted">@_total match@(_total == 1 ? "" : "es")@(_total > PageSize ? ", " + (_page * PageSize + 1) + " to " + Math.Min(_total, (_page + 1) * PageSize) + " shown" : "")</span>
     </div>
+
+    @if (_notice is not null) { <div class="alert alert-ok" role="status">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error" role="alert">@_error</div> }
+
+    @if (_canOperate && _selected.Count > 0)
+    {
+        <div class="btn-row" role="toolbar" aria-label="Actions for the selected verdicts" style="margin:0 0 12px">
+            <b>@_selected.Count selected</b>
+            <button class="btn btn-sm" disabled="@(Count(VerdictWorkflow.BulkAction.Done) == 0)" @onclick="() => Open(VerdictWorkflow.BulkAction.Done)">Done</button>
+            <button class="btn btn-secondary btn-sm" disabled="@(Count(VerdictWorkflow.BulkAction.Snooze) == 0)" @onclick="() => Open(VerdictWorkflow.BulkAction.Snooze)">Snooze</button>
+            <button class="btn btn-secondary btn-sm" disabled="@(Count(VerdictWorkflow.BulkAction.AcceptRisk) == 0)" @onclick="() => Open(VerdictWorkflow.BulkAction.AcceptRisk)">Accept risk</button>
+            <button class="btn btn-secondary btn-sm" disabled="@(Count(VerdictWorkflow.BulkAction.Reopen) == 0)" @onclick="() => Open(VerdictWorkflow.BulkAction.Reopen)">Re-open</button>
+            <button class="btn btn-secondary btn-sm" @onclick="ClearSelection">Clear selection</button>
+            @if (_rows is not null && _total > _rows.Count && AllOnPage && _selected.Count < _total)
+            {
+                @if (_total <= VerdictWorkflow.MaxBulk)
+                {
+                    <button class="btn btn-secondary btn-sm" @onclick="SelectAllMatching">Select all @_total matching this filter</button>
+                }
+                else
+                {
+                    <span class="muted">@_total match this filter. At most @VerdictWorkflow.MaxBulk can be changed at once, so narrow the filter to select them all.</span>
+                }
+            }
+        </div>
+    }
 
     @if (_rows is null)
     {
@@ -41,28 +71,131 @@
     }
     else
     {
-        <table class="table">
-            <thead>
-                <tr><th>Verdict</th><th>CVE</th><th>Product</th><th>Sentence</th><th>State</th><th>Due</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var v in _rows)
-                {
+        <div style="overflow-x:auto;width:0;min-width:100%">
+            <table class="table">
+                <thead>
                     <tr>
-                        <td><TierBadge Tier="v.Tier" Rule="v.RuleNumber" Confidence="v.Confidence" /></td>
-                        <td><a href="/verdicts/@v.Id">@v.CveId</a></td>
-                        <td>@v.WatchlistEntry?.DisplayName<br /><small>@v.WatchlistEntry?.Vendor @v.WatchlistEntry?.Product @v.WatchlistEntry?.Version</small></td>
-                        <td>@v.Sentence</td>
-                        <td><span class="@Ui.StateClass(v.State)">@v.State.Plain()</span></td>
-                        <td>@(v.SlaDue?.ToString("d MMM") ?? "-")</td>
+                        @if (_canOperate)
+                        {
+                            <th style="width:1%"><input type="checkbox" aria-label="Select every verdict on this page" checked="@AllOnPage" disabled="@(_rows.Count == 0)" @onclick="TogglePage" /></th>
+                        }
+                        <th>Verdict</th><th>CVE</th><th>Product</th><th>Sentence</th><th>State</th><th>Due</th>
                     </tr>
-                }
-                @if (_rows.Count == 0)
+                </thead>
+                <tbody>
+                    @for (var n = 0; n < _rows.Count; n++)
+                    {
+                        var i = n;
+                        var v = _rows[i];
+                        <tr @key="v.Id">
+                            @if (_canOperate)
+                            {
+                                <td><input type="checkbox" aria-label="Select @v.CveId on @(v.WatchlistEntry?.DisplayName ?? v.Subject)" checked="@_selected.ContainsKey(v.Id)" @onclick="e => Toggle(i, e)" /></td>
+                            }
+                            <td><TierBadge Tier="v.Tier" Rule="v.RuleNumber" Confidence="v.Confidence" /></td>
+                            <td><a href="/verdicts/@v.Id">@v.CveId</a></td>
+                            <td>
+                                @if (v.WatchlistEntry is not null) { <text>@v.WatchlistEntry.DisplayName<br /><small>@v.WatchlistEntry.Vendor @v.WatchlistEntry.Product @v.WatchlistEntry.Version</small></text> }
+                                else { <text>@v.Subject</text> }
+                            </td>
+                            <td>@v.Sentence</td>
+                            <td><span class="@Ui.StateClass(v.State)">@v.State.Plain()</span></td>
+                            <td>@(v.SlaDue?.ToString("d MMM") ?? "-")</td>
+                        </tr>
+                    }
+                    @if (_rows.Count == 0)
+                    {
+                        <tr><td colspan="@(_canOperate ? 7 : 6)" class="muted">No verdicts match these filters.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_total > PageSize)
+        {
+            <div class="btn-row" style="margin-top:12px">
+                <button class="btn btn-secondary btn-sm" disabled="@(_page == 0)" @onclick="() => GoTo(_page - 1)">Previous</button>
+                <span class="muted">Page @(_page + 1) of @Pages</span>
+                <button class="btn btn-secondary btn-sm" disabled="@(_page + 1 >= Pages)" @onclick="() => GoTo(_page + 1)">Next</button>
+            </div>
+        }
+        @if (_canOperate && _rows.Count > 0)
+        {
+            <p class="muted" style="font-size:12px;margin:10px 0 0">Tick verdicts to mark them done, snooze them, accept the risk or re-open them together. Hold Shift and tick to select a run.</p>
+        }
+    }
+
+    @if (_dialog is { } action)
+    {
+        var applies = Applicable(action);
+        var left = _selected.Count - applies.Count;
+        <div class="dialog-backdrop" @onclick="() => _dialog = null">
+            <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-title" @onclick:stopPropagation="true">
+                <h3 id="bulk-title">@(action switch
                 {
-                    <tr><td colspan="6" class="muted">No verdicts match these filters.</td></tr>
+                    VerdictWorkflow.BulkAction.Done => "Mark as done",
+                    VerdictWorkflow.BulkAction.Snooze => "Snooze",
+                    VerdictWorkflow.BulkAction.AcceptRisk => "Accept the risk",
+                    _ => "Re-open"
+                })</h3>
+                <p><b>@VerdictWorkflow.TierSummary(applies.Select(x => x.Tier))</b></p>
+                @if (left > 0)
+                {
+                    <p class="muted">@left of the @_selected.Count selected @(left == 1 ? "is" : "are") @(action switch
+                    {
+                        VerdictWorkflow.BulkAction.Done => "already closed",
+                        VerdictWorkflow.BulkAction.Reopen => "already open",
+                        _ => "not open"
+                    }) and will be left as @(left == 1 ? "it is" : "they are").</p>
                 }
-            </tbody>
-        </table>
+                @switch (action)
+                {
+                    case VerdictWorkflow.BulkAction.Done:
+                        <p class="muted">Each one is closed with its own history line. Watchlist versions are not changed here: to record an upgrade and close everything it fixes, mark one of them done from its own page.</p>
+                        <div class="form"><div><label for="bulk-note">Note (optional)</label><input id="bulk-note" type="text" @bind="_reason" placeholder="change CHG-1042" /></div></div>
+                        break;
+                    case VerdictWorkflow.BulkAction.Snooze:
+                        <div class="form">
+                            <div>
+                                <label for="bulk-for">For</label>
+                                <select id="bulk-for" @bind="_snoozeDays">
+                                    <option value="1">1 day</option>
+                                    <option value="3">3 days</option>
+                                    <option value="7">1 week</option>
+                                    <option value="14">2 weeks</option>
+                                    <option value="30">30 days</option>
+                                    <option value="0">Until a date</option>
+                                </select>
+                            </div>
+                            @if (_snoozeDays == 0)
+                            {
+                                <div><label for="bulk-until">Until</label><input id="bulk-until" type="date" @bind="_date" /></div>
+                            }
+                            <div><label for="bulk-reason">Reason</label><input id="bulk-reason" type="text" @bind="_reason" placeholder="change window on the 30th" /></div>
+                        </div>
+                        break;
+                    case VerdictWorkflow.BulkAction.AcceptRisk:
+                        <div class="form">
+                            <div><label for="bulk-owner">Owner</label><input id="bulk-owner" type="text" @bind="_owner" placeholder="who is accountable" /></div>
+                            <div><label for="bulk-reason">Reason</label><input id="bulk-reason" type="text" @bind="_reason" placeholder="feature disabled by configuration, WAF in front, ..." /></div>
+                            <div><label for="bulk-expiry">Expires (optional)</label><input id="bulk-expiry" type="date" @bind="_date" /></div>
+                        </div>
+                        break;
+                    default:
+                        <p class="muted">Each one goes back to Open. Snooze dates, accepted-risk expiries and owners are cleared.</p>
+                        break;
+                }
+                <div class="btn-row" style="margin-top:14px">
+                    <button class="btn" disabled="@(_busy || applies.Count == 0)" @onclick="Confirm">@(_busy ? "Working..." : action switch
+                    {
+                        VerdictWorkflow.BulkAction.Done => "Confirm done",
+                        VerdictWorkflow.BulkAction.Snooze => "Snooze",
+                        VerdictWorkflow.BulkAction.AcceptRisk => "Accept risk",
+                        _ => "Re-open"
+                    })</button>
+                    <button class="btn btn-secondary" @onclick="() => _dialog = null">Cancel</button>
+                </div>
+            </div>
+        </div>
     }
 </div>
 
@@ -71,32 +204,180 @@
     [SupplyParameterFromQuery(Name = "tier")] public string? TierQuery { get; set; }
     [SupplyParameterFromQuery(Name = "state")] public string? StateQuery { get; set; }
     [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
-    private string _tier = "", _state = "", _confidence = "", _search = "";
+    [SupplyParameterFromQuery(Name = "cve")] public string? CveQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "product")] public string? ProductQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "asset")] public string? AssetQuery { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string _tier = "", _state = "", _confidence = "", _search = "", _cve = "", _product = "", _asset = "";
     private List<Verdict>? _rows;
-    private int _total;
+    private int _total, _page;
+    private int Pages => Math.Max(1, (_total + PageSize - 1) / PageSize);
+
+    // bulk selection: each verdict as it looked when it was ticked, so the service can tell what has moved on since
+    private readonly Dictionary<Guid, VerdictWorkflow.BulkItem> _selected = new();
+    private bool _canOperate, _busy;
+    private int? _anchor;
+    private VerdictWorkflow.BulkAction? _dialog;
+    private string _reason = "", _owner = "";
+    private int _snoozeDays = 7;
+    private DateTime? _date;
+    private string? _notice, _error;
+
+    private bool AllOnPage => _rows is { Count: > 0 } && _rows.All(v => _selected.ContainsKey(v.Id));
 
     protected override async Task OnInitializedAsync()
     {
         _tier = TierQuery ?? "";
         _state = StateQuery ?? (string.IsNullOrEmpty(TierQuery) ? "Open" : "");
         _search = SearchQuery ?? "";
+        _cve = CveQuery ?? ""; _product = ProductQuery ?? ""; _asset = AssetQuery ?? "";
+        // decides whether the tick boxes are drawn; the action itself checks again, and so does the service
+        _canOperate = Ui.CanOperate((await AuthState).User);
         await Reload();
+    }
+
+    private IQueryable<Verdict> Filtered(VvDbContext db)
+    {
+        var q = db.Verdicts.AsNoTracking().AsQueryable();
+        if (Enum.TryParse<VerdictTier>(_tier, out var t)) q = q.Where(v => v.Tier == t);
+        if (Enum.TryParse<VerdictState>(_state, out var s)) q = q.Where(v => v.State == s);
+        if (Enum.TryParse<MatchConfidence>(_confidence, out var c)) q = q.Where(v => v.Confidence == c);
+        if (!string.IsNullOrWhiteSpace(_cve))
+        {
+            var id = _cve.Trim().ToUpperInvariant();
+            q = q.Where(v => v.CveId.Contains(id));
+        }
+        // Subject is the snapshot "vendor product version on asset": it is what an inventory verdict has in place of a watchlist entry
+        if (!string.IsNullOrWhiteSpace(_product))
+        {
+            var low = _product.Trim().ToLowerInvariant();
+            var norm = Normalizer.Norm(_product);
+            q = norm.Length == 0
+                ? q.Where(v => v.Subject.ToLower().Contains(low))
+                : q.Where(v => (v.WatchlistEntry != null && (v.WatchlistEntry.ProductNorm.Contains(norm) || v.WatchlistEntry.VendorNorm.Contains(norm) || (v.WatchlistEntry.VendorNorm + v.WatchlistEntry.ProductNorm).Contains(norm)))
+                               || (v.WatchlistEntryId == null && v.Subject.ToLower().Contains(low)));
+        }
+        if (!string.IsNullOrWhiteSpace(_asset))
+        {
+            var low = _asset.Trim().ToLowerInvariant();
+            q = q.Where(v => (v.WatchlistEntry != null && v.WatchlistEntry.AssetName != null && v.WatchlistEntry.AssetName.ToLower().Contains(low))
+                             || (v.Asset != null && v.Asset.DisplayName.ToLower().Contains(low)));
+        }
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var term = _search.Trim();
+            var low = term.ToLowerInvariant();
+            var norm = Normalizer.Norm(term);
+            q = q.Where(v => v.CveId.Contains(term.ToUpper()) || v.Subject.ToLower().Contains(low)
+                             || (v.WatchlistEntry != null && ((norm != "" && (v.WatchlistEntry.ProductNorm.Contains(norm) || v.WatchlistEntry.VendorNorm.Contains(norm)))
+                                                              || (v.WatchlistEntry.AssetName != null && v.WatchlistEntry.AssetName.ToLower().Contains(low)))));
+        }
+        return q;
+    }
+
+    /// <summary>A filter changed: back to the first page, and nothing stays ticked that the new list may not show.</summary>
+    private Task FilterChanged()
+    {
+        _page = 0;
+        ClearSelection();
+        return Reload();
+    }
+
+    private Task GoTo(int page)
+    {
+        _page = Math.Clamp(page, 0, Pages - 1);
+        _anchor = null;
+        return Reload();
     }
 
     private async Task Reload()
     {
         await using var db = await Db.CreateDbContextAsync();
-        var q = db.Verdicts.AsNoTracking().Include(v => v.WatchlistEntry).AsQueryable();
-        if (Enum.TryParse<VerdictTier>(_tier, out var t)) q = q.Where(v => v.Tier == t);
-        if (Enum.TryParse<VerdictState>(_state, out var s)) q = q.Where(v => v.State == s);
-        if (Enum.TryParse<MatchConfidence>(_confidence, out var c)) q = q.Where(v => v.Confidence == c);
-        if (!string.IsNullOrWhiteSpace(_search))
-        {
-            var term = _search.Trim();
-            var norm = Normalizer.Norm(term);
-            q = q.Where(v => v.CveId.Contains(term.ToUpper()) || v.WatchlistEntry!.ProductNorm.Contains(norm) || v.WatchlistEntry.VendorNorm.Contains(norm) || (v.WatchlistEntry.AssetName != null && v.WatchlistEntry.AssetName.Contains(term)));
-        }
+        var q = Filtered(db);
         _total = await q.CountAsync();
-        _rows = await q.OrderByDescending(v => v.Tier).ThenBy(v => v.SlaDue).ThenByDescending(v => v.UpdatedAt).Take(PageSize).ToListAsync();
+        if (_page > 0 && _page * PageSize >= _total) _page = Math.Max(0, Pages - 1);
+        _rows = await q.Include(v => v.WatchlistEntry).OrderByDescending(v => v.Tier).ThenBy(v => v.SlaDue).ThenByDescending(v => v.UpdatedAt).ThenBy(v => v.Id)
+                       .Skip(_page * PageSize).Take(PageSize).ToListAsync();
+    }
+
+    // ------------------------------------------------------------------ selection
+
+    private static VerdictWorkflow.BulkItem Seen(Verdict v) => new(v.Id, v.State, v.StateChangedAt, v.Tier);
+
+    private void Set(Verdict v, bool on)
+    {
+        if (on) _selected[v.Id] = Seen(v); else _selected.Remove(v.Id);
+    }
+
+    /// <summary>Tick or untick a row. With Shift held, every row between this one and the last one touched follows it.</summary>
+    private void Toggle(int index, MouseEventArgs e)
+    {
+        if (_rows is null || index >= _rows.Count) return;
+        var on = !_selected.ContainsKey(_rows[index].Id);
+        var from = e.ShiftKey && _anchor is { } a && a < _rows.Count ? Math.Min(a, index) : index;
+        var to = e.ShiftKey && _anchor is { } b && b < _rows.Count ? Math.Max(b, index) : index;
+        for (var i = from; i <= to; i++) Set(_rows[i], on);
+        _anchor = index;
+    }
+
+    private void TogglePage()
+    {
+        if (_rows is null) return;
+        var on = !AllOnPage;
+        foreach (var v in _rows) Set(v, on);
+        _anchor = null;
+    }
+
+    private void ClearSelection()
+    {
+        _selected.Clear();
+        _anchor = null;
+    }
+
+    /// <summary>Every verdict the filter matches, not only the page on screen. Offered only up to the bulk limit.</summary>
+    private async Task SelectAllMatching()
+    {
+        await using var db = await Db.CreateDbContextAsync();
+        var all = await Filtered(db).Select(v => new { v.Id, v.State, v.StateChangedAt, v.Tier }).Take(VerdictWorkflow.MaxBulk).ToListAsync();
+        foreach (var x in all) _selected[x.Id] = new VerdictWorkflow.BulkItem(x.Id, x.State, x.StateChangedAt, x.Tier);
+    }
+
+    // ------------------------------------------------------------------ bulk actions
+
+    private List<VerdictWorkflow.BulkItem> Applicable(VerdictWorkflow.BulkAction action) => _selected.Values.Where(x => VerdictWorkflow.Applies(action, x.State)).ToList();
+    private int Count(VerdictWorkflow.BulkAction action) => _selected.Values.Count(x => VerdictWorkflow.Applies(action, x.State));
+
+    private void Open(VerdictWorkflow.BulkAction action)
+    {
+        _notice = null; _error = null;
+        _reason = ""; _owner = ""; _date = null; _snoozeDays = 7;
+        _dialog = action;
+    }
+
+    private async Task Confirm()
+    {
+        if (_dialog is not { } action || _busy) return;
+        _error = null; _notice = null;
+        // event handlers check the role themselves: a hidden tick box is not access control
+        if (!await Ui.CanOperateAsync(AuthState)) { _dialog = null; return; }
+        _busy = true;
+        try
+        {
+            // same defaults as the single actions on the verdict page
+            DateTime? until = action switch
+            {
+                VerdictWorkflow.BulkAction.Snooze => _snoozeDays > 0 ? DateTime.UtcNow.AddDays(_snoozeDays) : (_date ?? DateTime.UtcNow.AddDays(7)).ToUniversalTime(),
+                VerdictWorkflow.BulkAction.AcceptRisk => _date?.ToUniversalTime(),
+                _ => null
+            };
+            var result = await Workflow.BulkAsync((await AuthState).User, new VerdictWorkflow.BulkRequest(action, Applicable(action), _reason, until, _owner));
+            _notice = result.Summary;
+            _dialog = null;
+            ClearSelection();
+            await Reload();
+        }
+        catch (Exception ex) { _error = ex.Message; _dialog = null; }
+        _busy = false;
     }
 }

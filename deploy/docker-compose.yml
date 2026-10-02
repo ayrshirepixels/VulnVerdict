@@ -1,5 +1,5 @@
 # VulnVerdict on-premises console. One command: docker compose up -d
-# Then open https://<host>/ and create the administrator account.
+# Then open https://<host>/ and create the administrator account with the setup token from: docker compose logs web
 services:
   db:
     # Postgres 16 without gosu, running as postgres (deploy/images/db.Dockerfile); postgres:16-alpine also works
@@ -29,8 +29,11 @@ services:
       Database__Provider: postgres
       Database__ConnectionString: "Host=db;Database=vulnverdict;Username=vulnverdict;Password=${DB_PASSWORD}"
       Worker__DataDir: /data
+      KeyProtection__Secret: ${VV_KEY_SECRET:-}
     volumes:
       - data:/data
+      # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
+      - ${VV_BACKUP_DIR:-backups}:/data/backups
     expose:
       - "8080"
 
@@ -46,9 +49,12 @@ services:
       Database__Provider: postgres
       Database__ConnectionString: "Host=db;Database=vulnverdict;Username=vulnverdict;Password=${DB_PASSWORD}"
       Worker__DataDir: /data
+      KeyProtection__Secret: ${VV_KEY_SECRET:-}
       Worker__CveMinYear: ${CVE_MIN_YEAR:-0}
     volumes:
       - data:/data
+      # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
+      - ${VV_BACKUP_DIR:-backups}:/data/backups
 
   proxy:
     # Caddy built with the current Go release (deploy/images/proxy.Dockerfile); caddy:2-alpine also works
@@ -69,5 +75,6 @@ services:
 volumes:
   db:
   data:
+  backups:
   caddy_data:
   caddy_config:

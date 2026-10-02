@@ -39,10 +39,12 @@ public sealed class KevFeed : IFeed
                 RetrievedAt = now
             });
         }
+        var unique = rows.DistinctBy(r => r.CveId).ToList();
+        SignalStore.GuardShrink(Name, await ctx.Db.Kev.CountAsync(ct), unique.Count);
         // replace atomically
         await using var tx = await ctx.Db.Database.BeginTransactionAsync(ct);
         await ctx.Db.Kev.ExecuteDeleteAsync(ct);
-        ctx.Db.Kev.AddRange(rows.DistinctBy(r => r.CveId));
+        ctx.Db.Kev.AddRange(unique);
         await ctx.Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         ctx.Db.ChangeTracker.Clear();

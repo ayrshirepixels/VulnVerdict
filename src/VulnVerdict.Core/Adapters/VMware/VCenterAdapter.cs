@@ -15,6 +15,16 @@ namespace VulnVerdict.Core.Adapters.VMware;
 public interface IVCenterSession : IAsyncDisposable
 {
     Task<JsonDocument?> GetAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// As <see cref="GetAsync"/>, with the HTTP status when there is no document, so the caller can tell "not there"
+    /// (404) from "could not be served" (400 over the list limit, 500, 503 for a disconnected host).
+    /// </summary>
+    async Task<(JsonDocument? Doc, int Status)> GetWithStatusAsync(string path, CancellationToken ct)
+    {
+        var doc = await GetAsync(path, ct);
+        return (doc, doc is null ? 404 : 200);
+    }
 }
 
 /// <summary>
@@ -108,37 +118,65 @@ public sealed class VCenterAdapter : IInventoryAdapter
         if (ver is not null) r.Software.Add(new SoftwareRecord(vcId, "VMware", "vCenter Server", ver, SoftwareKind.Application, ExternalId: "vcenter-server"));
 
         // ESXi hosts
-        var esxiVersionChecked = false; var esxiVersionAvailable = false;
+        var esxi = new List<AssetRecord>();
         using (var hosts = await s.GetAsync("/api/vcenter/host", ct))
         {
-            if (hosts is null) r.Warnings.Add("ESXi host list not readable (/api/vcenter/host)");
+            if (hosts is null) r.MarkPartial("ESXi host list not readable (/api/vcenter/host); hosts are not aged out this run");
             else
             {
                 var list = Unwrap(hosts.RootElement);
                 progress?.Report(list.GetArrayLength() + " ESXi hosts");
+                // every host is asked: one disconnected host (503) or one 404 says nothing about the others
+                var unread = new List<(AssetRecord Host, int Status)>();
                 foreach (var h in list.EnumerateArray())
                 {
                     var asset = MapHost(h);
-                    r.Assets.Add(asset);
-                    if (esxiVersionChecked && !esxiVersionAvailable) continue;
+                    r.Assets.Add(asset); esxi.Add(asset);
+                    var (detail, status) = await s.GetWithStatusAsync("/api/vcenter/host/" + asset.ExternalId, ct);
+                    if (detail is null) (detail, status) = await s.GetWithStatusAsync("/rest/vcenter/host/" + asset.ExternalId, ct);
                     string? v = null;
-                    using (var detail = await s.GetAsync("/api/vcenter/host/" + asset.ExternalId, ct) ?? await s.GetAsync("/rest/vcenter/host/" + asset.ExternalId, ct))
-                        if (detail is not null) v = FindVersion(detail.RootElement);
-                    if (!esxiVersionChecked)
-                    {
-                        esxiVersionChecked = true; esxiVersionAvailable = v is not null;
-                        if (v is null) r.Warnings.Add("ESXi version is not exposed by the vCenter REST API on this release; ESXi hosts are listed without a software version");
-                    }
+                    using (detail) if (detail is not null) v = FindVersion(detail.RootElement);
                     if (v is not null) r.Software.Add(new SoftwareRecord(asset.ExternalId, "VMware", "ESXi", v, SoftwareKind.OperatingSystem, ExternalId: "esxi"));
+                    else unread.Add((asset, status));
+                }
+                // "not on this release" only when no host has it and all say so the same way (404, or a detail without a version)
+                if (unread.Count == esxi.Count && unread.Count > 0 && unread.All(u => u.Status is 404 or 200) && unread.Select(u => u.Status).Distinct().Count() == 1)
+                    r.Warnings.Add("ESXi version is not exposed by the vCenter REST API on this release; ESXi hosts are listed without a software version");
+                else if (unread.Count > 0)
+                {
+                    foreach (var u in unread) r.IncompleteSoftware.Add(u.Host.ExternalId);
+                    r.Warnings.Add("ESXi version not read for " + unread.Count + " of " + esxi.Count + " hosts (" + string.Join(", ", unread.Take(10).Select(u => u.Host.DisplayName + ": HTTP " + u.Status))
+                        + (unread.Count > 10 ? ", ..." : "") + "); the version an earlier run recorded is kept");
                 }
             }
         }
 
         // virtual machines
-        using (var vms = await s.GetAsync("/api/vcenter/vm", ct))
         {
-            if (vms is null) { r.Warnings.Add("VM list not readable (/api/vcenter/vm)"); return r; }
-            var list = Unwrap(vms.RootElement).EnumerateArray().ToList();
+            var list = new List<JsonElement>();
+            var (vms, vmStatus) = await s.GetWithStatusAsync("/api/vcenter/vm", ct);
+            using (vms)
+            {
+                if (vms is not null) list.AddRange(Unwrap(vms.RootElement).EnumerateArray().Select(e => e.Clone()));
+                else if (vmStatus is 400 or 500 && esxi.Count > 0)
+                {
+                    // the unfiltered list is refused above vCenter's per-request limit: ask host by host instead
+                    var seen = new HashSet<string>(StringComparer.Ordinal); var refused = new List<string>();
+                    foreach (var h in esxi)
+                    {
+                        var (page, status) = await s.GetWithStatusAsync("/api/vcenter/vm?hosts=" + Uri.EscapeDataString(h.ExternalId), ct);
+                        using (page)
+                        {
+                            if (page is null) { refused.Add(h.DisplayName + ": HTTP " + status); continue; }
+                            foreach (var vm in Unwrap(page.RootElement).EnumerateArray()) if (seen.Add(Str(vm, "vm"))) list.Add(vm.Clone());
+                        }
+                    }
+                    r.Warnings.Add("The VM list is over vCenter's single-request limit (HTTP " + vmStatus + "); it was read host by host: " + list.Count + " VMs");
+                    if (refused.Count > 0)
+                        r.MarkPartial("VMs could not be listed for " + refused.Count + " of " + esxi.Count + " hosts (" + string.Join(", ", refused.Take(10)) + (refused.Count > 10 ? ", ..." : "") + "); the VM list is partial and VMs are not aged out this run");
+                }
+                else { r.MarkPartial("VM list not readable (/api/vcenter/vm, HTTP " + vmStatus + "); VMs are not aged out this run"); return r; }
+            }
             var mapped = new AssetRecord?[list.Count];
             var noIdentity = 0; var done = 0;
             using var gate = new SemaphoreSlim(Math.Max(1, parallel));
@@ -350,17 +388,27 @@ public sealed class VCenterAdapter : IInventoryAdapter
 
         public async Task<JsonDocument?> GetAsync(string path, CancellationToken ct)
         {
-            var p = _legacy && path.StartsWith("/api/", StringComparison.Ordinal) ? "/rest" + path[4..] : path;
+            var (doc, status) = await GetWithStatusAsync(path, ct);
+            if (status == 500) throw new HttpRequestException("vCenter " + path + " returned HTTP 500");
+            return doc;
+        }
+
+        /// <summary>404, 503 and 400 give no document; so does 500, which is how 7.x and 8.x refuse a list over the limit. Other failures throw.</summary>
+        public async Task<(JsonDocument? Doc, int Status)> GetWithStatusAsync(string path, CancellationToken ct)
+        {
+            // the 6.x /rest dialect prefixes list filters
+            var p = _legacy && path.StartsWith("/api/", StringComparison.Ordinal) ? "/rest" + path[4..].Replace("?hosts=", "?filter.hosts=") : path;
             using var req = new HttpRequestMessage(HttpMethod.Get, _base + p);
             req.Headers.Add("vmware-api-session-id", _token);
             using var resp = await _client.SendAsync(req, ct);
-            if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.ServiceUnavailable or HttpStatusCode.BadRequest) return null;
+            var status = (int)resp.StatusCode;
+            if (status is 404 or 503 or 400 or 500) return (null, status);
             if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                throw new InvalidOperationException("vCenter refused " + p + " (HTTP " + (int)resp.StatusCode + "): the session expired or the account lacks the Read-Only role");
-            if (!resp.IsSuccessStatusCode) throw new HttpRequestException("vCenter " + p + " returned HTTP " + (int)resp.StatusCode);
+                throw new InvalidOperationException("vCenter refused " + p + " (HTTP " + status + "): the session expired or the account lacks the Read-Only role");
+            if (!resp.IsSuccessStatusCode) throw new HttpRequestException("vCenter " + p + " returned HTTP " + status);
             var body = await resp.Content.ReadAsStringAsync(ct);
-            if (string.IsNullOrWhiteSpace(body)) return null;
-            return JsonDocument.Parse(body);
+            // an empty body on a success status is treated as "nothing there", as before
+            return string.IsNullOrWhiteSpace(body) ? (null, 404) : (JsonDocument.Parse(body), status);
         }
 
         public async ValueTask DisposeAsync()
