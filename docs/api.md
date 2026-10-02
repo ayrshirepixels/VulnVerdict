@@ -33,7 +33,48 @@ Set a URL and a secret under Settings. Events: `verdict.created`, `verdict.promo
                "sentence": "...", "fixedIn": "7.2.8", "url": "https://vulnverdict.internal/verdicts/..." } }
 ```
 
-Headers: `X-VulnVerdict-Event` and `X-VulnVerdict-Signature: sha256=<hex HMAC-SHA256 of the raw body with the secret>`. Verify the signature before trusting a delivery. Deliveries are retried once and logged.
+`sentAt` is when the event happened. The verdict is as it was at that moment, and the body is byte-for-byte the same on every retry.
+
+### Headers
+
+| Header | Value |
+|---|---|
+| `X-VulnVerdict-Event` | the event name |
+| `X-VulnVerdict-Delivery` | an id for this event, the same on every retry: use it to drop duplicates |
+| `X-VulnVerdict-Timestamp` | when this attempt was sent, in Unix seconds |
+| `X-VulnVerdict-Signature-V2` | `sha256=<hex HMAC-SHA256 of timestamp + "." + raw body>`, keyed with the secret |
+| `X-VulnVerdict-Signature` | `sha256=<hex HMAC-SHA256 of the raw body>`, keyed with the secret |
+
+The signature headers are sent only when a secret is set.
+
+### Verifying a delivery
+
+Verify before trusting anything in the body:
+
+1. Take `X-VulnVerdict-Timestamp` exactly as received and refuse the delivery if it is more than five minutes from your clock.
+2. Compute HMAC-SHA256 over the timestamp, a full stop and the raw request body (the bytes as received, before any JSON parsing), with the secret as the key.
+3. Compare `sha256=` plus the lower-case hex of that with `X-VulnVerdict-Signature-V2`, using a constant-time comparison.
+
+```python
+import hmac, hashlib, time
+
+def verify(secret: bytes, headers, raw_body: bytes) -> bool:
+    ts = headers["X-VulnVerdict-Timestamp"]
+    if abs(time.time() - int(ts)) > 300:
+        return False
+    expected = "sha256=" + hmac.new(secret, ts.encode() + b"." + raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, headers["X-VulnVerdict-Signature-V2"])
+```
+
+`X-VulnVerdict-Signature` is the signature from earlier releases, over the body alone. It is still sent and unchanged, so an existing receiver keeps working. It does not cover the timestamp, so a delivery captured in transit could be replayed to a receiver that checks only this header; move receivers to `X-VulnVerdict-Signature-V2` when you can.
+
+### Delivery and retries
+
+An event is written to an outbox table in the same database transaction as the change it reports, and the worker sends it, normally within a minute. Nothing is held in memory: an event survives a restart, and it does not matter whether the web container or the worker made the change. Marking a verdict done in the console also tries its `verdict.closed` delivery straight away.
+
+Any 2xx answer within 20 seconds is a success. Anything else is retried after 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes (longer if the answer is 429 with a `Retry-After`). After eight attempts the delivery is given up: the console shows a banner and emails the administrator alert address. Delivery is at-least-once, so a receiver should treat a repeated `X-VulnVerdict-Delivery` as already handled. Every attempt is logged.
+
+Teams and Slack messages use the same outbox: see [chat.md](chat.md).
 
 ## Example
 

@@ -98,9 +98,11 @@ public sealed class VerdictWorkflow
         mutate(v);
         db.VerdictHistory.Add(new VerdictHistory { VerdictId = v.Id, At = now, Actor = actor, Kind = "state", From = from.ToString(), To = to.ToString(), Reason = reason });
         db.Audit.Add(new AuditEntry { At = now, Actor = actor, Action = "verdict." + to.ToString().ToLowerInvariant(), Target = v.CveId + " / " + (v.WatchlistEntryId ?? v.SoftwareInstanceId), Before = from.ToString(), After = to.ToString() + ": " + reason });
+        // queued in the same save, so the worker sends it even if this process stops here; tried now as well, so a
+        // helpdesk that closes its ticket on this event hears straight away
+        var queued = to == VerdictState.Closed ? await _webhooks.EnqueueAsync(db, new[] { (WebhookService.EventClosed, v.Id) }, ct) : null;
         await db.SaveChangesAsync(ct);
-        // the web process closes tickets directly; deliver the webhook now rather than through the worker queue
-        if (to == VerdictState.Closed) await _webhooks.NotifyAsync(WebhookService.EventClosed, v, ct);
+        if (queued is { Count: > 0 }) await _webhooks.DeliverNowAsync(queued, ct);
     }
 
     // ------------------------------------------------------------------ suppression rules

@@ -76,6 +76,7 @@ public static class CoreServices
         services.AddSingleton<LicenseService>();
         services.AddSingleton<TelemetryService>();
         services.AddSingleton<MspReportService>();
+        services.AddSingleton<ChatNotificationService>().AddSingleton<DigestActionTokens>().AddSingleton<DigestActionService>();
 
         services.AddSingleton<IFeed, KevFeed>();
         services.AddSingleton<IFeed, EpssFeed>();

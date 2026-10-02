@@ -1,0 +1,129 @@
+@inject SettingsService SettingsSvc
+@inject ChatNotificationService Chat
+
+@* Teams, Slack and the digest's one-click links. The fields are the Settings page's own object, so its Save button
+   saves them too; the buttons here save this card only and then act. *@
+<div class="card">
+    <h2>Teams and Slack</h2>
+    <p class="muted" style="margin-top:0">Optional. Messages go out only: each has a link to the console, never a button that calls back into it. A message names the product, version and CVE. Asset names and addresses stay on the box unless you switch them on below. A message that fails is retried for about an hour, then reported in the banner and to the administrator alert address. <a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/chat.md" target="_blank" rel="noopener noreferrer">How to set it up</a>.</p>
+    @if (_airGapped) { <div class="alert alert-warn">This console is in air-gap mode (fed by uploaded bundles, with no central service), so nothing is sent to Teams or Slack. The settings are kept and messages start once the console pulls its own feeds again.</div> }
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+    <div class="form">
+        <div class="row">
+            <div><label>Teams webhook address</label><input type="password" @bind="Settings.TeamsWebhookUrl" @bind:after="TeamsTyped" autocomplete="new-password" placeholder="@(_teamsSaved ? "saved - leave blank to keep" : "https://")" /><div class="help">From a Teams workflow, "Post to a channel when a webhook request is received". The address is the credential: stored encrypted and not shown again.</div></div>
+            <div class="btn-row" style="align-self:center">
+                <button class="btn btn-secondary" @onclick="() => Test(WebhookService.KindTeams)" disabled="@(_busy || _airGapped)">Save and test Teams</button>
+                @if (_teamsSaved) { <button class="btn btn-secondary" @onclick="() => Remove(WebhookService.KindTeams)" disabled="@_busy">Remove</button> }
+            </div>
+        </div>
+        <div class="row">
+            <div><label>Slack webhook address</label><input type="password" @bind="Settings.SlackWebhookUrl" @bind:after="SlackTyped" autocomplete="new-password" placeholder="@(_slackSaved ? "saved - leave blank to keep" : "https://hooks.slack.com/services/")" /><div class="help">An incoming webhook from a Slack app. Stored encrypted and not shown again.</div></div>
+            <div class="btn-row" style="align-self:center">
+                <button class="btn btn-secondary" @onclick="() => Test(WebhookService.KindSlack)" disabled="@(_busy || _airGapped)">Save and test Slack</button>
+                @if (_slackSaved) { <button class="btn btn-secondary" @onclick="() => Remove(WebhookService.KindSlack)" disabled="@_busy">Remove</button> }
+            </div>
+        </div>
+        <div>
+            <label>Send a message for</label>
+            <label class="check"><input type="checkbox" @bind="Settings.ChatNotifyFixToday" /> A new Fix today, as soon as it appears</label>
+            <label class="check"><input type="checkbox" @bind="Settings.ChatNotifyChanges" /> Promotions and re-opens at Fix this week or above</label>
+            <label class="check"><input type="checkbox" @bind="Settings.ChatNotifyDigest" /> The daily digest, as a short summary</label>
+            <label class="check"><input type="checkbox" @bind="Settings.ChatNotifyFeedHealth" /> Feeds that are overdue (at most once a day)</label>
+        </div>
+        <div>
+            <label class="check"><input type="checkbox" @bind="Settings.ChatIncludeAssetNames" /> Include asset names in chat messages</label>
+            <div class="help">Off by default: Teams and Slack are someone else's cloud. With this off a message says how many assets are affected, not which. With it on, it lists their names (or the address, for a host known only by its address).</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Digest links</h2>
+    <div class="form">
+        <div>
+            <label class="check"><input type="checkbox" @bind="Settings.DigestActionLinks" /> Done and Snooze links in the digest email that work without signing in</label>
+            <div class="help">Each Fix today and Fix this week item gets a Done and a Snooze 7 days link. A link opens a page that asks for confirmation; nothing changes until Confirm is pressed. Links are signed, work for 7 days, and stop working if the verdict changes. Anyone the email is forwarded to can use them, and the action is recorded as "via digest link" with the digest it came from. Switch this off and the links go back to opening the console. Needs the console address above.</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    /// <summary>The Settings page's own settings object, with stored secrets already blanked.</summary>
+    [Parameter, EditorRequired] public AppSettings Settings { get; set; } = default!;
+
+    private bool _busy, _airGapped;
+    private string? _notice, _error;
+    // the stored addresses never reach the browser: the card only knows whether one is saved
+    private bool _teamsSaved, _slackSaved, _teamsTyped, _slackTyped;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var stored = await SettingsSvc.LoadAsync();
+        _teamsSaved = !string.IsNullOrWhiteSpace(stored.TeamsWebhookUrl);
+        _slackSaved = !string.IsNullOrWhiteSpace(stored.SlackWebhookUrl);
+        _airGapped = await Chat.IsAirGappedAsync();
+    }
+
+    private void TeamsTyped() => _teamsTyped = !string.IsNullOrWhiteSpace(Settings.TeamsWebhookUrl);
+    private void SlackTyped() => _slackTyped = !string.IsNullOrWhiteSpace(Settings.SlackWebhookUrl);
+
+    protected override void OnParametersSet()
+    {
+        // the page's own Save stores a typed address and blanks the field again
+        if (_teamsTyped && string.IsNullOrEmpty(Settings.TeamsWebhookUrl)) { _teamsSaved = true; _teamsTyped = false; }
+        if (_slackTyped && string.IsNullOrEmpty(Settings.SlackWebhookUrl)) { _slackSaved = true; _slackTyped = false; }
+    }
+
+    /// <summary>Save this card's fields only. A blank address keeps the stored one.</summary>
+    private async Task SaveAsync(string actor)
+    {
+        foreach (var url in new[] { Settings.TeamsWebhookUrl, Settings.SlackWebhookUrl })
+            if (!string.IsNullOrWhiteSpace(url) && !(Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps))
+                throw new InvalidOperationException("A webhook address must start with https://");
+        var stored = await SettingsSvc.LoadAsync();
+        if (!string.IsNullOrWhiteSpace(Settings.TeamsWebhookUrl)) stored.TeamsWebhookUrl = Settings.TeamsWebhookUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(Settings.SlackWebhookUrl)) stored.SlackWebhookUrl = Settings.SlackWebhookUrl.Trim();
+        stored.ChatNotifyFixToday = Settings.ChatNotifyFixToday; stored.ChatNotifyChanges = Settings.ChatNotifyChanges;
+        stored.ChatNotifyDigest = Settings.ChatNotifyDigest; stored.ChatNotifyFeedHealth = Settings.ChatNotifyFeedHealth;
+        stored.ChatIncludeAssetNames = Settings.ChatIncludeAssetNames;
+        await SettingsSvc.SaveAsync(stored, actor);
+        Settings.TeamsWebhookUrl = ""; Settings.SlackWebhookUrl = ""; _teamsTyped = _slackTyped = false;
+        _teamsSaved = !string.IsNullOrWhiteSpace(stored.TeamsWebhookUrl);
+        _slackSaved = !string.IsNullOrWhiteSpace(stored.SlackWebhookUrl);
+    }
+
+    private async Task Test(string kind)
+    {
+        // event handlers check the role themselves: a hidden button is not access control
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null;
+        var name = kind == WebhookService.KindTeams ? "Teams" : "Slack";
+        try
+        {
+            await SaveAsync(Ui.Actor((await AuthState).User));
+            var problem = await Chat.SendTestAsync(kind);
+            if (problem is null) _notice = "Saved, and a test message was sent to " + name + ".";
+            else _error = name + " test failed: " + problem;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+
+    private async Task Remove(string kind)
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null;
+        try
+        {
+            var stored = await SettingsSvc.LoadAsync();
+            if (kind == WebhookService.KindTeams) { stored.TeamsWebhookUrl = ""; Settings.TeamsWebhookUrl = ""; _teamsSaved = _teamsTyped = false; }
+            else { stored.SlackWebhookUrl = ""; Settings.SlackWebhookUrl = ""; _slackSaved = _slackTyped = false; }
+            await SettingsSvc.SaveAsync(stored, Ui.Actor((await AuthState).User));
+            _notice = (kind == WebhookService.KindTeams ? "Teams" : "Slack") + " webhook address removed.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
+    }
+}

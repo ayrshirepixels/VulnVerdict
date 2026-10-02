@@ -31,6 +31,8 @@ public sealed class DigestContent
     public string Html { get; init; } = "";
     public string Text { get; init; } = "";
     public List<long> HistoryIdsIncluded { get; init; } = new();
+    /// <summary>One-click Done and Snooze links for the Fix today and Fix this week items, by verdict. Empty in a preview: only a digest that is sent carries them.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public Dictionary<Guid, DigestActionLinks> Actions { get; init; } = new();
 }
 
 public sealed class DigestService
@@ -46,16 +48,20 @@ public sealed class DigestService
     private readonly ConnectorService _connectors;
     private readonly ILogger<DigestService> _log;
 
-    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ConnectorService connectors, HealthNotices notices, ILogger<DigestService> log)
+    public DigestService(IDbContextFactory<VvDbContext> factory, SettingsService settings, EmailService email, ConnectorService connectors, HealthNotices notices, ILogger<DigestService> log, DigestActionTokens? actionTokens = null)
     {
-        _factory = factory; _settings = settings; _email = email; _connectors = connectors; _notices = notices; _log = log;
+        _factory = factory; _settings = settings; _email = email; _connectors = connectors; _notices = notices; _log = log; _actionTokens = actionTokens;
     }
 
     private readonly HealthNotices _notices;
+    private readonly DigestActionTokens? _actionTokens;
 
     // ------------------------------------------------------------------ build
 
-    public async Task<DigestContent> BuildAsync(CancellationToken ct = default)
+    public Task<DigestContent> BuildAsync(CancellationToken ct = default) => BuildAsync(null, ct);
+
+    /// <summary>Build the digest. With the id of the run it will be sent as, the Fix today and Fix this week items get their one-click links.</summary>
+    public async Task<DigestContent> BuildAsync(Guid? digestId, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var s = await _settings.LoadAsync(ct);
@@ -79,8 +85,8 @@ public sealed class DigestService
         var dismissedSinceMonday = await db.Verdicts.CountAsync(v => v.CreatedAt >= mondayUtc && (v.Tier <= VerdictTier.IgnoreTracked || v.State == VerdictState.Suppressed), ct);
         var dismissedTotal = await db.Verdicts.CountAsync(v => v.Tier <= VerdictTier.IgnoreTracked || v.State == VerdictState.Suppressed, ct);
 
-        // changed since last digest: undigested tier changes that touch an actionable tier, and closures
-        var history = await db.VerdictHistory.AsNoTracking().Where(h => !h.Digested).OrderByDescending(h => h.At).Take(200).ToListAsync(ct);
+        // changed since last digest: undigested tier changes that touch an actionable tier, closures and re-opens
+        var history = await db.VerdictHistory.AsNoTracking().Where(h => !h.Digested).OrderByDescending(h => h.At).ThenByDescending(h => h.Id).Take(200).ToListAsync(ct);
         var histVerdictIds = history.Select(h => h.VerdictId).Distinct().ToList();
         var histVerdicts = await db.Verdicts.AsNoTracking().Where(v => histVerdictIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
         var changed = new List<DigestItem>();
@@ -99,6 +105,10 @@ public sealed class DigestService
             }
             else if (h.Kind == "state" && h.To == "Closed")
                 changed.Add(Item(v, "closed: " + h.Reason));
+            // a re-open is reported whether or not the tier moved with it: a verdict someone marked done that comes
+            // back at the same tier has no tier line, and would otherwise reappear under Fix today unexplained
+            else if (h.Kind == "state" && h.To == "Open" && v.IsActionable)
+                changed.Add(Item(v, h.Reason is { Length: > 0 } why ? (why.StartsWith("re-opened", StringComparison.OrdinalIgnoreCase) ? why : "re-opened: " + why) : "re-opened"));
         }
         changed = changed.DistinctBy(c => c.VerdictId).Take(25).ToList();
 
@@ -118,6 +128,12 @@ public sealed class DigestService
         var secretNotices = await _notices.SecretsAsync(now, ct);
         var secretWarning = secretNotices.Count > 0 ? string.Join(" ", secretNotices.Select(n => n.Text)) : null;
 
+        // one-click links, only in a digest that is being sent and only when there is an address to put in them
+        var actions = new Dictionary<Guid, DigestActionLinks>();
+        if (digestId is { } run && _actionTokens is not null && s.DigestActionLinks && !string.IsNullOrWhiteSpace(s.BaseUrl))
+            foreach (var v in open.Where(v => v.Tier >= VerdictTier.FixThisWeek && v.Confidence != MatchConfidence.Possible))
+                actions[v.Id] = _actionTokens.Links(s.BaseUrl, run, v, now);
+
         var headline = fixToday.Count + " to fix today, " + fixWeek.Count + " this week. " + dismissedSinceMonday + " CVE" + (dismissedSinceMonday == 1 ? "" : "s") + " since Monday you did not need to read.";
         var subject = "VulnVerdict" + (string.IsNullOrWhiteSpace(s.OrganisationName) ? "" : " for " + s.OrganisationName) + ": " + headline;
 
@@ -125,7 +141,7 @@ public sealed class DigestService
         {
             Headline = headline, Subject = subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions
         };
         var html = RenderHtml(content, s.BaseUrl, localNow);
         var text = RenderText(content, s.BaseUrl, localNow);
@@ -133,7 +149,7 @@ public sealed class DigestService
         {
             Headline = content.Headline, Subject = content.Subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Html = html, Text = text
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
         };
     }
 
@@ -143,14 +159,24 @@ public sealed class DigestService
     public async Task<DigestRun> SendDigestAsync(DigestKind kind, string? overrideRecipients = null, CancellationToken ct = default)
     {
         var s = await _settings.LoadAsync(ct);
-        var content = await BuildAsync(ct);
+        // the id is chosen first because the one-click links in the email are bound to it
+        var runId = Guid.NewGuid();
+        var content = await BuildAsync(runId, ct);
         var recipients = (overrideRecipients is null ? s.Recipients : overrideRecipients.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList();
         var run = new DigestRun
         {
-            Id = Guid.NewGuid(), Kind = kind, GeneratedAt = content.GeneratedAt, Recipients = string.Join(", ", recipients), Subject = content.Subject,
+            Id = runId, Kind = kind, GeneratedAt = content.GeneratedAt, Recipients = string.Join(", ", recipients), Subject = content.Subject,
             FixToday = content.FixToday.Count, FixThisWeek = content.FixThisWeek.Count, NextPatchCycle = content.NextPatchCycleCount, Dismissed = content.DismissedSinceMonday,
             Html = content.Html, Text = content.Text
         };
+        // the console keeps the digest with its ordinary links: the one-click tokens exist only in the mailboxes they
+        // were sent to, not in the database, its backups, or the Digests page that any signed-in user can open
+        if (content.Actions.Count > 0)
+        {
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(content.GeneratedAt, s.ResolveTimeZone());
+            run.Html = RenderHtml(content, s.BaseUrl, localNow, oneClick: false);
+            run.Text = RenderText(content, s.BaseUrl, localNow, oneClick: false);
+        }
         try
         {
             if (recipients.Count == 0) throw new InvalidOperationException("No digest recipients configured");
@@ -174,8 +200,21 @@ public sealed class DigestService
             if (mentioned.Count > 0) await db.Verdicts.Where(v => mentioned.Contains(v.Id) && v.FirstDigestAt == null).ExecuteUpdateAsync(u => u.SetProperty(v => v.FirstDigestAt, now), ct);
             if (kind == DigestKind.Daily) await _settings.SetStateAsync(SettingsService.Keys.LastDailyDigest, now.ToString("O"), ct);
         }
+        if (kind == DigestKind.Daily) db.Outbox.AddRange(ChatMessages.ForDigest(s, content, DateTime.UtcNow));
         await db.SaveChangesAsync(ct);
         return run;
+    }
+
+    /// <summary>The day's digest summary for Teams and Slack when no digest email is sent (mail is not set up). Returns the number of messages queued.</summary>
+    public async Task<int> QueueChatSummaryAsync(CancellationToken ct = default)
+    {
+        var s = await _settings.LoadAsync(ct);
+        if (!s.ChatNotifyDigest || !ChatMessages.Configured(s)) return 0;
+        var rows = ChatMessages.ForDigest(s, await BuildAsync(ct), DateTime.UtcNow).ToList();
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        db.Outbox.AddRange(rows);
+        await db.SaveChangesAsync(ct);
+        return rows.Count;
     }
 
     /// <summary>Fix today is always emailed immediately as well. One email per batch of new items.</summary>
@@ -256,7 +295,7 @@ public sealed class DigestService
 
     public static string Link(string baseUrl, Guid verdictId) => (string.IsNullOrWhiteSpace(baseUrl) ? "" : baseUrl.TrimEnd('/')) + "/verdicts/" + verdictId;
 
-    private static void AppendItems(StringBuilder sb, List<DigestItem> items, string baseUrl, string colour)
+    private static void AppendItems(StringBuilder sb, List<DigestItem> items, string baseUrl, string colour, IReadOnlyDictionary<Guid, DigestActionLinks>? actions = null)
     {
         sb.Append("<ul style=\"padding-left:18px;margin:6px 0 16px\">");
         foreach (var i in items)
@@ -264,12 +303,17 @@ public sealed class DigestService
             sb.Append("<li style=\"margin:0 0 10px\"><span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:" + colour + ";margin-right:8px\"></span>");
             sb.Append(WebUtility.HtmlEncode(i.Sentence));
             if (i.Reason is not null) sb.Append(" <i style=\"color:#555\">(" + WebUtility.HtmlEncode(i.Reason) + ")</i>");
-            sb.Append(" <a href=\"" + Link(baseUrl, i.VerdictId) + "\" style=\"color:#1a4fbf\">Details</a> &middot; <a href=\"" + Link(baseUrl, i.VerdictId) + "?action=done\" style=\"color:#1a4fbf\">Done</a></li>");
+            sb.Append(" <a href=\"" + Link(baseUrl, i.VerdictId) + "\" style=\"color:#1a4fbf\">Details</a> &middot; ");
+            // with a one-click link, Done and Snooze open a confirmation page that needs no sign-in; without, Done opens the verdict in the console
+            if (actions is not null && actions.TryGetValue(i.VerdictId, out var a))
+                sb.Append("<a href=\"" + WebUtility.HtmlEncode(a.Done) + "\" style=\"color:#1a4fbf\">Done</a> &middot; <a href=\"" + WebUtility.HtmlEncode(a.Snooze) + "\" style=\"color:#1a4fbf\">Snooze " + DigestActionService.SnoozeDays + " days</a></li>");
+            else
+                sb.Append("<a href=\"" + Link(baseUrl, i.VerdictId) + "?action=done\" style=\"color:#1a4fbf\">Done</a></li>");
         }
         sb.Append("</ul>");
     }
 
-    public static string RenderHtml(DigestContent c, string baseUrl, DateTime localNow)
+    public static string RenderHtml(DigestContent c, string baseUrl, DateTime localNow, bool oneClick = true)
     {
         var sb = new StringBuilder();
         sb.Append("<!doctype html><html><body style=\"margin:0;padding:16px;background:#f6f6f4\"><div style=\"font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;color:#1c1c1c;max-width:720px;margin:0 auto;background:#fff;padding:24px;border-radius:8px\">");
@@ -277,14 +321,14 @@ public sealed class DigestService
         sb.Append("<div style=\"color:#666;font-size:12px;margin-bottom:16px\">" + localNow.ToString("dddd d MMMM yyyy, HH:mm") + "</div>");
         sb.Append("<p style=\"font-size:20px;font-weight:600;margin:0 0 20px\">" + WebUtility.HtmlEncode(c.Headline) + "</p>");
 
-        void Section(string title, List<DigestItem> items, string colour, string emptyText)
+        void Section(string title, List<DigestItem> items, string colour, string emptyText, bool actions = false)
         {
             sb.Append("<h3 style=\"font-size:15px;margin:18px 0 4px;color:" + colour + "\">" + title + "</h3>");
             if (items.Count == 0) sb.Append("<p style=\"color:#666;margin:4px 0 12px\">" + emptyText + "</p>");
-            else AppendItems(sb, items, baseUrl, colour);
+            else AppendItems(sb, items, baseUrl, colour, actions && oneClick ? c.Actions : null);
         }
-        Section("Fix today", c.FixToday, "#b3261e", "Nothing.");
-        Section("Fix this week", c.FixThisWeek, "#b26a00", "Nothing.");
+        Section("Fix today", c.FixToday, "#b3261e", "Nothing.", actions: true);
+        Section("Fix this week", c.FixThisWeek, "#b26a00", "Nothing.", actions: true);
         if (c.CheckThese.Count > 0) Section("Check these", c.CheckThese, "#5b5b5b", "");
         if (c.Changed.Count > 0) Section("Changed since last digest", c.Changed, "#1a4fbf", "");
         if (c.Overdue.Count > 0) Section("Overdue", c.Overdue, "#b3261e", "");
@@ -300,14 +344,14 @@ public sealed class DigestService
         return sb.ToString();
     }
 
-    public static string RenderText(DigestContent c, string baseUrl, DateTime localNow)
+    public static string RenderText(DigestContent c, string baseUrl, DateTime localNow, bool oneClick = true)
     {
         var sb = new StringBuilder();
         sb.AppendLine("VULNVERDICT - " + localNow.ToString("dddd d MMMM yyyy, HH:mm"));
         sb.AppendLine();
         sb.AppendLine(c.Headline);
         sb.AppendLine();
-        void Section(string title, List<DigestItem> items, string emptyText)
+        void Section(string title, List<DigestItem> items, string emptyText, bool actions = false)
         {
             sb.AppendLine(title.ToUpperInvariant());
             if (items.Count == 0) sb.AppendLine("  " + emptyText);
@@ -315,11 +359,16 @@ public sealed class DigestService
             {
                 sb.AppendLine("  - " + i.Sentence + (i.Reason is null ? "" : " (" + i.Reason + ")"));
                 sb.AppendLine("    " + Link(baseUrl, i.VerdictId));
+                if (actions && oneClick && c.Actions.TryGetValue(i.VerdictId, out var a))
+                {
+                    sb.AppendLine("    Done: " + a.Done);
+                    sb.AppendLine("    Snooze " + DigestActionService.SnoozeDays + " days: " + a.Snooze);
+                }
             }
             sb.AppendLine();
         }
-        Section("Fix today", c.FixToday, "Nothing.");
-        Section("Fix this week", c.FixThisWeek, "Nothing.");
+        Section("Fix today", c.FixToday, "Nothing.", actions: true);
+        Section("Fix this week", c.FixThisWeek, "Nothing.", actions: true);
         if (c.CheckThese.Count > 0) Section("Check these", c.CheckThese, "");
         if (c.Changed.Count > 0) Section("Changed since last digest", c.Changed, "");
         if (c.Overdue.Count > 0) Section("Overdue", c.Overdue, "");

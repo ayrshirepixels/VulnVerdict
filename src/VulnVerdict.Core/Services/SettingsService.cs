@@ -60,6 +60,19 @@ public sealed class AppSettings
     public string WebhookUrl { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
 
+    // Teams and Slack: outbound only. The webhook addresses carry their own credential, so they are stored as secrets.
+    public string TeamsWebhookUrl { get; set; } = "";
+    public string SlackWebhookUrl { get; set; } = "";
+    public bool ChatNotifyFixToday { get; set; } = true;
+    public bool ChatNotifyDigest { get; set; } = true;
+    public bool ChatNotifyChanges { get; set; } = true;
+    public bool ChatNotifyFeedHealth { get; set; } = true;
+    /// <summary>Off by default: Teams and Slack are someone else's cloud, so messages carry product and CVE only.</summary>
+    public bool ChatIncludeAssetNames { get; set; }
+
+    /// <summary>Done and Snooze links in the digest email that work without signing in (see docs/digest.md).</summary>
+    public bool DigestActionLinks { get; set; } = true;
+
     // weekly management report
     public string ReportRecipients { get; set; } = "";
     public string ReportDay { get; set; } = "Monday";
@@ -101,6 +114,7 @@ public sealed class SettingsService
     private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken), nameof(AppSettings.LicenceKey) };
     /// <summary>Settings stored encrypted and never sent back to the browser.</summary>
     public static IReadOnlySet<string> SecretNames => Secret;
+    static SettingsService() { Secret.Add(nameof(AppSettings.TeamsWebhookUrl)); Secret.Add(nameof(AppSettings.SlackWebhookUrl)); }
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly IDataProtector _protector;
 
