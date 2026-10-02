@@ -25,6 +25,7 @@
         <div class="sidebar-foot">
             <AuthorizeView>
                 <div class="who">@context.User.Identity?.Name<br /><small>@(context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)</small></div>
+                <a class="account-link" href="/account">My account</a>
                 <form method="post" action="/auth/logout">
                     <AntiforgeryToken />
                     <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>

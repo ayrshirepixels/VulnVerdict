@@ -159,3 +159,22 @@ input.input, select.input, textarea.input { width: 100%; padding: 8px 10px; bord
 
 #blazor-error-ui { color-scheme: light only; background: var(--amber-soft); border-top: 2px solid var(--amber); bottom: 0; box-sizing: border-box; display: none; left: 0; padding: .6rem 1.25rem .7rem 1.25rem; position: fixed; width: 100%; z-index: 1000; }
 #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }
+
+/* ---- two-factor sign-in and SSH host-key trust (begin) ---- */
+.sidebar-foot .account-link { display: block; margin: 0 0 8px; color: var(--sidebar-ink); text-decoration: underline; }
+.auth-card.auth-card-wide { max-width: 520px; }
+.twofactor-enrol .qr { width: 220px; max-width: 100%; margin: 10px 0; padding: 8px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); }
+.twofactor-enrol .qr svg { display: block; width: 100%; height: auto; }
+.twofactor-enrol .help { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.twofactor-enrol .manual-key { font-size: 14px; letter-spacing: .04em; white-space: nowrap; color: var(--ink); }
+.twofactor-form { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--line); }
+.recovery-codes { list-style: none; margin: 12px 0; padding: 0; display: grid; grid-template-columns: repeat(2, max-content); gap: 6px 28px; }
+.recovery-codes code { font-size: 15px; letter-spacing: .05em; }
+.hostkeys { margin-top: 12px; }
+.hostkeys .help { margin-bottom: 8px; }
+.hostkeys code { word-break: break-all; }
+.hostkeys .table tr.hostkey-changed td { background: #fdecec; }
+.hostkeys .table tr.hostkey-changed .alert { margin: 0; }
+.hostkey-warning { margin-top: 4px; color: var(--amber-ink); }
+.hostkey-warning.hostkey-warning-changed { color: #8a1c17; font-weight: 600; }
+/* ---- two-factor sign-in and SSH host-key trust (end) ---- */

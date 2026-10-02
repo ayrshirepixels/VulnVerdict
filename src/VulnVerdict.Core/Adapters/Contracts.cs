@@ -71,7 +71,11 @@ public sealed class CollectResult
     public bool FindingsIncomplete { get; set; }
 }
 
-public sealed record TestResult(bool Ok, string Message);
+public sealed record TestResult(bool Ok, string Message)
+{
+    /// <summary>SSH host keys the test met, for the console's one-click trust prompt. Empty for sources that do not use SSH.</summary>
+    public IReadOnlyList<Linux.PresentedHostKey> HostKeys { get; init; } = Array.Empty<Linux.PresentedHostKey>();
+}
 
 /// <summary>
 /// Every inventory source implements this. Read-only credentials only; never writes to the source.

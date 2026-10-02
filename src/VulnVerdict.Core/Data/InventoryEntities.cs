@@ -122,6 +122,8 @@ public class Connector
     public bool Running { get; set; }
     [MaxLength(256)] public string? Progress { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>JSON array of SSH host keys the last run met that are not pinned, or differ from the pinned one; null when there are none.</summary>
+    public string? PendingHostKeysJson { get; set; }
 }
 
 /// <summary>Compensating-control modifier. Lowers a verdict one tier and is named in the explanation. Never lowers Active + Internet.</summary>

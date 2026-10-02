@@ -178,7 +178,7 @@ public sealed class WinRmAdapter : IInventoryAdapter
         }
         if (toPin.Count > 0)
         {
-            lines.Add("Host keys seen for the first time. Check each against the server (Get-ChildItem C:\\ProgramData\\ssh\\ssh_host_*_key.pub | % { ssh-keygen -lf $_ }), then paste these lines into Known host keys and test again:");
+            lines.Add("Host keys seen for the first time. Check each against the server (Get-ChildItem C:\\ProgramData\\ssh\\ssh_host_*_key.pub | % { ssh-keygen -lf $_ }), then trust them below (or paste these lines into Known host keys) and test again:");
             lines.AddRange(toPin);
         }
         return new TestResult(failures == 0, string.Join("\n", lines));

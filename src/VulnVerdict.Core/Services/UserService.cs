@@ -15,10 +15,16 @@ public sealed class UserService
     /// <summary>Written in the same save as the first administrator, so two first-run posts cannot both succeed.</summary>
     public const string SetupGuardKey = "state:setup:done";
     public const string SetupTokenFile = "setup-token";
+    /// <summary>Wrong passwords in a row before the account is locked, and for how long. The right password does not unlock it early.</summary>
+    public const int MaxPasswordFailures = 10;
+    public static readonly TimeSpan LockoutPeriod = TimeSpan.FromMinutes(15);
     private static readonly PasswordHasher<AppUser> Hasher = new();
     private readonly IDbContextFactory<VvDbContext> _factory;
 
     public UserService(IDbContextFactory<VvDbContext> factory) => _factory = factory;
+
+    /// <summary>The clock; replaceable so tests can step past a lockout.</summary>
+    public Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
 
     public static string NewStamp() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 
@@ -129,7 +135,11 @@ public sealed class UserService
             throw new InvalidOperationException("Cannot demote the last administrator");
         var before = user.Role;
         user.Role = role;
-        if (!string.IsNullOrEmpty(newPassword)) user.PasswordHash = Hasher.HashPassword(user, newPassword);
+        if (!string.IsNullOrEmpty(newPassword))
+        {
+            user.PasswordHash = Hasher.HashPassword(user, newPassword);
+            user.FailedPasswordCount = 0; user.PasswordLockedUntil = null;
+        }
         if (before != role || !string.IsNullOrEmpty(newPassword)) user.SecurityStamp = NewStamp();
         db.Audit.Add(new AuditEntry { At = DateTime.UtcNow, Actor = actor, Action = "user.update", Target = user.Username, Before = before.ToString(), After = role + (string.IsNullOrEmpty(newPassword) ? "" : ", password reset") });
         await db.SaveChangesAsync(ct);
@@ -153,14 +163,33 @@ public sealed class UserService
         await using var db = await _factory.CreateDbContextAsync(ct);
         var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username.Trim() && u.Provider == "local", ct);
         if (user?.PasswordHash is null) return null;
+        var now = UtcNow();
+        // locked: the right password waits as well, or guessing could simply carry on through the lockout
+        if (user.PasswordLockedUntil is { } until && until > now) return null;
         var result = Hasher.VerifyHashedPassword(user, user.PasswordHash, password);
-        if (result == PasswordVerificationResult.Failed) return null;
+        if (result == PasswordVerificationResult.Failed)
+        {
+            // the login rate limit is per address; this one is per account, so guesses spread over many addresses still stop
+            if (++user.FailedPasswordCount >= MaxPasswordFailures)
+            {
+                user.FailedPasswordCount = 0; user.PasswordLockedUntil = now + LockoutPeriod;
+                db.Audit.Add(new AuditEntry { At = now, Actor = user.Username, Action = "user.lockout", Target = user.Username, After = MaxPasswordFailures + " wrong passwords in a row; locked until " + user.PasswordLockedUntil.Value.ToString("u") });
+            }
+            await db.SaveChangesAsync(ct);
+            return null;
+        }
         if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = Hasher.HashPassword(user, password);
         if (user.SecurityStamp.Length == 0) user.SecurityStamp = NewStamp();
-        user.LastLoginAt = DateTime.UtcNow;
+        user.FailedPasswordCount = 0; user.PasswordLockedUntil = null;
+        // with two-factor on, the sign-in is not complete until the code is accepted
+        if (!user.TwoFactorEnabled) user.LastLoginAt = now;
         await db.SaveChangesAsync(ct);
         return user;
     }
+
+    /// <summary>Checks a password without signing in or counting failures: for confirming a change the signed-in user asks for.</summary>
+    public static bool PasswordMatches(AppUser user, string? password) =>
+        user.PasswordHash is not null && !string.IsNullOrEmpty(password) && Hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
 
     /// <summary>Record an OIDC sign-in with the role its groups map to. A role change rotates the stamp, ending older sessions.</summary>
     public async Task<AppUser> RecordOidcSignInAsync(string name, string? email, UserRole role, CancellationToken ct = default)
@@ -190,6 +219,6 @@ public sealed class UserService
         return user;
     }
 
-    private static bool FixedTimeEquals(string a, string b) =>
+    public static bool FixedTimeEquals(string a, string b) =>
         CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
 }
