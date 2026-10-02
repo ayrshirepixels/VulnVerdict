@@ -402,8 +402,36 @@ public static partial class VersionMatcher
             yield return new Range(single, single, true, affected, MatchConfidence.Likely, original);
             yield break;
         }
+        // A list: "5.0.x, 5.2.x", "FortiOS 5.4.5, 5.4.4, 5.4.3", "versions 5.4.0 through 5.4.4 and 5.6.0" (Fortinet). Read
+        // only when every item reads on its own, by the rules above; one unreadable item leaves the whole text unparsed,
+        // so nothing the vendor listed is dropped. Never better than Likely.
+        var items = ListItems(original);
+        // each item ends in a version ("FortiOS 5.4.5", "5.0.x", "5.4.0 through 5.4.4"); "the 5.6 branch" does not, and a
+        // name-plus-version reading of it would wrongly be the single release 5.6
+        if (items.Count >= 2 && items.All(i => char.IsAsciiDigit(i.Split(' ')[^1].TrimStart('v', 'V').FirstOrDefault())))
+        {
+            List<Range>? parts = new();
+            foreach (var item in items)
+            {
+                var sub = Expand(new AffectedVersion { Version = item, Status = v.Status, VersionType = v.VersionType }).ToList();
+                if (sub.Count == 0 || sub.Any(r => r.Unbounded)) { parts = null; break; }
+                parts.AddRange(sub);
+            }
+            if (parts is not null)
+            {
+                foreach (var r in parts)
+                    yield return r with { Confidence = r.Confidence == MatchConfidence.Exact ? MatchConfidence.Likely : r.Confidence, Text = r.Text + " (in the list \"" + original + "\")" };
+                yield break;
+            }
+        }
         yield return new Range(null, null, true, affected, MatchConfidence.Possible, ver + " (unparsed)");
     }
+
+    [GeneratedRegex(@"\s*(?:[,;&]|\band\b|\bor\b)\s*", RegexOptions.IgnoreCase)] private static partial Regex ListSeparator();
+
+    /// <summary>The items of a listed version text, or an empty list when it is not a list.</summary>
+    private static List<string> ListItems(string text) =>
+        ListSeparator().IsMatch(text) ? ListSeparator().Split(text).Select(s => s.Trim()).Where(s => s.Length > 0).ToList() : new();
 
     private static bool? Contains(Range r, string installed)
     {
