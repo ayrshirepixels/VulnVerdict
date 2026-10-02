@@ -89,7 +89,7 @@ public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> So
 /// nothing is written to the host. Packages carry an OSV ecosystem string and a purl so they are matched through
 /// OSV rather than through CNA product names.
 /// </summary>
-public sealed class SshLinuxAdapter : IInventoryAdapter
+public sealed partial class SshLinuxAdapter : IInventoryAdapter
 {
     public const string Id = "ssh-linux";
 
@@ -130,8 +130,8 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
             new CredentialField("password", "Password", CredentialTypes.Password, "Leave empty when authenticating with a private key.", Required: false),
             new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.TextArea, "OpenSSH or PEM private key. Leave empty when authenticating with a password.", Required: false),
             new CredentialField("passphrase", "Key passphrase", CredentialTypes.Password, "Only when the private key is encrypted.", Required: false),
-            new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended): host keys are pinned in the list below and a changed key is reported instead of connecting.", Required: false, Default: "false"),
-            new CredentialField("knownHostKeys", "Known host keys", CredentialTypes.TextArea, "One per line: host SHA256:fingerprint. Test connection prints the lines to paste for hosts seen for the first time.", Required: false),
+            new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended): only hosts pinned in the list below are connected to; an unpinned or changed key is refused before the password is sent.", Required: false, Default: "false"),
+            new CredentialField("knownHostKeys", "Known host keys", CredentialTypes.TextArea, "One per line: host SHA256:fingerprint. Test connection prints the lines to paste for hosts seen for the first time; a host is not collected until its line is here.", Required: false),
             new CredentialField("timeoutSeconds", "Timeout (seconds)", CredentialTypes.Number, "Per connection and per command.", Required: false, Default: "30"),
         },
         "an ordinary user account (no sudo); package lists and listening sockets are world-readable",
@@ -161,11 +161,17 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
                 if (session.HostKeyFingerprint is { Length: > 0 } fp && !acceptAny && !IsPinned(known, t)) toPin.Add(t.AsTyped + " " + FormatFingerprint(fp));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (HostKeyNotPinnedException ex)
+            {
+                failures++;
+                lines.Add(t.AsTyped + ": host key not pinned yet, so the credentials were not sent");
+                toPin.Add(SshHostKeys.KnownHostsLine(t.AsTyped, ex.Fingerprint));
+            }
             catch (Exception ex) { failures++; lines.Add(t.AsTyped + ": " + ex.Message); }
         }
         if (toPin.Count > 0)
         {
-            lines.Add("Host keys seen for the first time. Paste these lines into Known host keys so a changed key is detected next time:");
+            lines.Add("Host keys seen for the first time. Check each against the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then paste these lines into Known host keys and test again:");
             lines.AddRange(toPin);
         }
         return new(failures == 0, string.Join("\n", lines));
@@ -304,11 +310,17 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         };
 
         var purlType = f.PackageManager switch { "dpkg" => "deb", "rpm" => "rpm", "apk" => "apk", _ => "generic" };
+        // one row per source package, architecture and version: binaries built from one source usually share a version,
+        // but a partial upgrade or several installed kernels must not hide the older (vulnerable) one
+        var versionsBySource = packages.GroupBy(p => p.Source + ":" + p.Architecture, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(p => p.Version).Distinct(StringComparer.Ordinal).Count(), StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var p in packages)
         {
             var key = purlType + ":" + p.Source + ":" + p.Architecture;
-            if (!seen.Add(key)) continue; // one row per source package and architecture; binaries built from it share the version
+            if (!seen.Add(key + "@" + p.Version)) continue;
+            // the plain key while there is one version, so the common case keeps a stable id across runs
+            if (versionsBySource[p.Source + ":" + p.Architecture] > 1) key += "@" + p.Version;
             software.Add(new SoftwareRecord(externalId, distro.Name, p.Source, p.Version, SoftwareKind.Package,
                 Purl: BuildPurl(purlType, distro.PurlNamespace, p.Source, p.Version, p.Architecture, distro.DistroQualifier),
                 Ecosystem: distro.Ecosystem,
@@ -474,12 +486,20 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
         return list;
     }
 
-    private static (string Name, string Version) SplitApkNameVersion(string s)
+    /// <summary>"font-adobe-100dpi-1.0.4-r2" to ("font-adobe-100dpi", "1.0.4-r2"): the version is the last segment before the -rN suffix, as names may contain "-digit" themselves.</summary>
+    public static (string Name, string Version) SplitApkNameVersion(string s)
     {
+        var rel = ApkRelease().Match(s);
+        var stem = rel.Success ? s[..rel.Index] : s;
+        var dash = stem.LastIndexOf('-');
+        if (dash > 0 && dash < stem.Length - 1 && char.IsDigit(stem[dash + 1])) return (s[..dash], s[(dash + 1)..]);
+        // no -rN suffix: fall back to the first "-digit"
         for (var i = 1; i < s.Length - 1; i++)
             if (s[i] == '-' && char.IsDigit(s[i + 1])) return (s[..i], s[(i + 1)..]);
         return (s, "");
     }
+
+    [GeneratedRegex(@"-r\d+$")] private static partial Regex ApkRelease();
 
     private static readonly Regex LocalAddr = new(@"^(?<bind>.+):(?<port>\d+)$", RegexOptions.Compiled);
     private static readonly Regex SsProcess = new("\\(\\(\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -723,29 +743,20 @@ public sealed class SshLinuxAdapter : IInventoryAdapter
 
         var info = new ConnectionInfo(t.Host, t.Port, o.Username, methods.ToArray()) { Timeout = o.Timeout };
         var client = new SshClient(info);
-        string? presented = null; string? rejected = null;
-        client.HostKeyReceived += (_, e) =>
-        {
-            presented = e.FingerPrintSHA256;
-            if (o.AcceptAnyHostKey || o.ExpectedFingerprint is null) { e.CanTrust = true; return; }
-            if (FingerprintEquals(o.ExpectedFingerprint, presented)) e.CanTrust = true;
-            else { rejected = presented; e.CanTrust = false; }
-        };
+        // an unpinned key is refused at key exchange, before any password or key signature is sent
+        var guard = new SshHostKeys.Guard(client, t.AsTyped, o.ExpectedFingerprint, o.AcceptAnyHostKey,
+            fp => "add this line to Known host keys: " + SshHostKeys.KnownHostsLine(t.AsTyped, fp));
         try
         {
             await client.ConnectAsync(ct);
         }
-        catch (SshConnectionException ex) when (rejected is not null)
+        catch (Exception ex)
         {
             client.Dispose();
-            throw new InvalidOperationException("Host key for " + t.AsTyped + " has changed: expected " + FormatFingerprint(o.ExpectedFingerprint!) + ", received " + FormatFingerprint(rejected) + ". Verify the server before updating Known host keys.", ex);
-        }
-        catch
-        {
-            client.Dispose();
+            if (guard.Explain(ex) is { } why) throw why;
             throw;
         }
-        return new SshNetSession(client, presented, o.Timeout);
+        return new SshNetSession(client, guard.Presented, o.Timeout);
     }
 
     private sealed class SshNetSession : ISshSession

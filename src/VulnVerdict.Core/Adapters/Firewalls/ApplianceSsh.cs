@@ -12,7 +12,7 @@ public enum SshMode { Exec, Shell }
 
 /// <summary>
 /// SSH for firewalls whose only practical read path is the CLI. Same host-key rules as the Linux adapter: a pinned
-/// fingerprint must match, an unpinned key is accepted and reported so it can be pinned. Only the read-only
+/// fingerprint must match, an unpinned key is refused (with the fingerprint to pin) unless Accept any host key is on. Only the read-only
 /// commands each adapter lists are ever sent.
 /// </summary>
 public static partial class ApplianceSsh
@@ -24,7 +24,8 @@ public static partial class ApplianceSsh
         new CredentialField("password", "Password", CredentialTypes.Password, "Leave empty when authenticating with a private key.", Required: false),
         new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.TextArea, "OpenSSH or PEM private key, where the appliance supports key login. Leave empty for password login.", Required: false),
         new CredentialField("passphrase", "Key passphrase", CredentialTypes.Password, "Only when the private key is encrypted.", Required: false),
-        new CredentialField("hostKey", "Host key fingerprint", CredentialTypes.Text, "SHA256:... as printed by Test connection. Once set, a changed key stops the connection instead of being accepted.", Required: false),
+        new CredentialField("hostKey", "Host key fingerprint", CredentialTypes.Text, "SHA256:... as printed by Test connection. Until it is set the appliance is not connected to; a changed key stops the connection.", Required: false),
+        new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended). On connects without a pinned key and exposes the password to anyone who can intercept the connection.", Required: false, Default: "false"),
         new CredentialField("timeoutSeconds", "Timeout (seconds)", CredentialTypes.Number, "Per connection and per command.", Required: false, Default: "30"),
     };
 
@@ -47,7 +48,8 @@ public static partial class ApplianceSsh
         return new SshConnectionOptions(user, pw.Length > 0 ? pw : null, key.Length > 0 ? key : null,
             FwCreds.Secret(c, "passphrase") is { Length: > 0 } pp ? pp : null,
             TimeSpan.FromSeconds(Math.Clamp(FwCreds.Int(c, "timeoutSeconds", 30), 5, 300)),
-            AcceptAnyHostKey: false, ExpectedFingerprint: pin.Length > 0 ? pin : null);
+            AcceptAnyHostKey: FwCreds.Get(c, "acceptAny").Trim().ToLowerInvariant() is "true" or "1" or "yes" or "on",
+            ExpectedFingerprint: pin.Length > 0 ? pin : null);
     }
 
     /// <summary>Warning text when the host key is not pinned yet (null when it is, or unknown).</summary>
@@ -76,28 +78,19 @@ public static partial class ApplianceSsh
         }
         var info = new ConnectionInfo(t.Host, t.Port, o.Username, methods.ToArray()) { Timeout = o.Timeout };
         var client = new SshClient(info);
-        string? presented = null; string? rejected = null;
-        client.HostKeyReceived += (_, e) =>
-        {
-            presented = e.FingerPrintSHA256;
-            if (o.AcceptAnyHostKey || o.ExpectedFingerprint is null) { e.CanTrust = true; return; }
-            if (SshLinuxAdapter.FingerprintEquals(o.ExpectedFingerprint, presented)) e.CanTrust = true;
-            else { rejected = presented; e.CanTrust = false; }
-        };
+        var guard = new SshHostKeys.Guard(client, t.AsTyped, o.ExpectedFingerprint, o.AcceptAnyHostKey,
+            fp => "paste " + SshLinuxAdapter.FormatFingerprint(fp) + " into Host key fingerprint");
         try
         {
             await client.ConnectAsync(ct);
         }
-        catch (SshConnectionException ex) when (rejected is not null)
+        catch (Exception ex)
         {
             client.Dispose();
-            throw new InvalidOperationException("Host key for " + t.AsTyped + " has changed: expected " + SshLinuxAdapter.FormatFingerprint(o.ExpectedFingerprint!) + ", received " + SshLinuxAdapter.FormatFingerprint(rejected) + ". Verify the appliance before updating the pinned key.", ex);
-        }
-        catch
-        {
-            client.Dispose();
+            if (guard.Explain(ex) is { } why) throw why;
             throw;
         }
+        var presented = guard.Presented;
         if (mode == SshMode.Exec) return new ExecSession(client, presented, o.Timeout);
         try { return await ShellSession.OpenAsync(client, presented, o.Timeout, ct); }
         catch { client.Dispose(); throw; }

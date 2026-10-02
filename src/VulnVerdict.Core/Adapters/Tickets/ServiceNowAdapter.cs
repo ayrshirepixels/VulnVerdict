@@ -37,9 +37,25 @@ public sealed class ServiceNowAdapter : TicketAdapterBase
         public string Api(string query = "") => Instance + "/api/now/table/" + Table + query;
     }
 
-    private static Creds Read(IReadOnlyDictionary<string, string> c) => new(
-        BaseUrl(Require(c, "instanceUrl", "Instance URL")), Require(c, "username", "Username"), Require(c, "password", "Password"),
-        Get(c, "table", "incident").ToLowerInvariant(), Get(c, "assignmentGroup") is { Length: > 0 } g ? g : null);
+    private static Creds Read(IReadOnlyDictionary<string, string> c)
+    {
+        var table = Get(c, "table", "incident").ToLowerInvariant();
+        // the table is part of the URL path: a table name, nothing else
+        if (!System.Text.RegularExpressions.Regex.IsMatch(table, "^[a-z0-9_]{1,80}$")) throw new ArgumentException("Table must be a ServiceNow table name such as incident (letters, digits and underscores).");
+        return new(BaseUrl(Require(c, "instanceUrl", "Instance URL")), Require(c, "username", "Username"), Require(c, "password", "Password"),
+            table, Get(c, "assignmentGroup") is { Length: > 0 } g ? g : null);
+    }
+
+    /// <summary>
+    /// A value placed in an encoded query. "^" separates conditions (and "^OR", "^NQ" add new ones), so a value
+    /// carrying it could widen the search to other records; such values are refused, not escaped.
+    /// </summary>
+    public static string QueryValue(string v)
+    {
+        if (v.Length == 0 || v.Length > 200 || v.Contains('^') || v.Any(char.IsControl))
+            throw new ArgumentException("Value cannot be used in a ServiceNow query: " + (v.Length > 40 ? v[..40] + "..." : v));
+        return v;
+    }
 
     private HttpClient Client(IReadOnlyDictionary<string, string> credentials, Creds c)
     {
@@ -63,7 +79,7 @@ public sealed class ServiceNowAdapter : TicketAdapterBase
         var client = Client(credentials, c);
 
         // idempotency: an active record already carries our correlation id
-        var query = "correlation_id=" + request.CorrelationKey + "^active=true";
+        var query = "correlation_id=" + QueryValue(request.CorrelationKey) + "^active=true";
         var found = await SendJsonAsync(client, JsonRequest(HttpMethod.Get, c.Api("?sysparm_query=" + Uri.EscapeDataString(query) + "&sysparm_fields=sys_id,number,state&sysparm_display_value=true&sysparm_limit=1")), ct);
         if (found?["result"] is JsonArray rows && rows.Count > 0 && Ref(rows[0]) is { } existing)
         {
@@ -102,7 +118,7 @@ public sealed class ServiceNowAdapter : TicketAdapterBase
     {
         var c = Read(credentials);
         var client = Client(credentials, c);
-        var query = "number=" + externalRef + "^ORsys_id=" + externalRef;
+        var query = "number=" + QueryValue(externalRef) + "^ORsys_id=" + QueryValue(externalRef);
         var r = await SendJsonAsync(client, JsonRequest(HttpMethod.Get, c.Api("?sysparm_query=" + Uri.EscapeDataString(query) + "&sysparm_fields=state&sysparm_display_value=true&sysparm_limit=1")), ct);
         return r?["result"] is JsonArray rows && rows.Count > 0 ? Str(rows[0]?["state"]) : null;
     }

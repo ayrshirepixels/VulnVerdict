@@ -42,12 +42,12 @@ public sealed class InventoryService
         // identity index of every non-archived asset for cross-source merging (MAC, then hostname, then IP)
         var all = await db.Assets.Include(a => a.Sources).Where(a => !a.Archived).ToListAsync(ct);
         var byMac = new Dictionary<string, Asset>(StringComparer.OrdinalIgnoreCase);
-        var byHost = new Dictionary<string, Asset>(StringComparer.OrdinalIgnoreCase);
+        var byHost = new HostIndex();
         var byIp = new Dictionary<string, List<Asset>>();
         foreach (var a in all)
         {
             foreach (var m in Json(a.MacAddressesJson)) byMac.TryAdd(NormMac(m), a);
-            foreach (var h in Json(a.HostnamesJson)) byHost.TryAdd(ShortHost(h), a);
+            foreach (var h in Json(a.HostnamesJson)) byHost.Add(h, a);
             foreach (var ip in Json(a.IpAddressesJson)) (byIp.TryGetValue(ip, out var l) ? l : byIp[ip] = new()).Add(a);
         }
 
@@ -58,7 +58,7 @@ public sealed class InventoryService
             Asset? asset = null;
             if (linkByExt.TryGetValue(rec.ExternalId, out var link) && assetCache.TryGetValue(link.AssetId, out var known)) asset = known;
             asset ??= rec.MacAddresses.Select(m => byMac.GetValueOrDefault(NormMac(m))).FirstOrDefault(a => a is not null);
-            asset ??= rec.Hostnames.Concat(new[] { rec.DisplayName }).Select(h => byHost.GetValueOrDefault(ShortHost(h))).FirstOrDefault(a => a is not null);
+            asset ??= rec.Hostnames.Concat(new[] { rec.DisplayName }).Select(byHost.Find).FirstOrDefault(a => a is not null);
             if (asset is null)
             {
                 foreach (var ip in rec.IpAddresses)
@@ -94,7 +94,7 @@ public sealed class InventoryService
 
             extToAsset[rec.ExternalId] = asset;
             foreach (var m in rec.MacAddresses) byMac.TryAdd(NormMac(m), asset);
-            foreach (var h in rec.Hostnames.Concat(new[] { rec.DisplayName })) byHost.TryAdd(ShortHost(h), asset);
+            foreach (var h in rec.Hostnames.Concat(new[] { rec.DisplayName })) byHost.Add(h, asset);
         }
         await db.SaveChangesAsync(ct);
 
@@ -142,7 +142,7 @@ public sealed class InventoryService
         {
             Asset? target = null;
             if (ex.AssetExternalId is not null) extToAsset.TryGetValue(ex.AssetExternalId, out target);
-            target ??= ex.Hostname is not null ? byHost.GetValueOrDefault(ShortHost(ex.Hostname)) : null;
+            target ??= ex.Hostname is not null ? byHost.Find(ex.Hostname) : null;
             if (target is null && ex.IpAddress is not null && byIp.TryGetValue(ex.IpAddress, out var c) && c.Count == 1) target = c[0];
             if (target is null || target.ExposurePinned) continue;
             if (ex.Exposure > target.Exposure || (target.ExposureEvidence ?? "").StartsWith(connector.DisplayName + ":"))
@@ -166,7 +166,7 @@ public sealed class InventoryService
             row.CveIdsJson = JsonSerializer.Serialize(ids); row.SourceSeverity = f.Severity; row.Title = Trunc(f.Title, 500); row.LastSeen = now;
             findings++;
         }
-        if (result.FullSnapshot)
+        if (result.FullSnapshot && !result.FindingsIncomplete)
         {
             var stale = await db.Findings.Where(x => x.ConnectorId == connectorId && x.LastSeen < now).ToListAsync(ct);
             db.Findings.RemoveRange(stale);
@@ -294,7 +294,67 @@ public sealed class InventoryService
 
     private static Criticality DefaultCriticality(AssetRecord r) => r.Kind is AssetKind.Firewall or AssetKind.Hypervisor ? Criticality.Critical : r.Criticality ?? Criticality.Standard;
     private static string NormMac(string m) => m.Replace("-", ":").Replace(".", "").ToLowerInvariant();
-    private static string ShortHost(string h) => h.Split('.')[0].Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Hostname identity for merging. FQDNs match exactly; a bare name ("SRV01" from AD or an RMM) matches an FQDN's
+    /// first label only when exactly one asset carries it. IP literals, blanks and generic names ("localhost") are never
+    /// keys: discovery uses the IP as the display name when there is no reverse DNS, and those must not merge.
+    /// </summary>
+    internal sealed class HostIndex
+    {
+        private readonly Dictionary<string, Asset> _full = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<Asset>> _byLabel = new(StringComparer.Ordinal);
+
+        public void Add(string? name, Asset a)
+        {
+            var n = NormHost(name);
+            if (n is null) return;
+            _full.TryAdd(n, a);
+            var label = n.Split('.')[0];
+            (_byLabel.TryGetValue(label, out var set) ? set : _byLabel[label] = new()).Add(a);
+        }
+
+        public Asset? Find(string? name)
+        {
+            var n = NormHost(name);
+            if (n is null) return null;
+            if (_full.TryGetValue(n, out var exact)) return exact;
+            var dot = n.IndexOf('.');
+            if (dot < 0)
+            {
+                // a bare name against FQDNs that share its first label: only when unambiguous
+                return _byLabel.TryGetValue(n, out var set) && set.Count == 1 ? set.First() : null;
+            }
+            // an FQDN against a bare name; a different domain is a different host (www.a.com is not www.b.com)
+            return _full.GetValueOrDefault(n[..dot]);
+        }
+    }
+
+    private static readonly HashSet<string> GenericHosts = new(StringComparer.Ordinal)
+    {
+        "localhost", "localhost.localdomain", "localhost4", "localhost6", "localhost6.localdomain6", "ip6-localhost", "ip6-loopback",
+        "localdomain", "unknown", "none", "(none)", "n/a", "null", "default", "-", "?",
+    };
+
+    /// <summary>Lower-cased hostname without a trailing dot, or null when it says nothing about identity.</summary>
+    internal static string? NormHost(string? h)
+    {
+        if (string.IsNullOrWhiteSpace(h)) return null;
+        var n = h.Trim().TrimEnd('.').ToLowerInvariant();
+        if (n.Length == 0 || GenericHosts.Contains(n) || n.StartsWith("localhost.")) return null;
+        if (IsIpLiteral(n)) return null;
+        if (n.StartsWith('.') || n.Contains("..")) return null;
+        return n;
+    }
+
+    private static bool IsIpLiteral(string n)
+    {
+        var t = n.Trim('[', ']');
+        var pct = t.IndexOf('%'); if (pct > 0) t = t[..pct];
+        if (t.Contains(':')) return System.Net.IPAddress.TryParse(t, out _);
+        // dotted digits ("10.0.0.5") and bare numbers ("10", which IPAddress would also accept) are never hostnames
+        return t.All(c => char.IsAsciiDigit(c) || c == '.');
+    }
     private static bool IsPrivateShared(string ip) => ip.StartsWith("127.") || ip.StartsWith("169.254.") || ip == "0.0.0.0" || ip.StartsWith("::");
     private static string Trunc(string? s, int max) => s is null ? "" : (s.Length <= max ? s : s[..max]);
     public static List<string> Json(string? json)

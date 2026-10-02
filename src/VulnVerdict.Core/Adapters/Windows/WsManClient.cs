@@ -160,14 +160,28 @@ public sealed class WsManClient : IWindowsShell
         _o = options; _log = log;
         var handler = new HttpClientHandler { UseDefaultCredentials = false, PreAuthenticate = true, AllowAutoRedirect = false, UseCookies = false };
         if (!options.VerifyTls) handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-        if (!options.BasicAuth) handler.Credentials = ToNetworkCredential(options.Username, options.Password);
+        var host = options.Host.Contains(':') && !options.Host.StartsWith('[') ? "[" + options.Host + "]" : options.Host;
+        Endpoint = (options.UseTls ? "https" : "http") + "://" + host + ":" + options.EffectivePort + "/wsman";
+        if (!options.BasicAuth) handler.Credentials = WindowsAuthOnly(new Uri(Endpoint), options.Username, options.Password);
         // per request; the OperationTimeout (60 s) makes the server answer before this fires
         _http = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(90) };
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
         if (options.BasicAuth)
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(options.Username + ":" + options.Password)));
-        var host = options.Host.Contains(':') && !options.Host.StartsWith('[') ? "[" + options.Host + "]" : options.Host;
-        Endpoint = (options.UseTls ? "https" : "http") + "://" + host + ":" + options.EffectivePort + "/wsman";
+    }
+
+    /// <summary>
+    /// Credentials offered only to Negotiate (Kerberos or NTLM) and NTLM challenges from this host. A bare
+    /// NetworkCredential would also answer a Basic challenge, handing the password to whoever sits on the connection.
+    /// </summary>
+    public static CredentialCache WindowsAuthOnly(Uri target, string username, string password)
+    {
+        var root = new Uri(target.GetLeftPart(UriPartial.Authority));
+        var cred = ToNetworkCredential(username, password);
+        var cache = new CredentialCache();
+        cache.Add(root, "Negotiate", cred);
+        cache.Add(root, "NTLM", cred);
+        return cache;
     }
 
     /// <summary>"DOMAIN\user" and ".\user" become domain + user; "user@domain" (UPN) is passed through as the user name.</summary>

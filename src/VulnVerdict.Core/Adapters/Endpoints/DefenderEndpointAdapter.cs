@@ -74,9 +74,11 @@ public sealed class DefenderEndpointAdapter : IInventoryAdapter
         var result = new CollectResult { FullSnapshot = true };
 
         progress?.Report("Listing machines");
-        var machines = await AllPagesAsync(api, MachinesPath, ct);
+        var (machines, machinesCapped) = await AllPagesAsync(api, MachinesPath, ct);
+        if (machinesCapped) result.Warnings.Add("The machine list stopped at " + MaxRows.ToString("N0") + " rows; machines beyond that were not read.");
         progress?.Report("Reading the software inventory");
-        var software = await AllPagesAsync(api, SoftwarePath, ct);
+        var (software, softwareCapped) = await AllPagesAsync(api, SoftwarePath, ct);
+        if (softwareCapped) result.Warnings.Add("The software inventory stopped at " + MaxRows.ToString("N0") + " rows; no software is marked removed this run.");
         var byMachine = software.GroupBy(s => EpJson.Str(s, "deviceId") ?? "").ToDictionary(g => g.Key, g => g.ToList());
 
         var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -92,6 +94,8 @@ public sealed class DefenderEndpointAdapter : IInventoryAdapter
             result.Assets.Add(asset);
             if (os is not null) result.Software.Add(os);
             result.Software.AddRange(apps);
+            // a machine Defender knows but whose inventory has no rows yet (just onboarded, or a capped read) is not "everything uninstalled"
+            if (rows.Count == 0 || softwareCapped) result.IncompleteSoftware.Add(asset.ExternalId);
             kept.Add(id);
         }
         if (stale > 0) result.Warnings.Add(stale + " machine(s) not seen by Defender for " + EndpointNaming.StaleDays + " days were left out.");
@@ -101,7 +105,13 @@ public sealed class DefenderEndpointAdapter : IInventoryAdapter
             progress?.Report("Reading vulnerability findings");
             try
             {
-                foreach (var v in await AllPagesAsync(api, VulnerabilitiesPath, ct))
+                var (vulns, vulnsCapped) = await AllPagesAsync(api, VulnerabilitiesPath, ct);
+                if (vulnsCapped)
+                {
+                    result.Warnings.Add("Vulnerability findings stopped at " + MaxRows.ToString("N0") + " rows; findings not read this run are kept.");
+                    result.FindingsIncomplete = true;
+                }
+                foreach (var v in vulns)
                 {
                     var f = MapVulnerability(v);
                     if (f is not null && kept.Contains(f.AssetExternalId)) result.Findings.Add(f);
@@ -113,23 +123,32 @@ public sealed class DefenderEndpointAdapter : IInventoryAdapter
             catch (EndpointApiException ex) when (ex.Status is 403 or 404)
             {
                 result.Warnings.Add("Vulnerability findings are not readable (" + ex.Message + "); machines and software were still read.");
+                result.FindingsIncomplete = true; // keep what earlier runs found rather than purge it
             }
         }
         _log.LogInformation("Defender for Endpoint: {Machines} machines, {Software} software, {Findings} findings", result.Assets.Count, result.Software.Count, result.Findings.Count);
         return result;
     }
 
-    private static async Task<List<JsonElement>> AllPagesAsync(EndpointHttp api, string path, CancellationToken ct)
+    /// <summary>Upper bound on rows read from one export; Capped says there were more.</summary>
+    public int MaxRows { get; set; } = 5_000_000;
+
+    private async Task<(List<JsonElement> Items, bool Capped)> AllPagesAsync(EndpointHttp api, string path, CancellationToken ct)
     {
         var items = new List<JsonElement>();
         string? next = path;
-        while (next is not null && items.Count < 5_000_000)
+        while (next is not null)
         {
+            if (items.Count >= MaxRows)
+            {
+                _log.LogWarning("Defender for Endpoint: {Path} stopped at {Max} rows", path, MaxRows);
+                return (items, true);
+            }
             var page = await api.GetJsonAsync(next, ct);
             items.AddRange(EpJson.Items(page));
             next = EpJson.Str(page, "@odata.nextLink");
         }
-        return items;
+        return (items, false);
     }
 
     // ------------------------------------------------------------------ mapping (pure; tested with fixtures)
