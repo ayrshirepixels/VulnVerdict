@@ -60,6 +60,12 @@ public class KeyRingProtectionTests : IDisposable
     }
 
     [Fact]
+    public void The_decryptor_keeps_the_name_that_key_files_on_existing_installs_refer_to()
+    {
+        Assert.StartsWith("VulnVerdict.Web.SecretXmlDecryptor, VulnVerdict.Web,", typeof(SecretXmlDecryptor).AssemblyQualifiedName);
+    }
+
+    [Fact]
     public void A_short_secret_is_refused()
     {
         Assert.Throws<InvalidOperationException>(() => Protector("short"));

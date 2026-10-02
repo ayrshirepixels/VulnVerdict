@@ -125,7 +125,10 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Pages only. A script or scraper asking the API or /metrics must get the 404 or 429 itself, not the not-found page
+// (which, with nobody signed in, is a redirect to the login page).
+app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api") && !ctx.Request.Path.StartsWithSegments("/metrics"),
+    pages => pages.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 
 // security headers on every response
 app.Use(async (ctx, next) =>

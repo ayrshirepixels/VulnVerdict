@@ -134,6 +134,8 @@ public sealed class VerdictWorkflow
 
     /// <summary>The most one bulk action takes. Everything is one save, so the batch has to stay a sensible size.</summary>
     public const int MaxBulk = 2000;
+    /// <summary>Up to this many queued messages are sent before a bulk action returns; more wait for the worker.</summary>
+    private const int InlineDeliveries = 8;
 
     /// <summary>Same rule the pages apply: Operator or Administrator. Checked here as well, so no caller can skip it.</summary>
     public static bool CanOperate(System.Security.Claims.ClaimsPrincipal? user) =>
@@ -234,9 +236,9 @@ public sealed class VerdictWorkflow
             if (changed > 0) await db.SaveChangesAsync(ct);   // one save: every history line and audit entry, or none
         }
 
-        // tried now, a few at a time so a slow receiver does not hold the page for long; the worker retries the rest
-        foreach (var batch in (queued ?? new()).Chunk(8))
-            await _webhooks.DeliverNowAsync(batch, ct);
+        // a handful is tried now, as the single Done does; a large batch is left to the worker, which sends from the
+        // outbox within a minute, so a slow receiver cannot hold the page for one send after another
+        if (queued is { Count: > 0 and <= InlineDeliveries }) await _webhooks.DeliverNowAsync(queued, ct);
 
         return new BulkResult(req.Action, changed, skipped.OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal).Select(s => (s.Key, s.Value)).ToList());
     }

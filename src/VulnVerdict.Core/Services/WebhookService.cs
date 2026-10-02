@@ -281,7 +281,10 @@ public sealed class WebhookService
             if (resp.IsSuccessStatusCode) return (null, null, (int)resp.StatusCode);
             var text = await resp.Content.ReadAsStringAsync(CancellationToken.None);
             var retryAfter = resp.Headers.RetryAfter is { } ra ? ra.Delta ?? (ra.Date is { } at ? at - DateTimeOffset.UtcNow : null) : null;
-            return (Truncate("HTTP " + (int)resp.StatusCode + (text.Length > 0 ? ": " + text.Trim() : ""), 500), retryAfter, (int)resp.StatusCode);
+            // What the receiver replied goes to the log, not into the error that the health banner and the administrator
+            // alert show: the address is whatever was typed in Settings, and its reply is not for every signed-in user.
+            if (text.Length > 0) _log.LogWarning("Receiver replied HTTP {Status}: {Body}", (int)resp.StatusCode, Truncate(text.Trim(), 500));
+            return ("HTTP " + (int)resp.StatusCode + " (" + resp.StatusCode + ")", retryAfter, (int)resp.StatusCode);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)

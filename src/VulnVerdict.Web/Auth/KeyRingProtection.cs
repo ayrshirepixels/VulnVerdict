@@ -176,7 +176,11 @@ public sealed class SecretXmlEncryptor : IXmlEncryptor
     public EncryptedXmlInfo Encrypt(XElement plaintextElement) => new(_ring.Encrypt(plaintextElement), typeof(SecretXmlDecryptor));
 }
 
-/// <summary>Named in each encrypted key file; the framework creates it with the service provider when it reads the ring.</summary>
+/// <summary>
+/// Named in each encrypted key file; the framework creates it with the service provider when it reads the ring.
+/// Do not rename or move this class or its assembly: every protected key file on every install names it, and a file
+/// that names a type that no longer exists cannot be opened (KeyRingProtectionTests pins the name).
+/// </summary>
 public sealed class SecretXmlDecryptor : IXmlDecryptor
 {
     private readonly KeyRingSecret _ring;

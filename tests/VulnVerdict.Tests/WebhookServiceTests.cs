@@ -186,7 +186,7 @@ public class WebhookServiceTests : IDisposable
         Assert.Equal(1, row.Attempts);
         Assert.InRange(row.NextAttemptAt - DateTime.UtcNow, TimeSpan.FromSeconds(50), TimeSpan.FromSeconds(61));
         Assert.Contains("HTTP 500", row.LastError);
-        Assert.Contains("boom", row.LastError);
+        Assert.DoesNotContain("boom", row.LastError);   // what the receiver replied is logged, not shown
 
         // not due yet: a flush does nothing
         await svc.FlushPendingAsync(CancellationToken.None);

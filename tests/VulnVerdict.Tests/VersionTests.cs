@@ -444,4 +444,21 @@ public class VersionTests
         // "10-3" is a version with a build number, not "10 down to 3"
         Assert.NotEqual(VersionMatch.Affected, VersionMatcher.Evaluate("5.0", V(("10-3", "affected", null, null)), null).Match);
     }
+
+    [Fact]
+    public void An_unaffected_whole_number_range_is_not_widened_to_the_whole_top_line()
+    {
+        // affected by default, "5 - 7" unaffected: 7.2.3 is past 7 and nobody cleared it
+        var versions = V(("5 - 7", "unaffected", null, null));
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("6.4", versions, "affected").Match);
+        Assert.Equal(VersionMatch.NotAffected, VersionMatcher.Evaluate("7", versions, "affected").Match);
+        Assert.Equal(VersionMatch.Affected, VersionMatcher.Evaluate("7.2.3", versions, "affected").Match);
+    }
+
+    [Fact]
+    public void A_build_number_after_a_spaced_dash_is_not_the_top_of_a_range()
+    {
+        var versions = V(("7.1.1 - 7058", "affected", null, null));
+        Assert.NotEqual(VersionMatch.Affected, VersionMatcher.Evaluate("7.3.0", versions, null).Match);
+    }
 }

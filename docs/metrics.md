@@ -16,7 +16,7 @@ The endpoint is never open:
 - on, it answers 401 unless the request carries the metrics token, or comes from an address in the allow-list on the same Settings card (addresses or CIDR ranges, for a scraper that cannot send a token);
 - the metrics token reads `/metrics` and nothing else, and the API tokens do not read `/metrics`.
 
-The allow-list compares the address the TLS proxy reports for the client. Prefer the token; use the allow-list only on a network where that address can be trusted.
+The allow-list compares the address the TLS proxy reports for the client. Prefer the token; use the allow-list only on a network where that address can be trusted. Do not use the allow-list when the console is reached without the built-in proxy (the all-in-one image with `VV_TLS=off`): there the address comes from the `X-Forwarded-For` header, which any client reaching the console directly can set.
 
 ## What is in it, and what is not
 

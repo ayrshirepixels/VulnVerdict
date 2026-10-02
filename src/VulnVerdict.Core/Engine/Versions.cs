@@ -274,9 +274,13 @@ public static partial class VersionMatcher
         if (a is null || b is null) return null;
         if (VersionCompare.Compare(a, b) > 0)
             return new Range(null, null, true, affected, MatchConfidence.Possible, text + " (range written backwards, unparsed)");
-        // A whole number at the top means the whole of that line: "5 - 7" covers 7.2.3, so the range ends just
-        // before 8. Read as 7.0.0 exactly, every 7.x release would have been cleared.
-        if (toIncl && WholeBound().IsMatch(b)) { b = (int.Parse(b) + 1).ToString(); toIncl = false; }
+        // One dotted end and one bare number is only a range while the number could be a major release: in
+        // "7.1.1 - 7058" it is a build number, and that text is one version as before.
+        if (WholeBound().IsMatch(a) != WholeBound().IsMatch(b) && (WholeBound().IsMatch(a) ? a : b).Length > 3) return null;
+        // A whole number at the top of an affected range means the whole of that line: "5 - 7" covers 7.2.3, so the
+        // range ends just before 8. Read as 7.0.0 exactly, every 7.x release would have been cleared. An unaffected
+        // range is not widened: there the wider reading is the one that clears releases nobody cleared.
+        if (affected && toIncl && WholeBound().IsMatch(b)) { b = (int.Parse(b) + 1).ToString(); toIncl = false; }
         return new Range(a, b, toIncl, affected, MatchConfidence.Likely, text, fromIncl);
     }
 

@@ -169,13 +169,17 @@ public sealed class UserService
         var result = Hasher.VerifyHashedPassword(user, user.PasswordHash, password);
         if (result == PasswordVerificationResult.Failed)
         {
-            // the login rate limit is per address; this one is per account, so guesses spread over many addresses still stop
-            if (++user.FailedPasswordCount >= MaxPasswordFailures)
+            // the login rate limit is per address; this one is per account, so guesses spread over many addresses still
+            // stop. Counted in the database, one UPDATE per guess: guesses arriving together cannot share an increment.
+            await db.Users.Where(u => u.Id == user.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.FailedPasswordCount, x => x.FailedPasswordCount + 1), ct);
+            var failures = await db.Users.Where(u => u.Id == user.Id).Select(u => u.FailedPasswordCount).FirstOrDefaultAsync(ct);
+            if (failures >= MaxPasswordFailures)
             {
-                user.FailedPasswordCount = 0; user.PasswordLockedUntil = now + LockoutPeriod;
-                db.Audit.Add(new AuditEntry { At = now, Actor = user.Username, Action = "user.lockout", Target = user.Username, After = MaxPasswordFailures + " wrong passwords in a row; locked until " + user.PasswordLockedUntil.Value.ToString("u") });
+                var lockedUntil = now + LockoutPeriod;
+                await db.Users.Where(u => u.Id == user.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.FailedPasswordCount, 0).SetProperty(x => x.PasswordLockedUntil, (DateTime?)lockedUntil), ct);
+                db.Audit.Add(new AuditEntry { At = now, Actor = user.Username, Action = "user.lockout", Target = user.Username, After = MaxPasswordFailures + " wrong passwords in a row; locked until " + lockedUntil.ToString("u") });
+                await db.SaveChangesAsync(ct);
             }
-            await db.SaveChangesAsync(ct);
             return null;
         }
         if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = Hasher.HashPassword(user, password);
