@@ -116,7 +116,7 @@ build {
   }
   provisioner "file" {
     sources = [
-      "../docker-compose.yml", "../Caddyfile", "../update.sh", "../rollback.sh",
+      "../docker-compose.yml", "../Caddyfile", "../update.sh", "../rollback.sh", "../restore.sh",
       "firstboot.sh", "appliance-setup.sh",
     ]
     destination = "/tmp/vv/"

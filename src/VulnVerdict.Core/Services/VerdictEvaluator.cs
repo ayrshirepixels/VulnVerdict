@@ -55,6 +55,7 @@ public sealed partial class VerdictEvaluator
         // a run with failures still counts as a run: the failed subjects are retried on their own, not the whole run
         // every minute
         await _settings.SetStateAsync(SettingsService.Keys.LastEvaluation, DateTime.UtcNow.ToString("O"), ct);
+        await _settings.SetStateAsync(MetricsService.EvaluationSecondsKey, sw.Elapsed.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), ct);
         await RecordFailedAsync(failed, ct);
         var summary = total with { Removed = removed, Elapsed = sw.Elapsed };
         _log.LogInformation("Evaluated {Entries} subjects: {Candidates} candidates, {Created} new, {Changed} changed, {Removed} removed, {Failed} failed in {Elapsed}", summary.Entries, summary.Candidates, summary.Created, summary.Changed, summary.Removed, failed.Count, summary.Elapsed);

@@ -22,7 +22,7 @@ systemctl enable --now docker
 # ── The stack ─────────────────────────────────────────────────────────────
 install -d -m 0755 /opt/vulnverdict
 install -m 0644 /tmp/vv/docker-compose.yml /tmp/vv/Caddyfile /opt/vulnverdict/
-install -m 0755 /tmp/vv/update.sh /tmp/vv/rollback.sh /opt/vulnverdict/
+install -m 0755 /tmp/vv/update.sh /tmp/vv/rollback.sh /tmp/vv/restore.sh /opt/vulnverdict/
 # DB_PASSWORD is a placeholder: the first-boot wizard generates the real one, so no two appliances
 # share it. The .env is root-only because it will hold that password.
 printf 'DB_PASSWORD=__SET_AT_FIRST_BOOT__\nVV_HOSTNAME=vulnverdict\nVV_IMAGE=%s\nVV_DB_IMAGE=%s\nVV_PROXY_IMAGE=%s\nCVE_MIN_YEAR=0\n' \

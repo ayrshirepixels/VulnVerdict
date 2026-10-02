@@ -39,6 +39,7 @@ docker exec -u vulnverdict -w /app \
 ```
 
 The console keeps running while the command runs. It removes that local account's two-factor and recovery codes, clears its lockouts, ends its sessions and writes `user.2fa.reset` by `console` to the audit log. The account then signs in with its password, and sets two-factor up again at once if the policy requires it. It does not change the password.
+- `/metrics` (Prometheus) is off by default and never anonymous: once an administrator turns it on it needs its own metrics token, stored and compared the same way and good for nothing else, or a scraper address on the allow-list. While it is off it answers 404. Its labels carry no asset names, hostnames, addresses or CVE identifiers (see [metrics](metrics.md)).
 
 ## Secrets
 
@@ -46,6 +47,7 @@ The console keeps running while the command runs. It removes that local account'
 - Saved secrets are never sent back to the browser: the forms show that one is saved, and a blank field keeps it. A blank connector password is only reused while the connector's address, account and TLS setting are unchanged, so a changed address cannot be tested with the saved password. Pinning an SSH host key does not count as a change; a different host or port does.
 - SSH connectors only sign in to hosts whose key is pinned. An administrator pins a key from the connector test (one click, audited with the fingerprint); a key that differs from the pinned one is never accepted in bulk and has to be replaced host by host. See [connectors](connectors.md#ssh-host-keys).
 - Credentials never appear in configuration files or logs. Every adapter uses read-only accounts and never writes to the source.
+- A backup holds the database and the key ring, because one is useless without the other: together they open every stored credential. The backups folder is created for the console's user only; put it on storage only administrators can read, and set an archive passphrase (AES-256-GCM, key derived with PBKDF2-HMAC-SHA256) if the backups leave the machine. Backups, the passphrase and restores are administrator-only and audited. See [backup](backup.md).
 
 ## Network
 
@@ -58,7 +60,7 @@ Content Security Policy (scripts only from the console itself, no inline scripts
 
 ## Feed bundles and licences
 
-The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. Vendor VEX statements and end-of-life dates travel as two optional files with their own signature over their hashes, checked the same way; a console that predates them ignores them. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
+The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. An uploaded bundle is checked before it is unpacked: the manifest is read and its signature verified first, then only the files the signed manifest lists are extracted, each stopped at its signed size and hashed as it is written. A zip that holds anything else, a file larger than its signed size (a zip bomb) or an upload over 2 GB is refused. Vendor VEX statements and end-of-life dates travel as two optional files with their own signature over their hashes, checked the same way; a console that predates them ignores them. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
 
 ## Supply chain
 
@@ -66,7 +68,7 @@ Every push and release checks the NuGet packages, direct and transitive, for kno
 
 Nothing runs as root inside the containers. Postgres and the console run as their own users; Caddy runs as the console user with only the capability to bind 443. The Compose database image is Postgres 16 without gosu, running as postgres from the start, and the proxy image is Caddy compiled with the current Go release and dependencies, because the published Postgres and Caddy images can lag behind Go security fixes.
 
-Image updates are opt-in with a changelog and a one-command rollback; `deploy/update.sh` moves the database and proxy images along with the console.
+Image updates are opt-in with a changelog. `deploy/update.sh` moves the database and proxy images along with the console, takes and verifies a database dump before the new version starts (no dump, no update), and puts all four images and, if the schema moved, the database back by itself when the new version does not come up; `deploy/rollback.sh` does the same by hand.
 
 ## Reporting a vulnerability in VulnVerdict
 

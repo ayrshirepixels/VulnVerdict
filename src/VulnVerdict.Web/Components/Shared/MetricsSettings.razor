@@ -1,0 +1,62 @@
+@inject MetricsAuth Metrics
+
+@* Metrics card on the Settings page. Saves on its own buttons: these values are not part of the Settings form above. *@
+<div class="card">
+    <h2>Metrics (Prometheus)</h2>
+    <p class="muted" style="margin-top:0"><code>GET /metrics</code> reports verdict counts, overdue items, feed and connector health, mail, backups and the licence in the Prometheus text format, for your own monitoring. Off until you turn it on, and never open: a scraper sends the metrics token as <code>Authorization: Bearer TOKEN</code>, or comes from an address you list. No asset names, hostnames or addresses are in it (<a href="https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/metrics.md" target="_blank" rel="noopener noreferrer">what is, with a sample scrape configuration</a>).</p>
+    @if (_notice is not null) { <div class="alert alert-ok">@_notice</div> }
+    @if (_error is not null) { <div class="alert alert-error">@_error</div> }
+    @if (_newToken is not null) { <div class="alert alert-ok">Copy this token now; it is not shown again.<br /><code style="user-select:all;word-break:break-all">@_newToken</code></div> }
+    @if (_status is not null)
+    {
+        <div class="form">
+            <div class="row">
+                <div><label>Endpoint</label><div>@(_status.Enabled ? (_status.HasToken || _allow.Trim().Length > 0 ? "On" : "On, but nothing can read it: generate a token or list an address") : "Off")</div></div>
+                <div class="btn-row" style="align-self:end">
+                    @if (_status.Enabled) { <button class="btn btn-secondary" @onclick="Disable" disabled="@_busy">Turn off</button> }
+                    else { <button class="btn btn-secondary" @onclick="Enable" disabled="@_busy">Turn on</button> }
+                </div>
+            </div>
+            <div class="row">
+                <div><label>Metrics token</label><div>@(_status.HasToken ? "Set" : "Not set")</div></div>
+                <div class="btn-row" style="align-self:end"><button class="btn btn-secondary" @onclick="Generate" disabled="@_busy">@(_status.HasToken ? "Replace" : "Generate")</button>@if (_status.HasToken) { <button class="btn btn-secondary" @onclick="Revoke" disabled="@_busy">Revoke</button> }</div>
+            </div>
+            <div class="row">
+                <div><label>Scraper addresses allowed without a token (optional)</label><input type="text" @bind="_allow" placeholder="10.0.5.20, 10.0.9.0/24" /><div class="help">Addresses or CIDR ranges. The address is the one the TLS proxy reports, so prefer the token unless the scraper cannot send one.</div></div>
+                <div class="btn-row" style="align-self:center"><button class="btn btn-secondary" @onclick="SaveAllow" disabled="@_busy">Save addresses</button></div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private MetricsAuth.Status? _status;
+    private string _allow = "";
+    private string? _newToken, _notice, _error;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync(true);
+
+    private async Task LoadAsync(bool allow = false)
+    {
+        _status = await Metrics.StatusAsync();
+        if (allow) _allow = _status.AllowList;
+    }
+
+    private async Task Run(Func<string, Task> action)
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _notice = null; _newToken = null;
+        try { await action(Ui.Actor((await AuthState).User)); }
+        catch (Exception ex) { _error = ex.Message; }
+        await LoadAsync(_error is null);
+        _busy = false;
+    }
+
+    private Task Enable() => Run(async actor => { _newToken = await Metrics.EnableAsync(actor); _notice = "Metrics are on."; });
+    private Task Disable() => Run(async actor => { await Metrics.DisableAsync(actor); _notice = "Metrics are off."; });
+    private Task Generate() => Run(async actor => _newToken = await Metrics.GenerateTokenAsync(actor));
+    private Task Revoke() => Run(async actor => { await Metrics.RevokeTokenAsync(actor); _notice = "Metrics token revoked."; });
+    private Task SaveAllow() => Run(async actor => { await Metrics.SetAllowListAsync(_allow, actor); _notice = "Allowed addresses saved."; });
+}

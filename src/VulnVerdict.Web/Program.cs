@@ -14,6 +14,9 @@ using VulnVerdict.Core.Services;
 using VulnVerdict.Web;
 using VulnVerdict.Web.Components;
 
+// backup-decrypt and backup-verify (deploy/restore.sh) run and exit without starting the console
+if (await BackupCli.TryRunAsync(args)) return;
+
 var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
 
@@ -286,6 +289,8 @@ app.MapPost("/connectors/{id:guid}/diagnostics", async (Guid id, HttpContext htt
 
 app.MapGet("/reports/weekly.csv", async (ReportService reports, int? weeks) =>
     Results.File(System.Text.Encoding.UTF8.GetBytes((await reports.BuildAsync(weeks is > 0 ? DateTime.UtcNow.AddDays(-7 * weeks.Value) : null)).Csv), "text/csv", "vulnverdict-weekly-" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ".csv"));
+
+app.MapOperationsEndpoints();
 
 // Healthy means the console can reach its database, so a stack whose web container is up but cut off
 // from Postgres shows as unhealthy to Docker, the appliance test and anyone probing it.

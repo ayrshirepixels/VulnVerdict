@@ -84,7 +84,20 @@ Caddy issues a certificate from its internal CA for an internal hostname (import
 
 ## Updating and rolling back
 
-Updates are opt-in. `./update.sh [tag]` (in the Compose folder, or `/opt/vulnverdict` on the appliance) pulls the new image, keeps the previous one, moves the database and proxy to the images released with it, restarts web and worker, and rolls back automatically if the console does not answer within a minute. `./rollback.sh` returns the console to the previous image. Database migrations are additive, so an older image runs against a newer schema. The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume.
+Updates are opt-in. In the Compose folder, or `/opt/vulnverdict` on the appliance (with `sudo`):
+
+```bash
+./update.sh            # to the latest release; ./update.sh 1.4.0 for a particular one
+./update.sh --dry-run  # show what it would do
+```
+
+`update.sh` notes which images are running (console, worker, database, proxy), pulls the new ones, and keeps the old ones under `:rollback` tags. It then stops the console and worker, dumps the database to `backups/pre-update-<time>.dump` in the same folder and checks that the dump reads back; if it cannot take that backup it starts the old version again and stops. Only then does it start the new images, the database first, then the console and worker (migrations run on start), then the proxy. If any of them does not come up, it rolls everything back by itself. Expect the console to be away for a minute or two. Running it again with the same release does nothing.
+
+`./rollback.sh` puts all four images back by hand, for the release that came up but turned out wrong. A newer console may have changed the database schema, which the older one cannot be assumed to run against, so when the schema has moved it asks whether to restore the pre-update dump (everything recorded since the update is lost); `--restore-db` or `--keep-db` answers in advance, and with nobody to ask and neither given it changes nothing. The last three pre-update dumps are kept; they hold your data, so the `backups` folder is readable by root only.
+
+On an air-gapped site, load the release's images with `docker load` and run `./update.sh --no-pull <tag>`.
+
+The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume. Press **Back up now** (Settings, Backups) first, or copy the latest file from the backups folder: rolling back means recreating the container from the previous image and, if the schema moved, restoring that backup with `restore.sh --container` (see [backup](backup.md)).
 
 ## Air-gapped sites
 
@@ -92,4 +105,8 @@ Set no bundle URL and upload a signed feed bundle under **Licence and updates** 
 
 ## Backups
 
-Back up the `db` volume (Postgres) and the `data` volume (data-protection keys, which encrypt stored credentials and secrets). Without the keys a restored database cannot decrypt connector credentials; everything else survives.
+The worker backs up the database and the data-protection keys every night at 02:30 into the `backups` folder of the data volume, checks each backup, keeps 14 daily and 8 weekly, and tells you (Sources page, digest footer, administrator alert) when one fails or the last good one is older than 48 hours. By default that folder is a Docker volume on the same machine: set `VV_BACKUP_DIR` in `.env` to a mounted share or another disk so the backups survive the machine, and consider the archive passphrase, because a backup and its keys together open every stored credential. `./restore.sh` puts one back. All of it, including restoring onto a new machine, is in [backup](backup.md).
+
+## Monitoring
+
+`GET /metrics` serves Prometheus metrics (backlog by tier, overdue, feed and connector freshness, mail, backup age) once an administrator turns it on under Settings; it needs the metrics token or a listed scraper address. See [metrics](metrics.md) for the list, a scrape configuration and a starter Grafana dashboard.

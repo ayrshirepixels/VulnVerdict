@@ -27,6 +27,8 @@ public sealed class DigestContent
     public string? FeedWarning { get; init; }
     /// <summary>Client secrets expiring within 30 days: in the email only (the console shows them as a banner).</summary>
     public string? SecretWarning { get; init; }
+    /// <summary>Set when the last good database backup is older than 48 hours.</summary>
+    public string? BackupWarning { get; init; }
     public DateTime GeneratedAt { get; init; }
     public string Html { get; init; } = "";
     public string Text { get; init; } = "";
@@ -128,6 +130,7 @@ public sealed class DigestService
         // client secrets about to expire: the digest is the one place an administrator reliably sees a month ahead
         var secretNotices = await _notices.SecretsAsync(now, ct);
         var secretWarning = secretNotices.Count > 0 ? string.Join(" ", secretNotices.Select(n => n.Text)) : null;
+        var backupWarning = (await BackupService.HealthAsync(_settings, null, now, ct)).DigestWarning;
 
         // one-click links, only in a digest that is being sent and only when there is an address to put in them
         var actions = new Dictionary<Guid, DigestActionLinks>();
@@ -142,7 +145,7 @@ public sealed class DigestService
         {
             Headline = headline, Subject = subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions
         };
         var html = RenderHtml(content, s.BaseUrl, localNow);
         var text = RenderText(content, s.BaseUrl, localNow);
@@ -150,7 +153,7 @@ public sealed class DigestService
         {
             Headline = content.Headline, Subject = content.Subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
         };
     }
 
@@ -287,7 +290,7 @@ public sealed class DigestService
                     channel = "email"; externalRef = s.HelpdeskIntakeAddress;
                 }
             }
-            catch (Exception ex) { _log.LogWarning(ex, "Ticket not raised for {Cve}", v.CveId); break; }
+            catch (Exception ex) { _log.LogWarning(ex, "Ticket not raised for {Cve}", v.CveId); MetricCounters.Add(MetricCounters.TicketsFailed); break; }
             v.TicketSentAt = DateTime.UtcNow;
             db.Tickets.Add(new Ticket { Id = Guid.NewGuid(), VerdictId = v.Id, Channel = channel, CorrelationKey = key, ExternalRef = externalRef is { Length: > 256 } ? externalRef[..256] : externalRef, SentAt = DateTime.UtcNow, LastStatus = "sent" });
             sent++;
@@ -342,6 +345,7 @@ public sealed class DigestService
         sb.Append("<p style=\"color:#444;font-size:13px\">" + WebUtility.HtmlEncode(c.CoverageLine) + " " + c.DismissedTotal + " CVEs dismissed in total as not affected or not worth your time.</p>");
         if (c.FeedWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.FeedWarning) + "</p>");
         if (c.SecretWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.SecretWarning) + "</p>");
+        if (c.BackupWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.BackupWarning) + "</p>");
         sb.Append("<p style=\"color:#5c6470;font-size:12px;margin-top:14px\"><b style=\"color:#1E222A\"><span style=\"color:#FF9F0A\">VULN</span>VERDICT</b> &middot; Cut the noise. Know your risk.</p>");
         sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(Disclaimer) + "</p>");
         sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(EpssAttribution) + "</p>");
@@ -382,6 +386,7 @@ public sealed class DigestService
         sb.AppendLine(c.CoverageLine + " " + c.DismissedTotal + " CVEs dismissed in total.");
         if (c.FeedWarning is not null) sb.AppendLine(c.FeedWarning);
         if (c.SecretWarning is not null) sb.AppendLine(c.SecretWarning);
+        if (c.BackupWarning is not null) sb.AppendLine(c.BackupWarning);
         sb.AppendLine();
         sb.AppendLine(Disclaimer);
         sb.AppendLine();

@@ -42,6 +42,8 @@ public class VvDbContext : DbContext
     public DbSet<VexStatement> VexStatements => Set<VexStatement>();
     public DbSet<VexDocument> VexDocuments => Set<VexDocument>();
     public DbSet<EolCycle> EolCycles => Set<EolCycle>();
+    public DbSet<MetricCounter> MetricCounters => Set<MetricCounter>();
+    public DbSet<SlaSnapshot> SlaSnapshots => Set<SlaSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -118,6 +120,8 @@ public class VvDbContext : DbContext
         b.Entity<VexStatement>(e => { e.HasIndex(x => x.CveId); e.HasIndex(x => new { x.Provider, x.DocumentId }); });
         b.Entity<VexDocument>(e => e.HasIndex(x => new { x.Provider, x.Path }).IsUnique());
         b.Entity<EolCycle>(e => e.HasIndex(x => new { x.Slug, x.Cycle }).IsUnique());
+        b.Entity<MetricCounter>(e => e.HasKey(x => new { x.Name, x.Label }));
+        b.Entity<SlaSnapshot>(e => e.HasIndex(x => new { x.Day, x.Tier }).IsUnique());
     }
 }
 

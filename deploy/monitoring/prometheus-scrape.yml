@@ -1,0 +1,16 @@
+# Prometheus scrape job for a VulnVerdict console. Turn metrics on under Settings first; the token is shown once there.
+# See docs/metrics.md for what is reported.
+scrape_configs:
+  - job_name: vulnverdict
+    scheme: https
+    metrics_path: /metrics
+    scrape_interval: 60s
+    authorization:
+      type: Bearer
+      # a file holding only the token (vv_metrics_...), readable by Prometheus alone
+      credentials_file: /etc/prometheus/secrets/vulnverdict-metrics-token
+    tls_config:
+      # the console's internal CA (caddy-root.crt); remove this line when the console has a public certificate
+      ca_file: /etc/prometheus/secrets/vulnverdict-caddy-root.crt
+    static_configs:
+      - targets: ["vulnverdict.internal"]

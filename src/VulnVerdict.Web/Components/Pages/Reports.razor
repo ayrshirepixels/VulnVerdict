@@ -1,8 +1,11 @@
 @page "/reports"
 @inject ReportService ReportSvc
+@inject SlaReportService SlaSvc
 @inject SettingsService Settings
 
 <PageTitle>Reports - VulnVerdict</PageTitle>
+
+<style>@((MarkupString)SlaCharts.Css)</style>
 
 <div class="page">
     <h1>Weekly management report</h1>
@@ -25,16 +28,139 @@
             <a class="btn btn-secondary" href="/reports/weekly.csv">Download CSV</a>
             <a class="btn btn-secondary" href="/reports/weekly.html?weeks=1" target="_blank">Last week's report</a>
         </div>
+    }
+
+    <h1 style="margin-top:28px">Fix times and trends</h1>
+    <p class="lead">How long fixes take against the fix windows, week by week. Time to fix runs from when a verdict opened to when it closed; a week is Monday to Sunday in the console's time zone.</p>
+
+    @if (_sla is null) { <p class="muted">@(_slaError ?? "Building...")</p> }
+    else
+    {
+        <div class="btn-row" style="margin-bottom:16px">
+            <label style="margin:0">Show
+                <select value="@_weeks" @onchange="ChangeWeeks" style="width:auto;display:inline-block">
+                    <option value="8">8 weeks</option>
+                    <option value="12">12 weeks</option>
+                    <option value="26">26 weeks</option>
+                    <option value="52">52 weeks</option>
+                </select>
+            </label>
+            <a class="btn btn-secondary" href="/reports/sla.html?weeks=@_weeks" target="_blank">One-page summary to print</a>
+            <a class="btn btn-secondary" href="/reports/sla.csv?weeks=@_weeks">Download the numbers (CSV)</a>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card">@((MarkupString)SlaCharts.TimeToFix(_sla))</div>
+            <div class="card">@((MarkupString)SlaCharts.WithinSla(_sla))</div>
+            <div class="card">@((MarkupString)SlaCharts.OpenedClosed(_sla))</div>
+            <div class="card">@((MarkupString)SlaCharts.Overdue(_sla))</div>
+        </div>
+
+        <h2>The numbers</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Week starting</th><th>Opened</th><th>Closed</th><th>In fix window</th>
+                    @foreach (var t in SlaMath.Tiers) { <th>@t.Plain(): median / 90th</th> }
+                    <th>Open at end</th><th>Overdue at end</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var w in Enumerable.Reverse(_sla.Weeks))
+                {
+                    <tr>
+                        <td>@w.Week.Start.ToString("d MMM yyyy") <small class="muted">@w.Week.Label@(w.Week.Partial ? ", so far" : "")</small></td>
+                        <td class="num">@w.Opened</td>
+                        <td class="num">@w.Closed</td>
+                        <td class="num">@SlaReportRenderer.Pct(w.WithinSlaPercent)</td>
+                        @foreach (var t in SlaMath.Tiers)
+                        {
+                            <td class="num">@(w.Tiers[t].Closed == 0 ? "-" : SlaReportRenderer.Days(w.Tiers[t].MedianDays) + " / " + SlaReportRenderer.Days(w.Tiers[t].P90Days))</td>
+                        }
+                        <td class="num">@(w.OpenAtEnd?.ToString() ?? "-")</td>
+                        <td class="num">@(w.OverdueAtEnd?.ToString() ?? "-")@(w.Backfilled ? "*" : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (_sla.Weeks.Any(w => w.Backfilled)) { <p class="muted">* rebuilt from the verdict history, not counted on the day: close, but verdicts deleted since are missing.</p> }
+
+        <div class="grid grid-2" style="margin-top:16px">
+            <div class="card">
+                <h2>Products with the most open verdicts</h2>
+                @if (_sla.TopProducts.Count == 0) { <p class="muted">Nothing open.</p> }
+                else
+                {
+                    <table class="table">
+                        <thead><tr><th>Product</th><th>Open</th><th>Overdue</th></tr></thead>
+                        <tbody>@foreach (var p in _sla.TopProducts) { <tr><td>@p.Product</td><td class="num">@p.Open</td><td class="num">@p.Overdue</td></tr> }</tbody>
+                    </table>
+                }
+            </div>
+            <div class="card">
+                <h2>Coverage</h2>
+                <p>@(_sla.Assets == 0 ? "No assets are in the inventory yet." : _sla.AssetsSeen + " of " + _sla.Assets + " assets (" + SlaReportRenderer.Pct(_sla.CoveragePercent) + ") were seen by a connector in the last 7 days.")</p>
+                @if (_sla.Coverage.Count > 0)
+                {
+                    <table class="table">
+                        <thead><tr><th>Connector</th><th>Assets seen in 7 days</th><th>Of all assets</th></tr></thead>
+                        <tbody>@foreach (var c in _sla.Coverage) { <tr><td>@c.Connector</td><td class="num">@c.AssetsSeen</td><td class="num">@SlaReportRenderer.Pct(c.Percent)</td></tr> }</tbody>
+                    </table>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Accepted risk</h2>
+            <p>@(_sla.AcceptedRisk == 0 ? "No risks are accepted." : _sla.AcceptedRisk + " accepted" + (_sla.AcceptedRiskWithoutExpiry > 0 ? ", " + _sla.AcceptedRiskWithoutExpiry + " with no expiry date" : "") + ". " + (_sla.UpcomingExpiries.Count == 0 ? "None expires in the next 30 days." : "Expiring in the next 30 days (each re-opens on its date):"))</p>
+            @if (_sla.UpcomingExpiries.Count > 0)
+            {
+                <table class="table">
+                    <thead><tr><th>Expires</th><th>CVE</th><th>What</th><th>Owner</th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _sla.UpcomingExpiries)
+                        {
+                            <tr><td>@Ui.Local(e.Expiry, _tz, "d MMM yyyy")</td><td><a href="/verdicts/@e.VerdictId">@e.CveId</a></td><td>@e.Subject</td><td>@e.Owner</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+
+    @if (_r is not null)
+    {
+        <h2>This week's report</h2>
         <iframe class="digest-frame" src="/reports/weekly.html" title="Weekly report"></iframe>
     }
 </div>
 
 @code {
     private ReportService.WeeklyReport? _r;
+    private SlaReport? _sla;
+    private string? _slaError;
+    private TimeZoneInfo _tz = TimeZoneInfo.Utc;
+    private int _weeks = 12;
     private string _day = "Monday";
+
     protected override async Task OnInitializedAsync()
     {
-        _day = (await Settings.LoadAsync()).ReportDay;
+        var s = await Settings.LoadAsync();
+        _day = s.ReportDay;
+        _tz = s.ResolveTimeZone();
         _r = await ReportSvc.BuildAsync();
+        await LoadSlaAsync();
+    }
+
+    private async Task LoadSlaAsync()
+    {
+        try { _sla = await SlaSvc.BuildAsync(_weeks); _slaError = null; }
+        catch (Exception ex) { _sla = null; _slaError = "The trends could not be built: " + ex.Message; }
+    }
+
+    private async Task ChangeWeeks(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n) && n is 8 or 12 or 26 or 52) _weeks = n;
+        await LoadSlaAsync();
     }
 }

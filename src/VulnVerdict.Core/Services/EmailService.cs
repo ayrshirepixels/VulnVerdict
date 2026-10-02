@@ -53,9 +53,11 @@ public sealed class EmailService
             // kept for the on-screen banner: the administrator alert would go out over this same broken mail
             await RecordAsync(SettingsService.Keys.MailLastError, ex.Message.Length > 500 ? ex.Message[..500] : ex.Message);
             await RecordAsync(SettingsService.Keys.MailLastErrorAt, DateTime.UtcNow.ToString("O"));
+            MetricCounters.Add(MetricCounters.MailFailed);
             throw;
         }
         await RecordAsync(SettingsService.Keys.MailLastSuccess, DateTime.UtcNow.ToString("O"));
+        MetricCounters.Add(MetricCounters.MailSent);
     }
 
     private async Task RecordAsync(string key, string value)
