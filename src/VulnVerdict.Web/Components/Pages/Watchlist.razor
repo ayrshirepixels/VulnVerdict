@@ -100,6 +100,12 @@
     @if (_rows is null) { <p class="muted">Loading...</p> }
     else
     {
+        var noVersion = _rows.Where(x => x.Entry.Enabled && string.IsNullOrWhiteSpace(x.Entry.Version)).ToList();
+        @if (noVersion.Count > 0)
+        {
+            @* without a version nothing can be ruled out: every CVE for the product comes back as "check this" *@
+            <div class="alert alert-warn" role="status">@(noVersion.Count == 1 ? "One entry has" : noVersion.Count + " entries have") no version (@string.Join(", ", noVersion.Select(x => x.Entry.Product))), so every CVE for @(noVersion.Count == 1 ? "it" : "them") is a "check this" verdict: @noVersion.Sum(x => x.Today + x.Week + x.Cycle) open now. Add the version you run and the ones that do not apply are cleared.</div>
+        }
         <table class="table">
             <thead><tr><th>Asset</th><th>Product</th><th>Version</th><th>Exposure</th><th>Criticality</th><th class="num">Fix today</th><th class="num">This week</th><th class="num">Next cycle</th><th class="num">Dismissed</th><th></th></tr></thead>
             <tbody>
@@ -108,7 +114,7 @@
                     <tr style="@(r.Entry.Enabled ? "" : "opacity:.55")">
                         <td>@r.Entry.DisplayName@(r.Entry.Enabled ? "" : " (disabled)")</td>
                         <td>@r.Entry.Vendor @r.Entry.Product</td>
-                        <td>@(r.Entry.Version ?? "-")</td>
+                        <td>@if (string.IsNullOrWhiteSpace(r.Entry.Version)) { <span class="chip chip-check" title="Without a version every CVE for this product is a check-this verdict">no version</span> } else { @r.Entry.Version }</td>
                         <td>@r.Entry.Exposure.Plain()</td>
                         <td>@r.Entry.Criticality</td>
                         <td class="num">@(r.Today > 0 ? r.Today.ToString() : "")</td>
