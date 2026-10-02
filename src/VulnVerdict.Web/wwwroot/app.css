@@ -159,7 +159,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
 :root[data-theme="light"] .theme-toggle [data-theme-set="light"],
 :root[data-theme="dark"] .theme-toggle [data-theme-set="dark"] { background: rgba(255,159,10,.14); color: #fff; font-weight: 600; }
 .topbar, .nav-backdrop { display: none; }
-.content { flex: 1; padding: 28px 36px 60px; max-width: 1240px; }
+.content { flex: 1; padding: 28px 36px 60px; max-width: 1240px; min-width: 0; }
 .page { max-width: 1100px; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin: 0 0 16px; }
