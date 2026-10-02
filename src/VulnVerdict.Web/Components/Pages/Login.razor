@@ -13,9 +13,17 @@
         <div class="brand"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></div>
         <p class="muted" style="margin:0 0 18px">Cut the noise. Know your risk.</p>
 
-        @if (Error is not null)
+        @if (Error == "locked")
         {
-            <div class="alert alert-error">Wrong username or password.</div>
+            <div class="alert alert-error">Too many wrong codes. The second step is locked for 15 minutes; an administrator can reset your two-factor if the phone is lost.</div>
+        }
+        else if (Error == "expired")
+        {
+            <div class="alert alert-error">That sign-in took longer than five minutes. Start again.</div>
+        }
+        else if (Error is not null)
+        {
+            <div class="alert alert-error">Wrong username or password. After @UserService.MaxPasswordFailures wrong passwords in a row an account is locked for 15 minutes.</div>
         }
 
         <form method="post" action="/auth/login" class="form">

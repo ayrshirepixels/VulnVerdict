@@ -1,0 +1,43 @@
+@page "/login/enrol"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout EmptyLayout
+@inject TwoFactorService TwoFactor
+@inject NavigationManager Nav
+
+<PageTitle>Set up two-factor - VulnVerdict</PageTitle>
+
+<div class="auth-wrap">
+    <div class="auth-card auth-card-wide">
+        <div class="brand"><img src="logo.svg" alt="" /><span class="word"><em>VULN</em>VERDICT</span></div>
+        <p class="muted" style="margin:0 0 18px">This console requires two-factor sign-in for local accounts. Set it up now to carry on.</p>
+
+        @if (Error is not null)
+        {
+            <div class="alert alert-error">That code is not right. Check the phone's clock is set automatically, then type the code the app shows now.</div>
+        }
+
+        @if (_enrolment is not null)
+        {
+            <TwoFactorEnrol Enrolment="_enrolment" Action="/auth/login/enrol" ReturnUrl="@ReturnUrl">
+                <a class="btn btn-secondary" href="/login">Cancel</a>
+            </TwoFactorEnrol>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    private TwoFactorEnrolment? _enrolment;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // only reachable straight after a correct password, for five minutes; nothing is signed in yet
+        var user = await TwoFactor.PendingUserAsync(Http?.Request.Cookies[TwoFactorEndpoints.PendingCookie], TwoFactorService.PurposeEnrol);
+        _enrolment = user is null ? null : await TwoFactor.BeginEnrolmentAsync(user.Id);
+        if (_enrolment is null) { Nav.NavigateTo("/login?error=expired"); return; }
+        if (Http is not null) Http.Response.Headers.CacheControl = "no-store";
+    }
+}

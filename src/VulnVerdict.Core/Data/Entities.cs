@@ -279,6 +279,21 @@ public class AppUser
     public DateTime? LastLoginAt { get; set; }
     /// <summary>Changes whenever the account's access changes (role, password, deletion); sign-ins carrying an older stamp end.</summary>
     [MaxLength(64)] public string SecurityStamp { get; set; } = "";
+    /// <summary>Two-factor (TOTP) secret, Data Protection encrypted. Written when enrolment starts; in use once <see cref="TotpEnabledAt"/> is set.</summary>
+    [MaxLength(512)] public string? TotpSecret { get; set; }
+    public DateTime? TotpEnabledAt { get; set; }
+    /// <summary>The last 30-second step a code was accepted for, so the same code cannot be used twice.</summary>
+    public long TotpLastStep { get; set; }
+    /// <summary>JSON array of SHA-256 hashes of the recovery codes not used yet.</summary>
+    [MaxLength(2000)] public string? RecoveryCodeHashes { get; set; }
+    /// <summary>Wrong passwords in a row, and the lockout they lead to. Counted per account, on top of the per-address login rate limit.</summary>
+    public int FailedPasswordCount { get; set; }
+    public DateTime? PasswordLockedUntil { get; set; }
+    /// <summary>Wrong second-factor codes in a row, and their lockout.</summary>
+    public int FailedSecondFactorCount { get; set; }
+    public DateTime? SecondFactorLockedUntil { get; set; }
+
+    public bool TwoFactorEnabled => TotpEnabledAt is not null && !string.IsNullOrEmpty(TotpSecret);
 }
 
 public class AuditEntry

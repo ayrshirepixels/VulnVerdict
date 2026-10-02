@@ -53,6 +53,16 @@ These read the laptops, desktops and servers a management tool already knows abo
 
 These connectors are built from each vendor's published API documentation and checked against sample responses. They have not yet run against a live tenant of every product; if one does not read your tenant correctly, the connector's error message and an issue report will get it fixed.
 
+## SSH host keys
+
+The connectors that use SSH (Linux servers, Windows over OpenSSH, pfSense, Zyxel, Check Point Quantum Spark) only sign in to a host whose key is pinned on the connector. A host with no pinned key, or a different one, is refused before the password or key signature is sent.
+
+**Test connection** lists the key each host presented: "New host: 10.0.0.5 presented ssh-ed25519 SHA256:...". Compare the fingerprint with the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server; on Windows the key files are in `C:\ProgramData\ssh`), then press **Trust** for that host, or **Trust all N new hosts**. On a saved connector that pins the key straight away and the saved password is kept; on a connector you are still adding, the key goes into the form and is kept when you save. Pasting `host SHA256:fingerprint` lines into Known host keys by hand still works. Only administrators can do either, and every pinned or replaced key is in the audit log with its fingerprint.
+
+**A changed key** (the host is pinned, and now presents something else) is shown in red and is never part of Trust all. Either the host was re-installed or its keys were regenerated, or something between the console and the host is intercepting the connection and would be handed the connector's password. Have someone read the fingerprint on the server itself, then use **Replace pinned key** for that one host and confirm.
+
+A scheduled collection that meets an unpinned or changed host does not collect it; the connector shows how many host keys are waiting, and a warning at the top of every page links to the same review prompt. Changing a connector's host or port still asks for its password again; pinning host keys does not.
+
 ## When a connector gets it wrong
 
 Most connectors are built from the vendor's API documentation and sample responses; a real system can answer differently. On the Connectors page, **Diagnostics** (administrators) runs the connector once without changing anything and downloads what its API returned, with credentials, device names, users, serial numbers and addresses replaced by placeholders such as device-1 and ip-1. **Report a problem** opens a pre-filled GitHub issue to attach it to. Each diagnostics run is recorded in the audit log.

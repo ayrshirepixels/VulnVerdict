@@ -177,7 +177,7 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
         }
         if (toPin.Count > 0)
         {
-            lines.Add("Host keys seen for the first time. Check each against the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then paste these lines into Known host keys and test again:");
+            lines.Add("Host keys seen for the first time. Check each against the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then trust them below (or paste these lines into Known host keys) and test again:");
             lines.AddRange(toPin);
         }
         return new(failures == 0, string.Join("\n", lines));

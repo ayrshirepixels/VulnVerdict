@@ -1,6 +1,7 @@
 @page "/users"
 @attribute [Authorize(Roles = "Administrator")]
 @inject UserService UserSvc
+@inject TwoFactorService TwoFactor
 
 <PageTitle>Users - VulnVerdict</PageTitle>
 
@@ -23,8 +24,16 @@
         </div>
     </div>
 
+    <div class="card">
+        <h2>Two-factor sign-in</h2>
+        <div class="form">
+            <label class="check"><input type="checkbox" checked="@_requireTwoFactor" @onchange="e => SetRequiredAsync(e.Value is true)" /> Require two-factor for local accounts</label>
+            <div class="help">Off: each local user chooses, under My account. On: a local user without two-factor has to set it up at their next sign-in before reaching anything else, and those signed in now are signed out, you included if you have not set it up. Single sign-on users are not affected; their identity provider does it.</div>
+        </div>
+    </div>
+
     <table class="table">
-        <thead><tr><th>Username</th><th>Provider</th><th>Role</th><th>Last login</th><th></th></tr></thead>
+        <thead><tr><th>Username</th><th>Provider</th><th>Role</th><th>Two-factor</th><th>Last login</th><th></th></tr></thead>
         <tbody>
             @foreach (var u in _users)
             {
@@ -36,15 +45,21 @@
                             <option value="Viewer">Viewer</option><option value="Operator">Operator</option><option value="Administrator">Administrator</option>
                         </select>
                     </td>
+                    <td>@(u.Provider != "local" ? "identity provider" : u.TwoFactorEnabled ? "on" : "off")@if (IsLocked(u)) { <br /><small class="muted">locked after wrong attempts</small> }</td>
                     <td>@Ui.Ago(u.LastLoginAt)</td>
                     <td class="btn-row">
                         @if (u.Provider == "local") { <button class="btn btn-secondary btn-sm" @onclick="() => _resetFor = u.Id">Reset password</button> }
+                        @if (u.Provider == "local" && (u.TwoFactorEnabled || IsLocked(u))) { <button class="btn btn-secondary btn-sm" @onclick="() => _resetTwoFactorFor = u.Id">Reset two-factor</button> }
                         <button class="btn btn-secondary btn-sm" @onclick="() => DeleteAsync(u.Id)">Delete</button>
                     </td>
                 </tr>
+                @if (_resetTwoFactorFor == u.Id)
+                {
+                    <tr><td colspan="6">Remove two-factor from <b>@u.Username</b> and clear any lockout? Use this when their phone is lost. They are signed out everywhere and sign in with the password alone@(_requireTwoFactor ? ", then set two-factor up again straight away" : " until they set it up again"). <span class="btn-row" style="display:inline-flex;margin-left:8px"><button class="btn btn-danger btn-sm" @onclick="() => ResetTwoFactorAsync(u)">Reset two-factor</button><button class="btn btn-secondary btn-sm" @onclick="() => _resetTwoFactorFor = null">Cancel</button></span></td></tr>
+                }
                 @if (_resetFor == u.Id)
                 {
-                    <tr><td colspan="5"><div class="form" style="max-width:480px"><div class="row"><div><input type="password" @bind="_newPassword" placeholder="new password" autocomplete="new-password" /></div><div class="btn-row"><button class="btn btn-sm" @onclick="() => ResetAsync(u)">Set</button><button class="btn btn-secondary btn-sm" @onclick="() => _resetFor = null">Cancel</button></div></div></div></td></tr>
+                    <tr><td colspan="6"><div class="form" style="max-width:480px"><div class="row"><div><input type="password" @bind="_newPassword" placeholder="new password" autocomplete="new-password" /></div><div class="btn-row"><button class="btn btn-sm" @onclick="() => ResetAsync(u)">Set</button><button class="btn btn-secondary btn-sm" @onclick="() => _resetFor = null">Cancel</button></div></div></div></td></tr>
                 }
             }
         </tbody>
@@ -55,10 +70,17 @@
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
     private List<AppUser> _users = new();
     private string _username = "", _password = "", _role = "Operator", _newPassword = "";
-    private Guid? _resetFor;
+    private Guid? _resetFor, _resetTwoFactorFor;
+    private bool _requireTwoFactor;
     private string? _notice, _error;
 
-    protected override async Task OnInitializedAsync() => _users = await UserSvc.ListUsersAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _users = await UserSvc.ListUsersAsync();
+        _requireTwoFactor = await TwoFactor.IsRequiredAsync();
+    }
+
+    private static bool IsLocked(AppUser u) => u.SecondFactorLockedUntil > DateTime.UtcNow || u.PasswordLockedUntil > DateTime.UtcNow;
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
 
     private async Task AddAsync()
@@ -92,6 +114,28 @@
             await UserSvc.UpdateUserAsync(u.Id, u.Role, _newPassword, await ActorAsync()); _notice = "Password reset for " + u.Username + "."; _resetFor = null; _newPassword = "";
         }
         catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task SetRequiredAsync(bool required)
+    {
+        _error = null; _notice = null;
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        var signedOut = await TwoFactor.SetRequiredAsync(required, await ActorAsync());
+        _requireTwoFactor = required;
+        _notice = required
+            ? "Two-factor is now required for local accounts." + (signedOut > 0 ? " " + signedOut + " account" + (signedOut == 1 ? "" : "s") + " without it " + (signedOut == 1 ? "has" : "have") + " been signed out and will set it up at the next sign-in." : "")
+            : "Two-factor is now optional for local accounts.";
+        _users = await UserSvc.ListUsersAsync();
+    }
+
+    // a lost phone: the administrator removes the second factor, which is audited and ends that user's sessions
+    private async Task ResetTwoFactorAsync(AppUser u)
+    {
+        _error = null; _notice = null;
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        if (await TwoFactor.ResetAsync(u.Id, await ActorAsync())) _notice = "Two-factor reset for " + u.Username + ". Their open sessions end.";
+        _resetTwoFactorFor = null;
+        _users = await UserSvc.ListUsersAsync();
     }
 
     private async Task DeleteAsync(Guid id)

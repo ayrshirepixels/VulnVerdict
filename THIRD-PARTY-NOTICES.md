@@ -15,6 +15,7 @@ VulnVerdict is licensed under the AGPL-3.0 (`LICENSE`). It builds on the followi
 | Anthropic (official C# SDK) | MIT | optional AI explanations |
 | ASP.NET Core, Blazor, Microsoft.Extensions.* | MIT | console and host |
 | Microsoft.AspNetCore.Authentication.OpenIdConnect | MIT | single sign-on |
+| QRCoder | MIT | the two-factor enrolment QR code, drawn on the server as SVG |
 
 ## Images and runtime
 

@@ -1,5 +1,6 @@
 @page "/connectors"
 @using VulnVerdict.Core.Adapters
+@using VulnVerdict.Core.Adapters.Linux
 @implements IDisposable
 @inject ConnectorService ConnectorSvc
 @inject SettingsService Settings
@@ -55,7 +56,56 @@
                         <button class="btn" @onclick="SaveAsync" disabled="@_busy">Save</button>
                         @if (_editId is not null) { <button class="btn btn-secondary" @onclick="Reset">Cancel</button><button class="btn btn-danger" @onclick="DeleteAsync">Delete</button> }
                     </div>
-                    @if (_testResult is not null) { <div class="alert @(_testResult.Ok ? "alert-ok" : "alert-error")" style="margin-top:8px">@_testResult.Message</div> }
+                    @if (_testResult is not null) { <div class="alert @(_testResult.Ok ? "alert-ok" : "alert-error")" style="margin-top:8px;white-space:pre-line">@_testResult.Message</div> }
+                    @if (_hostKeys.Count > 0)
+                    {
+                        var fresh = _hostKeys.Count(k => k.Status == HostKeyStatus.New);
+                        <div class="hostkeys">
+                            <h3>SSH host keys@(_fromRun ? " from the last collection" : "")</h3>
+                            <div class="help">A trusted key is pinned: the connector only signs in to that host while it presents that key. Before trusting one, compare the fingerprint with the server's own (on the server: <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code>; on Windows the key files are in <code>C:\ProgramData\ssh</code>).</div>
+                            @if (_hostKeyNotice is not null) { <div class="alert alert-ok">@_hostKeyNotice</div> }
+                            <table class="table">
+                                <thead><tr><th>Status</th><th>Host and the key it presented</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var k in _hostKeys)
+                                    {
+                                        <tr class="@(k.Status == HostKeyStatus.Changed ? "hostkey-changed" : "")">
+                                            <td>
+                                                @if (k.Status == HostKeyStatus.New) { <span class="state state-open">new host</span> }
+                                                else if (k.Status == HostKeyStatus.Changed) { <b>key changed</b> }
+                                                else { <span class="state state-closed">pinned</span> }
+                                            </td>
+                                            <td>@(k.Status == HostKeyStatus.New ? "New host: " : "")<b>@k.Host</b> presented <code>@k.KeyType @k.Display()</code></td>
+                                            <td class="btn-row">
+                                                @if (k.Status == HostKeyStatus.New) { <button class="btn btn-secondary btn-sm" @onclick="() => TrustAsync(k)" disabled="@_busy">Trust</button> }
+                                                else if (k.Status == HostKeyStatus.Changed && !SameHostName(_replaceHost, k.Host)) { <button class="btn btn-danger btn-sm" @onclick="() => _replaceHost = k.Host" disabled="@_busy">Replace pinned key...</button> }
+                                            </td>
+                                        </tr>
+                                        @if (k.Status == HostKeyStatus.Changed)
+                                        {
+                                            <tr class="hostkey-changed">
+                                                <td colspan="3">
+                                                    <div class="alert alert-error" role="alert">
+                                                        <b>@k.Host is not presenting the key that was pinned.</b> Pinned: <code>@SshLinuxAdapter.FormatFingerprint(k.PinnedFingerprint ?? "")</code>. Presented now: <code>@k.KeyType @k.Display()</code>.<br />
+                                                        Either the host was re-installed or its keys were regenerated, or something between the console and the host is intercepting the connection, and would be handed this connector's password. The connector will not sign in to it until this is settled. Have someone read the fingerprint on the server itself before replacing the key; it is never included in Trust all.
+                                                        @if (SameHostName(_replaceHost, k.Host))
+                                                        {
+                                                            <div class="btn-row" style="margin-top:8px">
+                                                                <span>Replace the pinned key for <b>@k.Host</b> with the one presented now?</span>
+                                                                <button class="btn btn-danger btn-sm" @onclick="() => ReplaceAsync(k)" disabled="@_busy">Yes, the fingerprint is the server's: replace pinned key</button>
+                                                                <button class="btn btn-secondary btn-sm" @onclick="() => _replaceHost = null">Cancel</button>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                            @if (fresh > 1) { <div class="btn-row" style="margin-top:8px"><button class="btn btn-secondary" @onclick="TrustAllNewAsync" disabled="@_busy">Trust all @fresh new hosts</button></div> }
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -79,6 +129,14 @@
                         else if (c.ConsecutiveFailures > 0) { <span style="color:var(--amber-ink)">failed @c.ConsecutiveFailures time@(c.ConsecutiveFailures == 1 ? "" : "s"): @c.LastError</span> }
                         else if (c.LastSuccess is not null) { <span class="state state-closed">ok</span> <span class="progress">@c.Progress</span>@if (c.LastError is not null) { <div class="progress">@c.LastError</div> } }
                         else { <span class="muted">not run yet</span> }
+                        @if (ConnectorService.PendingHostKeys(c) is { Count: > 0 } review)
+                        {
+                            var changed = review.Count(k => k.Status == HostKeyStatus.Changed);
+                            <div class="hostkey-warning @(changed > 0 ? "hostkey-warning-changed" : "")">
+                                @(changed > 0 ? changed + " SSH host key" + (changed == 1 ? " has" : "s have") + " changed" + (review.Count > changed ? ", " + (review.Count - changed) + " not pinned" : "") : review.Count + " SSH host" + (review.Count == 1 ? " is" : "s are") + " not pinned"); not collected until reviewed.
+                                <AuthorizeView Roles="Administrator" Context="keys"><button class="btn btn-secondary btn-sm" @onclick="() => ReviewAsync(c)">Review host keys</button></AuthorizeView>
+                            </div>
+                        }
                     </td>
                     <td class="btn-row"><AuthorizeView Roles="Administrator,Operator" Context="auth">@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <button class="btn btn-secondary btn-sm" @onclick="() => RunNow(c.Id)" disabled="@(c.Running || c.RunRequested)">Run now</button> }</AuthorizeView><AuthorizeView Roles="Administrator" Context="admin"><button class="btn btn-secondary btn-sm" @onclick="() => Edit(c)">Edit</button>@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) { <form method="post" action="/connectors/@c.Id/diagnostics" data-enhance="false" style="display:inline"><AntiforgeryToken /><button type="submit" class="btn btn-secondary btn-sm" title="Runs the connector once without changing anything and downloads what its API returned, with names, users and addresses replaced. Look through it, then attach it to a GitHub issue.">Diagnostics</button></form> }</AuthorizeView>@if (!ConnectorSvc.IsTicketAdapter(c.AdapterId)) {<a class="btn btn-secondary btn-sm" href="@IssueLinks.ConnectorProblem(c.AdapterId, AppVersion.Current)" target="_blank" rel="noopener noreferrer" title="Opens a pre-filled GitHub issue in your browser">Report a problem</a> }</td>
                 </tr>
@@ -106,11 +164,65 @@
     private TestResult? _testResult;
     private string? _notice, _error;
     private System.Threading.Timer? _timer;
+    /// <summary>?review=connector id: the link in the health banner, which opens that connector's host keys to review.</summary>
+    [SupplyParameterFromQuery] public Guid? Review { get; set; }
+    private Guid? _reviewed;
+    // host keys from the last test, or from the last collection when reviewing; held here on the server, so what is trusted is what was presented
+    private List<PresentedHostKey> _hostKeys = new();
+    private bool _fromRun;
+    private string? _replaceHost, _hostKeyNotice;
 
     protected override async Task OnInitializedAsync()
     {
         _list = await ConnectorSvc.ListAsync();
         _timer = new System.Threading.Timer(async _ => { try { _list = await ConnectorSvc.ListAsync(); await InvokeAsync(StateHasChanged); } catch { } }, null, 5000, 5000);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Review is null || Review == _reviewed) return;
+        _reviewed = Review;
+        if (_list.FirstOrDefault(c => c.Id == Review) is { } connector) await ReviewAsync(connector);
+    }
+
+    private async Task ReviewAsync(Connector c)
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        await Edit(c);
+        _hostKeys = ConnectorService.PendingHostKeys(c); _fromRun = true;
+    }
+
+    private void ClearHostKeys() { _hostKeys = new(); _fromRun = false; _replaceHost = null; _hostKeyNotice = null; }
+    private static bool SameHostName(string? a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private Task TrustAsync(PresentedHostKey key) => TrustAsync(new[] { key }, null);
+    private Task TrustAllNewAsync() => TrustAsync(_hostKeys.Where(k => k.Status == HostKeyStatus.New).ToList(), null);
+    // a changed key is only ever replaced one host at a time, after the confirmation
+    private Task ReplaceAsync(PresentedHostKey key) => TrustAsync(new[] { key }, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { key.Host });
+
+    private async Task TrustAsync(IReadOnlyCollection<PresentedHostKey> keys, IReadOnlySet<string>? replace)
+    {
+        if (_meta is null || !await Ui.IsAdminAsync(AuthState)) return;
+        _busy = true; _error = null; _hostKeyNotice = null; _replaceHost = null;
+        try
+        {
+            // the form, so a later Save keeps the pins; and for a saved connector the stored credential straight away, audited
+            var inForm = ConnectorService.ApplyTrust(_meta, _values, keys, replace);
+            var saved = _editId is null ? new List<PresentedHostKey>() : await ConnectorSvc.TrustHostKeysAsync(_editId.Value, keys, replace, await ActorAsync());
+            var done = inForm.Concat(saved).Select(k => k.Host).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _hostKeys = _hostKeys.Select(k => done.Contains(k.Host) ? k with { Status = HostKeyStatus.Pinned, PinnedFingerprint = k.Fingerprint } : k).ToList();
+            var hosts = string.Join(", ", done.OrderBy(h => h, StringComparer.OrdinalIgnoreCase));
+            if (done.Count == 0) _error = "Nothing was pinned: the form no longer names that host. Test the connection again.";
+            else if (_editId is not null && saved.Count == done.Count)
+            {
+                await ConnectorSvc.RequestRunAsync(_editId.Value);
+                _hostKeyNotice = "Pinned and saved: " + hosts + ". The saved password is kept; a collection starts within a minute.";
+                _list = await ConnectorSvc.ListAsync();
+            }
+            else _hostKeyNotice = "Pinned in the form: " + hosts + ". Save the connector to keep " + (done.Count == 1 ? "it" : "them") + ".";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _busy = false;
     }
 
     private void AdapterChanged()
@@ -122,7 +234,7 @@
             _interval = _meta.DefaultIntervalMinutes;
             foreach (var f in _meta.Form) if (f.Default is not null) _values[f.Key] = f.Default;
         }
-        _testResult = null;
+        _testResult = null; ClearHostKeys();
     }
 
     // adding, editing, testing and deleting connectors is for administrators: a test sends the saved credential to the form's address
@@ -132,22 +244,23 @@
         _editId = c.Id; _metaId = c.AdapterId; _meta = ConnectorSvc.Metadata(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
         _values = ConnectorSvc.Decrypt(c);
         foreach (var f in _meta?.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
-        _testResult = null; _notice = null; _error = null;
+        _testResult = null; _notice = null; _error = null; ClearHostKeys();
     }
 
     private void SetText(string key, ChangeEventArgs e) => _values[key] = e.Value?.ToString() ?? string.Empty;
     private static string InputType(CredentialField f) => f.Type == CredentialTypes.Password ? "password" : f.Type == CredentialTypes.Number ? "number" : f.Type == CredentialTypes.Date ? "date" : "text";
     private void SetBool(string key, ChangeEventArgs e) => _values[key] = e.Value is bool b && b ? "true" : "false";
 
-    private void Reset() { _editId = null; _metaId = ""; _meta = null; _name = ""; _values = new(); _testResult = null; _enabled = true; }
+    private void Reset() { _editId = null; _metaId = ""; _meta = null; _name = ""; _values = new(); _testResult = null; _enabled = true; ClearHostKeys(); }
 
     private async Task<string> ActorAsync() => Ui.Actor((await AuthState).User);
 
     private async Task TestAsync()
     {
         if (!await Ui.IsAdminAsync(AuthState)) return;
-        _busy = true; _testResult = null;
+        _busy = true; _testResult = null; ClearHostKeys();
         _testResult = await ConnectorSvc.TestAsync(_metaId, new Dictionary<string, string>(_values), _editId);
+        _hostKeys = _testResult.HostKeys.ToList();
         _busy = false;
     }
 

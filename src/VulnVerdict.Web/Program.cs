@@ -37,6 +37,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddVulnVerdictCore(provider, connectionString, workerOptions, role);
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<UserService>();
+builder.Services.AddSingleton<TwoFactorService>();
 builder.Services.AddSingleton<ApiTokenService>();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
@@ -95,6 +96,7 @@ builder.Services.AddRateLimiter(o =>
 var app = builder.Build();
 
 await CoreServices.InitialiseDatabaseAsync(app.Services);
+if (await ConsoleCommands.RunAsync(args, app.Services)) return; // break-glass: reset-2fa <username>, see docs/security.md
 await app.Services.GetRequiredService<ApiTokenService>().MigrateLegacyAsync();
 app.Services.GetRequiredService<AuthService>().ReloadOidc(await app.Services.GetRequiredService<SettingsService>().LoadAsync());
 if (role is "all" or "web")
@@ -158,7 +160,7 @@ app.MapPost("/auth/setup", async ([FromForm] string username, [FromForm] string 
     var user = await users.CreateFirstAdministratorAsync(dataDir, token, username, password, email);
     if (user is null) return Results.Redirect("/login");
     await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthService.BuildPrincipal(user), new AuthenticationProperties { IsPersistent = true });
-    return Results.Redirect("/settings?first=1");
+    return Results.Redirect("/account?first=1"); // offers two-factor for the new administrator, then carries on to settings
 }).AllowAnonymous().RequireRateLimiting("login");
 
 app.MapPost("/auth/login", async ([FromForm] string username, [FromForm] string password, [FromForm] string? returnUrl, HttpContext http, UserService users) =>
@@ -169,9 +171,10 @@ app.MapPost("/auth/login", async ([FromForm] string username, [FromForm] string 
         await Task.Delay(Random.Shared.Next(200, 600));
         return Results.Redirect("/login?error=1" + (string.IsNullOrEmpty(returnUrl) ? "" : "&returnUrl=" + Uri.EscapeDataString(returnUrl)));
     }
-    await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthService.BuildPrincipal(user), new AuthenticationProperties { IsPersistent = true });
-    return Results.LocalRedirect(AuthService.SafeReturnUrl(returnUrl));
+    // signed in here only when the account needs no second step; otherwise on to the code, or to enrolment
+    return await TwoFactorEndpoints.ContinueSignInAsync(http, user, returnUrl);
 }).AllowAnonymous().RequireRateLimiting("login");
+app.MapTwoFactor();
 
 app.MapGet("/auth/oidc", async (string? returnUrl, HttpContext http, SettingsService settings) =>
 {
