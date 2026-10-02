@@ -65,10 +65,10 @@ public sealed class JamfProAdapter : IInventoryAdapter
     {
         var api = Open(credentials);
         var result = new CollectResult { FullSnapshot = true };
-        var stale = 0;
+        var stale = 0; var noApps = 0;
 
         progress?.Report("Reading computers");
-        foreach (var c in await PagesAsync(api, ComputersPath, ct))
+        foreach (var c in await PagesAsync(api, ComputersPath, "computers", result, ct))
         {
             if (EndpointNaming.IsStale(EpJson.Str(c, "general.lastContactTime", "general.reportDate"))) { stale++; continue; }
             var mapped = MapComputer(c);
@@ -76,13 +76,16 @@ public sealed class JamfProAdapter : IInventoryAdapter
             result.Assets.Add(mapped.Value.Asset);
             if (mapped.Value.Os is not null) result.Software.Add(mapped.Value.Os);
             result.Software.AddRange(mapped.Value.Apps);
+            // no applications section at all is "unknown" (inventory not collected yet), not "nothing installed"
+            if (EpJson.At(c, "applications") is not { ValueKind: JsonValueKind.Array }) { noApps++; result.IncompleteSoftware.Add(mapped.Value.Asset.ExternalId); }
         }
+        if (noApps > 0) result.Warnings.Add(noApps + " computer(s) came back without an application list; what an earlier run recorded for them is kept.");
         if (EpCreds.Bool(credentials, "includeMobile", true))
         {
             progress?.Report("Reading mobile devices");
             try
             {
-                foreach (var m in await PagesAsync(api, MobilePath, ct))
+                foreach (var m in await PagesAsync(api, MobilePath, "mobile devices", result, ct))
                 {
                     if (EndpointNaming.IsStale(EpJson.Str(m, "general.lastInventoryUpdateDate", "general.lastInventoryUpdateTimestamp"))) { stale++; continue; }
                     var mapped = MapMobile(m);
@@ -101,16 +104,29 @@ public sealed class JamfProAdapter : IInventoryAdapter
         return result;
     }
 
-    private static async Task<List<JsonElement>> PagesAsync(EndpointHttp api, Func<int, string> path, CancellationToken ct)
+    /// <summary>Page cap; a listing that reaches it is reported as partial instead of being taken for the whole fleet.</summary>
+    public int MaxPages { get; set; } = 5000;
+
+    /// <summary>
+    /// Every page until totalCount is reached. A short page is not the end (the server may cap the page size below what
+    /// was asked for); without a total, only an empty page is.
+    /// </summary>
+    private async Task<List<JsonElement>> PagesAsync(EndpointHttp api, Func<int, string> path, string what, CollectResult result, CancellationToken ct)
     {
         var items = new List<JsonElement>();
-        for (var page = 0; page < 5000; page++)
+        for (var page = 0; ; page++)
         {
+            if (page >= MaxPages) { result.MarkPartial(EndpointPaging.CapHit(what, MaxPages)); break; }
             var root = await api.GetJsonAsync(path(page), ct);
             var batch = EpJson.Items(root, "results");
             items.AddRange(batch);
             var total = EpJson.Int(root, "totalCount");
-            if (batch.Count < PageSize || (total is not null && items.Count >= total)) break;
+            if (total is not null && items.Count >= total) break;
+            if (batch.Count == 0)
+            {
+                if (total is not null) result.MarkPartial(EndpointPaging.EndedShort(what, items.Count, total.Value));
+                break;
+            }
         }
         return items;
     }

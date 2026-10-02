@@ -193,6 +193,36 @@ public class FortinetAdapterTests
         Assert.Equal(2, r2.Warnings.Count);
         Assert.Contains(r2.Warnings, w => w.Contains("managed-switch"));
         Assert.Contains(r2.Warnings, w => w.Contains("managed_ap"));
+        Assert.False(r2.Partial); // a 404 is "this unit has none", not a failed read
+    }
+
+    [Fact]
+    public async Task Refused_vip_read_leaves_exposure_unknown_instead_of_silently_internal()
+    {
+        // a REST API admin whose profile cannot read firewall objects: the VIP table answers 403
+        var adapter = new FortiGateAdapter((path, _) =>
+        {
+            if (path == FortiGateAdapter.Paths.Vip) throw new FortinetApiException("GET " + path, 403, "the FortiGate rejected the API token");
+            return Task.FromResult(Fixture(FgtFiles[path]));
+        });
+        var r = await adapter.CollectAsync(NoCreds, null, null, CancellationToken.None);
+
+        Assert.DoesNotContain(r.Exposures, e => e.IpAddress == "10.0.10.5");       // the VIP target cannot be derived this run
+        Assert.True(r.ExposureUnknown);
+        Assert.True(r.Partial);
+        Assert.Equal("Exposure could not be read (virtual IPs): newly published servers will not be marked internet-facing until it can be", r.Warnings[0]);
+        Assert.Contains(r.Warnings, w => w.StartsWith("Skipped " + FortiGateAdapter.Paths.Vip));
+
+        // a failed device listing is partial too: the switches and access points it would have listed must not age out
+        var noAps = new FortiGateAdapter((path, _) =>
+        {
+            if (path == FortiGateAdapter.Paths.ManagedAp) throw new HttpRequestException("timed out");
+            return Task.FromResult(Fixture(FgtFiles[path]));
+        });
+        var r2 = await noAps.CollectAsync(NoCreds, null, null, CancellationToken.None);
+        Assert.True(r2.Partial);
+        Assert.False(r2.ExposureUnknown);
+        Assert.Contains(r2.Warnings, w => w.StartsWith("The managed access points could not be listed"));
     }
 
     [Fact]

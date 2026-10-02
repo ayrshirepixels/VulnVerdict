@@ -120,24 +120,30 @@ public sealed class ExternalCrossCheckAdapter : IInventoryAdapter
         {
             progress?.Report("Asking Shodan about " + targets.Count + " addresses");
             var client = _http.CreateClient("adapter");
-            var keyOk = true;
-            foreach (var ip in targets)
+            for (var i = 0; i < targets.Count; i++)
             {
-                if (!keyOk) break;
+                var ip = targets[i];
                 ct.ThrowIfCancellationRequested();
+                string? stopped = null;
                 try
                 {
                     // Shodan only takes the key as a query parameter: the URL is never logged here, the client factory's
                     // request logging redacts query strings (.NET 9+), and exception text is scrubbed below
                     using var resp = await client.GetAsync("https://api.shodan.io/shodan/host/" + ip + "?key=" + Uri.EscapeDataString(shodanKey), ct);
                     if (resp.StatusCode == HttpStatusCode.NotFound) { }
-                    else if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) { result.Warnings.Add("Shodan rejected the API key (" + (int)resp.StatusCode + "); Shodan results skipped."); keyOk = false; }
-                    else if (resp.StatusCode == HttpStatusCode.TooManyRequests) { result.Warnings.Add("Shodan rate limit hit; remaining addresses skipped."); keyOk = false; }
+                    else if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) stopped = "Shodan rejected the API key (" + (int)resp.StatusCode + ")";
+                    else if (resp.StatusCode == HttpStatusCode.TooManyRequests) stopped = "Shodan rate limit hit";
                     else if (resp.IsSuccessStatusCode) shodan[ip] = ParseShodan(await resp.Content.ReadAsStringAsync(ct));
-                    else result.Warnings.Add("Shodan answered " + (int)resp.StatusCode + " for " + ip + ".");
+                    else { result.IncompleteSoftware.Add(ip.ToString()); result.Warnings.Add("Shodan answered " + (int)resp.StatusCode + " for " + ip + "."); }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                catch (Exception ex) { result.Warnings.Add("Shodan lookup for " + ip + " failed: " + ScrubKey(ex.Message, shodanKey)); }
+                catch (Exception ex) { result.IncompleteSoftware.Add(ip.ToString()); result.Warnings.Add("Shodan lookup for " + ip + " failed: " + ScrubKey(ex.Message, shodanKey)); }
+                if (stopped is not null)
+                {
+                    // the addresses not asked about are unknown, not gone: nothing Shodan reported earlier is removed or aged out
+                    result.MarkPartial(stopped + "; " + (targets.Count - i) + " of " + targets.Count + " addresses were not checked with Shodan, so nothing Shodan reported earlier is removed this run.");
+                    break;
+                }
                 await Task.Delay(1100, ct);
             }
         }

@@ -71,6 +71,8 @@ public sealed class LinuxHostFacts
     /// <summary>"dpkg", "rpm", "apk" or null when none was found.</summary>
     public string? PackageManager { get; set; }
     public string PackageList { get; set; } = "";
+    /// <summary>Why the package listing failed (exit status and the first line of stderr), or null when it ran cleanly.</summary>
+    public string? PackageListError { get; set; }
     /// <summary>"ss" or "netstat", or null when neither exists.</summary>
     public string? SocketTool { get; set; }
     public string Sockets { get; set; } = "";
@@ -81,7 +83,11 @@ public sealed class LinuxHostFacts
     public bool HostKeyPinned { get; set; }
 }
 
-public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> Software, List<string> Warnings);
+/// <summary>
+/// Incomplete: the package listing failed or came back empty, so nothing may be marked removed from the host.
+/// ContainersUnread: docker is there but the list was not readable, so container rows from earlier runs are kept.
+/// </summary>
+public sealed record LinuxHostMapping(AssetRecord Asset, List<SoftwareRecord> Software, List<string> Warnings, bool Incomplete = false, bool ContainersUnread = false);
 
 /// <summary>
 /// Linux over SSH. Reads os-release, the installed package list (dpkg, rpm or apk), listening
@@ -93,14 +99,14 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
 {
     public const string Id = "ssh-linux";
 
-    public const string DpkgCommand = @"dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\t${Source}\t${db:Status-Status}\n' 2>/dev/null";
-    public const string RpmCommand = @"rpm -qa --qf '%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\n' 2>/dev/null";
-    public const string ApkListCommand = "apk list -I 2>/dev/null";
-    public const string ApkInfoCommand = "apk info -v 2>/dev/null";
+    public const string DpkgCommand = @"dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\t${Source}\t${db:Status-Status}\n'";
+    public const string RpmCommand = @"rpm -qa --qf '%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\n'";
+    public const string ApkListCommand = "apk list -I";
+    public const string ApkInfoCommand = "apk info -v";
     public const string ApkArchCommand = "apk --print-arch 2>/dev/null";
     public const string SsCommand = "ss -tlnp 2>/dev/null";
     public const string NetstatCommand = "netstat -tlnp 2>/dev/null";
-    public const string DockerCommand = "docker ps --format '{{.Names}}\\t{{.Image}}' 2>/dev/null";
+    public const string DockerCommand = "docker ps --format '{{.Names}}\\t{{.Image}}'";
     public const string OsReleaseCommand = "cat /etc/os-release 2>/dev/null || cat /usr/lib/os-release 2>/dev/null";
     public const string FqdnCommand = "hostname -f 2>/dev/null || hostname 2>/dev/null";
     public const string HostnameIpsCommand = "hostname -I 2>/dev/null || hostname -i 2>/dev/null || true";
@@ -212,6 +218,8 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
                 result.Assets.Add(m.Asset);
                 result.Software.AddRange(m.Software);
                 result.Warnings.AddRange(m.Warnings);
+                if (m.Incomplete) result.IncompleteSoftware.Add(m.Asset.ExternalId);
+                if (m.ContainersUnread) result.KeepRows(m.Asset.ExternalId, ContainerIdPrefix);
             }
             else if (errors.TryGetValue(i, out var err)) result.Warnings.Add(targets[i].AsTyped + ": " + err);
         }
@@ -233,8 +241,9 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
         f.IpAddr = (await s.RunAsync(IpAddrCommand, ct)).Output;
         f.IpLink = (await s.RunAsync(IpLinkCommand, ct)).Output;
 
-        if (tools.Contains("dpkg-query")) { f.PackageManager = "dpkg"; f.PackageList = (await s.RunAsync(DpkgCommand, ct)).Output; }
-        else if (tools.Contains("rpm")) { f.PackageManager = "rpm"; f.PackageList = (await s.RunAsync(RpmCommand, ct)).Output; }
+        // stderr is not discarded: a listing that exits non-zero (a locked or damaged package database) is not a full list
+        if (tools.Contains("dpkg-query")) { f.PackageManager = "dpkg"; f.PackageList = PackageOutput(await s.RunAsync(DpkgCommand, ct), f); }
+        else if (tools.Contains("rpm")) { f.PackageManager = "rpm"; f.PackageList = PackageOutput(await s.RunAsync(RpmCommand, ct), f); }
         else if (tools.Contains("apk"))
         {
             f.PackageManager = "apk";
@@ -242,9 +251,10 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
             if (list.Ok && list.HasOutput) f.PackageList = list.Output;
             else
             {
+                // older apk has no "list"; "info -v" is the fallback and its exit status is the one that counts
                 var info = await s.RunAsync(ApkInfoCommand, ct);
                 var arch = (await s.RunAsync(ApkArchCommand, ct)).Output.Trim();
-                f.PackageList = (arch != "" ? "#arch=" + arch + "\n" : "") + info.Output;
+                f.PackageList = (arch != "" ? "#arch=" + arch + "\n" : "") + PackageOutput(info, f);
             }
         }
 
@@ -259,6 +269,19 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
         }
         return f;
     }
+
+    /// <summary>stdout of a package listing. An exit status above zero is recorded (-1 is a server that sent none, which says nothing).</summary>
+    private static string PackageOutput(SshCommandResult r, LinuxHostFacts f)
+    {
+        if (r.ExitStatus > 0)
+        {
+            var stderr = r.Error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            f.PackageListError = "exit " + r.ExitStatus + (stderr is null ? "" : ": " + (stderr.Length > 200 ? stderr[..200] : stderr));
+        }
+        return r.Output;
+    }
+
+    public const string ContainerIdPrefix = "container:";
 
     // ------------------------------------------------------------------ mapping
 
@@ -330,16 +353,20 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
         foreach (var c in containers)
         {
             var (image, tag) = SplitImage(c.Image);
-            software.Add(new SoftwareRecord(externalId, "container", image, tag, SoftwareKind.Application, ExternalId: "container:" + c.Name));
+            software.Add(new SoftwareRecord(externalId, "container", image, tag, SoftwareKind.Application, ExternalId: ContainerIdPrefix + c.Name));
         }
 
+        // a failed or empty listing is "unknown", never "everything was uninstalled": the host is incomplete this run
+        var incomplete = false;
         if (f.PackageManager is null) warnings.Add(externalId + ": no dpkg, rpm or apk found; no package list collected");
-        else if (packages.Count == 0) warnings.Add(externalId + ": " + f.PackageManager + " returned no packages");
+        else if (f.PackageListError is not null) { incomplete = true; warnings.Add(externalId + ": " + f.PackageManager + " failed (" + f.PackageListError + "); the package list is incomplete, so nothing is marked removed from this host"); }
+        else if (packages.Count == 0) { incomplete = true; warnings.Add(externalId + ": " + f.PackageManager + " returned no packages; treated as a failed read, so nothing is marked removed from this host"); }
         if (f.SocketTool is null) warnings.Add(externalId + ": neither ss nor netstat is available; listening ports not collected");
-        if (f.DockerPresent && !f.DockerReadable) warnings.Add(externalId + ": docker is installed but the account cannot read the container list (docker group membership is needed)");
+        var containersUnread = f.DockerPresent && !f.DockerReadable;
+        if (containersUnread) warnings.Add(externalId + ": docker is installed but the account cannot read the container list (docker group membership is needed); containers collected earlier are kept");
         if (distro.Ecosystem is null && packages.Count > 0) warnings.Add(externalId + ": " + distro.Name + " has no OSV ecosystem; packages are recorded but not matched");
         if (!f.HostKeyPinned && f.HostKeyFingerprint is { Length: > 0 } fp) warnings.Add(externalId + ": host key " + FormatFingerprint(fp) + " is not pinned in Known host keys");
-        return new LinuxHostMapping(asset, software, warnings);
+        return new LinuxHostMapping(asset, software, warnings, incomplete, containersUnread);
     }
 
     /// <summary>Parses os-release (KEY=value, quoted or bare).</summary>

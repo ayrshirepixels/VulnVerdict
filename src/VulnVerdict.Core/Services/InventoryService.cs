@@ -17,6 +17,30 @@ public sealed record ApplySummary(int Assets, int Software, int Findings, int Ex
 public sealed class InventoryService
 {
     public const string DiscoveryConnectorPrefix = "discovery";
+    /// <summary>State key prefix (plus the connector id) for <see cref="RunState"/>: one settings row per connector.</summary>
+    public const string RunStatePrefix = "state:inventory:";
+    /// <summary>Per-asset floor: a list that had at least this many rows and loses more than half of them in one run is held.</summary>
+    public const int FloorMinRows = 10;
+    /// <summary>Per-asset floor: a list that had more than this many rows and comes back as the operating system alone is held.</summary>
+    public const int FloorHandful = 5;
+    /// <summary>The same reduced list on this many runs in a row is accepted as a real mass uninstall.</summary>
+    public const int FloorAcceptRuns = 3;
+    private const int StaleDays = 30;
+
+    /// <summary>
+    /// What the next run needs to know about this connector's earlier runs: when a complete (non-partial) run last
+    /// finished, since when its runs have been partial, and the reduced software lists being held by the per-asset floor.
+    /// </summary>
+    public sealed class RunState
+    {
+        public DateTime? LastComplete { get; set; }
+        public DateTime? PartialSince { get; set; }
+        /// <summary>Asset id to the reduced list seen (a hash of its product names) and on how many runs in a row.</summary>
+        public Dictionary<string, HeldDrop> Held { get; set; } = new();
+    }
+
+    public sealed record HeldDrop(string Signature, int Runs);
+
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly ILogger<InventoryService> _log;
 
@@ -30,7 +54,8 @@ public sealed class InventoryService
     public async Task<ApplySummary> ApplyAsync(Connector connector, CollectResult result, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var now = DateTime.UtcNow;
+        // whole milliseconds: the run state compares this stamp with LastSeen columns, and PostgreSQL keeps fewer digits than a tick
+        var now = new DateTime(DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond * TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
         var connectorId = connector.Id.ToString("N");
         var isDiscovery = connector.AdapterId.StartsWith(DiscoveryConnectorPrefix, StringComparison.OrdinalIgnoreCase);
 
@@ -100,12 +125,17 @@ public sealed class InventoryService
 
         // ---- software
         var aliases = await db.Aliases.AsNoTracking().ToListAsync(ct);
-        var unmapped = 0; var softwareCount = 0;
+        var stateRow = await db.Settings.FirstOrDefaultAsync(s => s.Key == RunStatePrefix + connectorId, ct);
+        var state = ParseRunState(stateRow?.Value) ?? new RunState();
+        // a partial run proves nothing about what is gone: no removal, no purge, no ageing (see HeldByPartialRunsAsync)
+        var removals = result.FullSnapshot && !result.Partial;
+        var unmapped = 0; var softwareCount = 0; var heldDrops = new List<string>();
         foreach (var group in result.Software.GroupBy(s => s.AssetExternalId, StringComparer.OrdinalIgnoreCase))
         {
             if (!extToAsset.TryGetValue(group.Key, out var asset)) continue;
             // removed rows too: software that comes back revives its old row, so its closed verdicts can reopen
             var existing = await db.Software.IgnoreQueryFilters().Where(s => s.AssetId == asset.Id && s.ConnectorId == connectorId).ToListAsync(ct);
+            var before = existing.Count(s => s.RemovedAt == null);
             var seen = new HashSet<Guid>();
             foreach (var rec in group)
             {
@@ -130,10 +160,38 @@ public sealed class InventoryService
                 }
                 seen.Add(match.Id); softwareCount++;
             }
+            if (!removals || result.IncompleteSoftware.Contains(group.Key)) continue;
+            var keep = result.IncompleteRows.GetValueOrDefault(group.Key);
+            var gone = existing.Where(s => !seen.Contains(s.Id) && s.RemovedAt == null
+                && !(keep is not null && s.ExternalId is not null && keep.Any(p => s.ExternalId.StartsWith(p, StringComparison.Ordinal)))).ToList();
+            var assetKey = asset.Id.ToString("N");
+            // per-asset floor: a list that collapses in one run is more often a failed read than a mass uninstall, so it
+            // is held until the same reduced list has come back FloorAcceptRuns times in a row
+            var current = existing.Where(s => seen.Contains(s.Id)).ToList();
+            var collapsed = gone.Count > 0 && ((before >= FloorMinRows && current.Count * 2 < before)
+                || (before > FloorHandful && current.All(s => s.Kind == SoftwareKind.OperatingSystem)));
+            if (collapsed)
+            {
+                var signature = Signature(current);
+                var runs = state.Held.TryGetValue(assetKey, out var held) && held.Signature == signature ? held.Runs + 1 : 1;
+                if (runs < FloorAcceptRuns)
+                {
+                    state.Held[assetKey] = new HeldDrop(signature, runs);
+                    heldDrops.Add(asset.DisplayName + " (" + before + " to " + current.Count + " rows, run " + runs + " of " + FloorAcceptRuns + ")");
+                    continue;
+                }
+            }
+            state.Held.Remove(assetKey);
             // not deleted: marked removed, so the evaluator closes its verdicts with a reason and keeps their history
-            if (result.FullSnapshot && !result.IncompleteSoftware.Contains(group.Key))
-                foreach (var gone in existing.Where(s => !seen.Contains(s.Id) && s.RemovedAt == null)) gone.RemovedAt = now;
+            foreach (var s in gone) s.RemovedAt = now;
         }
+        // first, so it is not cut off the connector's status line (which shows the first few warnings)
+        if (heldDrops.Count > 0)
+            result.Warnings.Insert(0, "Software list shrank sharply on " + string.Join(", ", heldDrops.Take(10)) + (heldDrops.Count > 10 ? " and " + (heldDrops.Count - 10) + " more" : "")
+                + ": nothing was marked removed there; it is accepted once the same list is seen on " + FloorAcceptRuns + " runs in a row");
+        // holds for assets this connector no longer reports are dropped with them
+        var linked = assetIds.Concat(extToAsset.Values.Select(a => a.Id)).Select(id => id.ToString("N")).ToHashSet();
+        foreach (var key in state.Held.Keys.Where(k => !linked.Contains(k)).ToList()) state.Held.Remove(key);
         await db.SaveChangesAsync(ct);
 
         // ---- exposure evidence (highest wins unless pinned by a person)
@@ -166,15 +224,62 @@ public sealed class InventoryService
             row.CveIdsJson = JsonSerializer.Serialize(ids); row.SourceSeverity = f.Severity; row.Title = Trunc(f.Title, 500); row.LastSeen = now;
             findings++;
         }
-        if (result.FullSnapshot && !result.FindingsIncomplete)
+        if (removals && !result.FindingsIncomplete)
         {
+            // only where this run is a full picture: assets it listed completely, and assets the source dropped long ago.
+            // An asset missing from one run (offline, filtered, a short page) keeps its findings.
+            var complete = extToAsset.Where(kv => !result.IncompleteSoftware.Contains(kv.Key)).Select(kv => kv.Value.Id).ToHashSet();
+            var dropped = links.Where(l => l.LastSeen < now.AddDays(-StaleDays)).Select(l => l.AssetId).ToHashSet();
             var stale = await db.Findings.Where(x => x.ConnectorId == connectorId && x.LastSeen < now).ToListAsync(ct);
-            db.Findings.RemoveRange(stale);
+            db.Findings.RemoveRange(stale.Where(f => complete.Contains(f.AssetId) || dropped.Contains(f.AssetId)));
         }
+
+        // ---- run state: only a complete run counts as having missed the assets it did not list
+        if (result.Partial) state.PartialSince ??= now;
+        else { state.LastComplete = now; state.PartialSince = null; }
+        if (stateRow is null) db.Settings.Add(stateRow = new AppSetting { Key = RunStatePrefix + connectorId });
+        stateRow.Value = JsonSerializer.Serialize(state); stateRow.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
 
         _log.LogInformation("Connector {Name}: {Assets} assets, {Software} software, {Findings} findings, {Unmapped} need mapping", connector.DisplayName, extToAsset.Count, softwareCount, findings, unmapped);
         return new ApplySummary(extToAsset.Count, softwareCount, findings, exposures, unmapped);
+    }
+
+    // ------------------------------------------------------------------ run state
+
+    private static RunState? ParseRunState(string? json)
+    {
+        try { return string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<RunState>(json); } catch (JsonException) { return null; }
+    }
+
+    /// <summary>The reduced list's identity: product names only, so an update to what is left does not restart the count.</summary>
+    private static string Signature(IEnumerable<SoftwareInstance> rows)
+    {
+        var names = string.Join("\n", rows.Select(s => s.VendorNorm + "|" + s.ProductNorm + "|" + (int)s.Kind).Distinct().OrderBy(n => n, StringComparer.Ordinal));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(names)))[..16];
+    }
+
+    /// <summary>
+    /// Assets that must not age out (the 30-day stale close, the 90-day archive) because the connector that reports them
+    /// has only had partial runs since it last saw them: a truncated listing is not evidence the asset is gone. An asset
+    /// a complete run has missed since is not held, and neither are the assets of a disabled or deleted connector.
+    /// </summary>
+    public static async Task<HashSet<Guid>> HeldByPartialRunsAsync(VvDbContext db, CancellationToken ct = default)
+    {
+        var held = new HashSet<Guid>();
+        var rows = await db.Settings.AsNoTracking().Where(s => s.Key.StartsWith(RunStatePrefix)).ToListAsync(ct);
+        if (rows.Count == 0) return held;
+        var enabled = (await db.Connectors.AsNoTracking().Where(c => c.Enabled).Select(c => c.Id).ToListAsync(ct)).Select(id => id.ToString("N")).ToHashSet();
+        foreach (var row in rows)
+        {
+            var connectorId = row.Key[RunStatePrefix.Length..];
+            if (ParseRunState(row.Value) is not { PartialSince: not null } state || !enabled.Contains(connectorId)) continue;
+            var sources = db.AssetSources.AsNoTracking().Where(s => s.ConnectorId == connectorId);
+            // seen by the last complete run (same stamp) or by a partial one since: no complete run has missed it yet
+            if (state.LastComplete is { } complete) sources = sources.Where(s => s.LastSeen >= complete);
+            held.UnionWith(await sources.Select(s => s.AssetId).ToListAsync(ct));
+        }
+        return held;
     }
 
     // ------------------------------------------------------------------ mapping
@@ -269,7 +374,10 @@ public sealed class InventoryService
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var now = DateTime.UtcNow;
-        var archived = await db.Assets.Where(a => !a.Archived && a.LastSeen < now.AddDays(-90)).ExecuteUpdateAsync(u => u.SetProperty(a => a.Archived, true), ct);
+        var held = (await HeldByPartialRunsAsync(db, ct)).ToList();
+        var old = db.Assets.Where(a => !a.Archived && a.LastSeen < now.AddDays(-90));
+        if (held.Count > 0) old = old.Where(a => !held.Contains(a.Id));
+        var archived = await old.ExecuteUpdateAsync(u => u.SetProperty(a => a.Archived, true), ct);
         var stale = await db.Assets.CountAsync(a => !a.Archived && a.LastSeen < now.AddDays(-30), ct);
         return (stale, archived);
     }
