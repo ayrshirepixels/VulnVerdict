@@ -134,7 +134,7 @@ public sealed partial class SshLinuxAdapter : IInventoryAdapter
             new CredentialField("hosts", "Hosts", CredentialTypes.TextArea, "One per line, optionally host:port. Each line becomes one asset."),
             new CredentialField("username", "Username", CredentialTypes.Text, "An ordinary account. sudo is never used."),
             new CredentialField("password", "Password", CredentialTypes.Password, "Leave empty when authenticating with a private key.", Required: false),
-            new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.TextArea, "OpenSSH or PEM private key. Leave empty when authenticating with a password.", Required: false),
+            new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.SecretArea, "OpenSSH or PEM private key. Leave empty when authenticating with a password.", Required: false),
             new CredentialField("passphrase", "Key passphrase", CredentialTypes.Password, "Only when the private key is encrypted.", Required: false),
             new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended): only hosts pinned in the list below are connected to; an unpinned or changed key is refused before the password is sent.", Required: false, Default: "false"),
             new CredentialField("knownHostKeys", "Known host keys", CredentialTypes.TextArea, "One per line: host SHA256:fingerprint. Test connection prints the lines to paste for hosts seen for the first time; a host is not collected until its line is here.", Required: false),

@@ -131,9 +131,9 @@ public sealed class ConnectorService
     /// </summary>
     public static List<string> ReuseStoredSecrets(AdapterMetadata meta, Dictionary<string, string> credentials, Dictionary<string, string> stored)
     {
-        var blank = meta.Form.Where(f => f.Type == CredentialTypes.Password && credentials.GetValueOrDefault(f.Key) == "" && !string.IsNullOrEmpty(stored.GetValueOrDefault(f.Key))).ToList();
+        var blank = meta.Form.Where(f => CredentialTypes.IsSecret(f.Type) && credentials.GetValueOrDefault(f.Key) == "" && !string.IsNullOrEmpty(stored.GetValueOrDefault(f.Key))).ToList();
         if (blank.Count == 0) return new();
-        var moved = meta.Form.Any(f => IdentifiesEndpoint(f) && Norm(credentials.GetValueOrDefault(f.Key)) != Norm(stored.GetValueOrDefault(f.Key)))
+        var moved = meta.Form.Any(f => IdentifiesEndpoint(f) && Norm(f, credentials.GetValueOrDefault(f.Key)) != Norm(f, stored.GetValueOrDefault(f.Key)))
             // a key the form does not know about could be read by the adapter as well
             || credentials.Where(kv => meta.Form.All(f => f.Key != kv.Key)).Any(kv => Norm(kv.Value) != Norm(stored.GetValueOrDefault(kv.Key)));
         if (moved) return blank.Select(f => f.Label).ToList();
@@ -142,11 +142,16 @@ public sealed class ConnectorService
     }
 
     // Pinned host keys are not where the credential goes: pinning a host's key (the trust prompt, or pasting a line)
-    // must not ask for the password again. The host and port fields still do.
+    // must not ask for the password again. The host and port fields still do, and so do the switches that decide which
+    // server is believed: TLS verification, and accepting any SSH host key (on, the password goes to whatever answers).
     private static bool IdentifiesEndpoint(CredentialField f) =>
-        !IsHostKeyField(f.Key) && (f.Type is CredentialTypes.Text or CredentialTypes.TextArea || (f.Type == CredentialTypes.Bool && f.Key.Equals("verifyTls", StringComparison.OrdinalIgnoreCase)));
+        !IsHostKeyField(f.Key) && (f.Type is CredentialTypes.Text or CredentialTypes.TextArea
+            || (f.Type == CredentialTypes.Bool && (f.Key.Equals("verifyTls", StringComparison.OrdinalIgnoreCase) || f.Key.Equals("acceptAny", StringComparison.OrdinalIgnoreCase))));
 
     private static string Norm(string? v) => (v ?? "").Trim();
+    // a switch never saved reads as its default, so ticking it on and off again is not a change
+    private static string Norm(CredentialField f, string? v) =>
+        f.Type == CredentialTypes.Bool ? (string.IsNullOrWhiteSpace(v) ? (f.Default ?? "false") : v.Trim()).ToLowerInvariant() : Norm(v);
 
     private static string ReenterMessage(List<string> labels) =>
         "The connection details changed, so the saved " + string.Join(", ", labels) + " is not reused. Type " + (labels.Count == 1 ? "it" : "them") + " again.";

@@ -156,4 +156,9 @@ public static class CredentialTypes
     public const string TextArea = "textarea";
     /// <summary>A calendar date (yyyy-MM-dd), such as when a client secret expires.</summary>
     public const string Date = "date";
+    /// <summary>A multi-line secret such as a private key: a text area, kept like a password (blank when editing, never sent back to the browser).</summary>
+    public const string SecretArea = "secretarea";
+
+    /// <summary>A field whose saved value is never shown again: reused when left blank, only while the endpoint is unchanged.</summary>
+    public static bool IsSecret(string type) => type is Password or SecretArea;
 }

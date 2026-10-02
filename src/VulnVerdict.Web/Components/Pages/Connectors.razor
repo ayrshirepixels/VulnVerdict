@@ -37,10 +37,10 @@
                             {
                                 <label class="check"><input type="checkbox" checked="@(_values.GetValueOrDefault(f.Key) == "true")" @onchange="e => SetBool(f.Key, e)" /> @f.Label</label>
                             }
-                            else if (f.Type == CredentialTypes.TextArea)
+                            else if (f.Type is CredentialTypes.TextArea or CredentialTypes.SecretArea)
                             {
                                 <label>@f.Label@(f.Required ? "" : " (optional)")</label>
-                                <textarea value="@_values.GetValueOrDefault(f.Key)" @oninput="e => SetText(f.Key, e)" rows="4"></textarea>
+                                <textarea value="@_values.GetValueOrDefault(f.Key)" @oninput="e => SetText(f.Key, e)" rows="4" autocomplete="off" spellcheck="false" placeholder="@(f.Type == CredentialTypes.SecretArea && _editId is not null ? "unchanged (paste a new one to replace it)" : "")"></textarea>
                             }
                             else
                             {
@@ -243,7 +243,8 @@
         if (!await Ui.IsAdminAsync(AuthState)) return;
         _editId = c.Id; _metaId = c.AdapterId; _meta = ConnectorSvc.Metadata(c.AdapterId); _name = c.DisplayName; _interval = c.IntervalMinutes; _enabled = c.Enabled;
         _values = ConnectorSvc.Decrypt(c);
-        foreach (var f in _meta?.Form ?? Array.Empty<CredentialField>()) if (f.Type == CredentialTypes.Password) _values[f.Key] = "";
+        // saved secrets (passwords, private keys) are never sent back to the browser: blank means keep the saved one
+        foreach (var f in _meta?.Form ?? Array.Empty<CredentialField>()) if (CredentialTypes.IsSecret(f.Type)) _values[f.Key] = "";
         _testResult = null; _notice = null; _error = null; ClearHostKeys();
     }
 

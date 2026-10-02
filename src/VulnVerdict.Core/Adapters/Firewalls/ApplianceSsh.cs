@@ -22,7 +22,7 @@ public static partial class ApplianceSsh
         new CredentialField("host", device + " host", CredentialTypes.Text, "Management address, optionally host:port (SSH port " + defaultPort + " unless changed)."),
         new CredentialField("username", "Username", CredentialTypes.Text, accountHelp),
         new CredentialField("password", "Password", CredentialTypes.Password, "Leave empty when authenticating with a private key.", Required: false),
-        new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.TextArea, "OpenSSH or PEM private key, where the appliance supports key login. Leave empty for password login.", Required: false),
+        new CredentialField("privateKey", "Private key (PEM)", CredentialTypes.SecretArea, "OpenSSH or PEM private key, where the appliance supports key login. Leave empty for password login.", Required: false),
         new CredentialField("passphrase", "Key passphrase", CredentialTypes.Password, "Only when the private key is encrypted.", Required: false),
         new CredentialField("hostKey", "Host key fingerprint", CredentialTypes.Text, "SHA256:... as printed by Test connection. Until it is set the appliance is not connected to; a changed key stops the connection.", Required: false),
         new CredentialField("acceptAny", "Accept any host key", CredentialTypes.Bool, "Off (recommended). On connects without a pinned key and exposes the password to anyone who can intercept the connection.", Required: false, Default: "false"),
