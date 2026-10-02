@@ -7,3 +7,6 @@ src/VulnVerdict.Web/data/
 
 # Local tooling: never part of the repository or its source archives
 .claude/
+
+# Deployment secrets
+deploy/.env
