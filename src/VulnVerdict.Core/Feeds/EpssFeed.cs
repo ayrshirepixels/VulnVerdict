@@ -47,8 +47,9 @@ public sealed class EpssFeed : IFeed
             rows.Add(new EpssScore { CveId = f[0].ToUpperInvariant(), Score = score, Percentile = pct, ScoreDate = scoreDate, RetrievedAt = now });
         }
 
-        ctx.Progress("Storing " + rows.Count.ToString("N0") + " EPSS scores");
         var db = ctx.Db;
+        SignalStore.GuardShrink(Name, await db.Epss.CountAsync(ct), rows.Count);
+        ctx.Progress("Storing " + rows.Count.ToString("N0") + " EPSS scores");
         db.ChangeTracker.AutoDetectChangesEnabled = false;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Epss.ExecuteDeleteAsync(ct);

@@ -10,7 +10,8 @@ namespace VulnVerdict.Core.Feeds.Psirt;
 /// Red Hat Security Data API (https://access.redhat.com/hydra/rest/securitydata/cve.json?after=YYYY-MM-DD,
 /// per_page/page). One Advisory per CVE; affected_packages ("openssl-1:1.1.1k-14.el8_6") become rows of package name and
 /// fixed NEVR. Cursor: yyyy-MM-dd of the newest public_date stored (re-queried from one day earlier; upsert is idempotent).
-/// First run covers the last InitialDays days.
+/// First run covers the last InitialDays days. The API filters on public date only and Red Hat adds fixed packages to a CVE
+/// weeks after it goes public, so every run also re-reads the last RescanDays days of public dates.
 /// </summary>
 public sealed partial class RedHatCsafFeed : IFeed
 {
@@ -24,14 +25,19 @@ public sealed partial class RedHatCsafFeed : IFeed
     public int InitialDays { get; init; } = 90;
     public int PerPage { get; init; } = 1000;
     public int MaxPages { get; init; } = 10;
+    /// <summary>Public-date window re-read on every run for affected_packages added after disclosure.</summary>
+    public int RescanDays { get; init; } = 180;
 
     public async Task<FeedResult> RunAsync(FeedContext ctx, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         var cursor = PsirtStore.ParseDate(ctx.Cursor, "yyyy-MM-dd");
-        var after = (cursor ?? now.AddDays(-InitialDays)).Date.AddDays(-1);
+        var since = cursor ?? now.AddDays(-InitialDays);
+        var rescan = now.AddDays(-RescanDays);
+        var after = (since < rescan ? since : rescan).Date.AddDays(-1);
         DateTime? newest = cursor;
         var total = 0;
+        var complete = false;
         for (var page = 1; page <= MaxPages; page++)
         {
             ct.ThrowIfCancellationRequested();
@@ -48,12 +54,18 @@ public sealed partial class RedHatCsafFeed : IFeed
                 ctx.Log.LogWarning(ex, "Red Hat page {Page} failed; will retry next run", page);
                 return new FeedResult(total, cursor?.ToString("yyyy-MM-dd"), $"stopped at page {page}: {ex.Message}");
             }
-            if (rows.Count == 0) break;
+            if (rows.Count == 0) { complete = true; break; }
             total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, rows, ct);
             foreach (var r in rows) if (r.Published is { } p && (newest is null || p > newest)) newest = p;
-            if (rows.Count < PerPage) break;
+            if (rows.Count < PerPage) { complete = true; break; }
         }
-        return new FeedResult(total, (newest ?? now).ToString("yyyy-MM-dd"), cursor is null ? $"first run: CVEs public since {after:yyyy-MM-dd}" : null);
+        if (!complete)
+        {
+            // the page order is not guaranteed to be by date: hold the cursor so the uncovered part is asked for again
+            ctx.Log.LogWarning("Red Hat: {Pages} pages of {PerPage} did not cover CVEs public since {After:yyyy-MM-dd}", MaxPages, PerPage, after);
+            return new FeedResult(total, cursor?.ToString("yyyy-MM-dd"), $"capped at {MaxPages} pages since {after:yyyy-MM-dd}; cursor held");
+        }
+        return new FeedResult(total, (newest ?? now).ToString("yyyy-MM-dd"), cursor is null ? $"first run: CVEs public since {after:yyyy-MM-dd}" : $"CVEs public since {after:yyyy-MM-dd} re-read");
     }
 
     /// <summary>Parse a cve.json array.</summary>
