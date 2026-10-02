@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     # /data/backups exists in the image so a volume mounted there starts out owned by the console's user
     && useradd --system --uid 10001 --create-home vulnverdict && mkdir -p /data/backups && chown vulnverdict /data /data/backups
 COPY --from=build /app .
+# this release's Compose file, Caddyfile and scripts: update.sh takes them from the image it moves to (deploy/update.sh)
+COPY deploy/docker-compose.yml deploy/Caddyfile deploy/update.sh deploy/rollback.sh deploy/restore.sh deploy/.env.example /app/deploy/
+RUN sed -i "/^    build: \.\.$/d" /app/deploy/docker-compose.yml && ! grep -q "build:" /app/deploy/docker-compose.yml
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
     Worker__DataDir=/data \

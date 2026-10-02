@@ -139,7 +139,7 @@ docker compose run --rm --no-deps -e VV_BACKUP_PASSPHRASE -v "$PWD:/restore" --u
 
 ## Updates take their own dump
 
-`update.sh` stops the console and worker and dumps the database to `backups/pre-update-<time>.dump` in the Compose folder (on the host, not in the data volume) before it starts a new version, and does not update if that dump fails or does not read back. `rollback.sh` restores it when the new version changed the database schema. The last three are kept. They are plain `pg_dump` files without the keys, readable by root only; `./restore.sh backups/pre-update-<time>.dump` restores one by hand. See [install](install.md#updating-and-rolling-back).
+`update.sh` stops the console and worker and dumps the database to `backups/pre-update-<time>.dump` in the Compose folder (on the host, not in the data volume) before it starts a new version, and does not update if that dump fails or does not read back. `rollback.sh` restores it when the new version changed the database schema. The last three are kept, each with a copy of the encryption keys as they were (`pre-update-<time>.keys.tar`, which `rollback.sh` puts back), readable by root only. The dumps are plain `pg_dump` files; `./restore.sh backups/pre-update-<time>.dump` restores one by hand. See [install](install.md#updating-and-rolling-back).
 
 ## Testing your backups
 

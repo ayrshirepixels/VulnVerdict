@@ -93,6 +93,19 @@ Updates are opt-in. In the Compose folder, or `/opt/vulnverdict` on the applianc
 
 `update.sh` notes which images are running (console, worker, database, proxy), pulls the new ones, and keeps the old ones under `:rollback` tags. It then stops the console and worker, dumps the database to `backups/pre-update-<time>.dump` in the same folder and checks that the dump reads back; if it cannot take that backup it starts the old version again and stops. Only then does it start the new images, the database first, then the console and worker (migrations run on start), then the proxy. If any of them does not come up, it rolls everything back by itself. Expect the console to be away for a minute or two. Running it again with the same release does nothing.
 
+With the dump it keeps a copy of the encryption keys (`backups/pre-update-<time>.keys.tar`), which a rollback puts back: a newer console may rewrite the key files (`VV_KEY_SECRET` does) in a form an older one cannot read. It also brings this folder up to date: it takes the new release's `update.sh`, `rollback.sh` and `restore.sh` from the new image, and its `docker-compose.yml` and `Caddyfile` too where the copies here are the ones the running version shipped. A file you have edited is left alone, the new one is written beside it as `docker-compose.yml.new` or `Caddyfile.new` to merge by hand, and a replaced file is kept as `<name>.before-<time>`.
+
+### Updating from 1.1.x
+
+The `update.sh` that 1.1.x shipped changes images only, never `docker-compose.yml`, so the settings added in 1.2 (the backup folder `VV_BACKUP_DIR`, `VV_KEY_SECRET`) would be ignored and `restore.sh` would be missing; the console says so in a banner. Take this release's files first, then update with the new script. In the Compose folder, or `/opt/vulnverdict` on the appliance (with `sudo`):
+
+```bash
+curl -fsSL https://github.com/ayrshirepixels/VulnVerdict/releases/latest/download/vulnverdict-compose.tar.gz | tar -xz --strip-components=1 vulnverdict/docker-compose.yml vulnverdict/update.sh vulnverdict/rollback.sh vulnverdict/restore.sh vulnverdict/.env.example
+./update.sh
+```
+
+That leaves `.env` and the `Caddyfile` as they are; if you had edited `docker-compose.yml` (ports, extra volumes), make the same edits to the new one before running `./update.sh`. Set `VV_KEY_SECRET` only once the update has come up and you are staying on it.
+
 `./rollback.sh` puts all four images back by hand, for the release that came up but turned out wrong. A newer console may have changed the database schema, which the older one cannot be assumed to run against, so when the schema has moved it asks whether to restore the pre-update dump (everything recorded since the update is lost); `--restore-db` or `--keep-db` answers in advance, and with nobody to ask and neither given it changes nothing. The last three pre-update dumps are kept; they hold your data, so the `backups` folder is readable by root only.
 
 On an air-gapped site, load the release's images with `docker load` and run `./update.sh --no-pull <tag>`.

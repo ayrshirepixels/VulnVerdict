@@ -8,6 +8,7 @@
 #   --keep-db     keep the database as it is, whatever the schema
 #   --yes         do not ask for confirmation
 #   --dry-run     show what would be done; nothing is stopped, started, restored or written
+# The encryption keys copied before the update are always put back, so the older console can read what it saved.
 # With neither --restore-db nor --keep-db: if the schema has not moved, the database is kept; if it has, the script
 # asks (and, with nobody to ask, stops without changing anything). update.sh calls this with --auto after a failed
 # update, which restores without asking: the new version never served anyone.
@@ -15,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$(basename "$0")" | sed 's/^# \{0,1\}//'; }
 die() { echo "rollback: $*" >&2; exit 1; }
 
 MODE=ask
@@ -102,6 +103,7 @@ PREV_PROXY_REF=""
 PREV_PROXY_ID=""
 MIGRATION_BEFORE=""
 BACKUP=""
+KEYS=""
 NEW_IMAGE=""
 if [ -f "$STATE" ]; then
   # shellcheck source=/dev/null
@@ -179,6 +181,15 @@ database_back
 if [ "$RESTORE" = 1 ]; then
   echo "Restoring the database from ${BACKUP}..."
   run ./restore.sh --yes --no-restart "$BACKUP"
+fi
+
+# The encryption keys as they were before the update: the newer console may have rewritten them (VV_KEY_SECRET wraps
+# every key file) in a form the older one cannot read. Keys made since are left in place.
+if [ -n "$KEYS" ] && [ -f "$KEYS" ]; then
+  echo "Putting back the encryption keys from before the update..."
+  if [ "$DRY_RUN" = 1 ]; then echo "  would unpack $KEYS into /data"
+  else docker compose run --rm --no-deps -T --entrypoint tar web -C /data -xf - < "$KEYS" || die "the keys in $KEYS could not be put back; the console and worker are stopped. Run again, or see docs/install.md."
+  fi
 fi
 
 echo "Starting the console and worker on ${WEB_TARGET}..."

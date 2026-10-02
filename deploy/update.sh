@@ -12,7 +12,10 @@
 #   2. pulls the new images; if they are what is already running, stops here
 #   3. tags the noted images as :rollback, :rollback-db and :rollback-proxy and writes .rollback-state
 #   4. stops the console and worker and dumps the database to backups/pre-update-<time>.dump, checked with
-#      pg_restore --list. No backup, no update: the old containers are started again and the script stops
+#      pg_restore --list, with a copy of the encryption keys beside it. No backup, no update: the old containers are
+#      started again and the script stops
+#   4b. takes the new release's update.sh, rollback.sh and restore.sh from its image, and its docker-compose.yml and
+#      Caddyfile where the copies here are unedited (an edited one is left alone, the new one written as <name>.new)
 #   5. starts the database, then the console and worker, then the proxy on the new images, checking each
 #   6. if anything in step 5 fails, runs ./rollback.sh, which puts back all four images and, because the new console
 #      may already have migrated the schema, the database from step 4
@@ -20,7 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,22p' "$(basename "$0")" | sed 's/^# \{0,1\}//'; }
 die() { echo "update: $*" >&2; exit 1; }
 
 DRY_RUN=0
@@ -123,6 +126,7 @@ write_state() {
     echo "PREV_PROXY_ID='$PREV_PROXY_ID'"
     echo "MIGRATION_BEFORE='$MIGRATION_BEFORE'"
     echo "BACKUP='$BACKUP'"
+    echo "KEYS='$KEYS'"
   } > "$tmp"
   chmod 600 "$tmp"
   mv "$tmp" "$STATE"
@@ -145,6 +149,8 @@ PREV_PROXY_REF="$(image_ref_of proxy)"
 STARTED="$(date -u +%Y%m%d-%H%M%S)"
 MIGRATION_BEFORE=""
 BACKUP=""
+KEYS=""
+DEPLOY_CHANGED=""
 
 [ -n "$PREV_WEB_ID" ] || die "the console is not running in this folder. Start it with 'docker compose up -d' first; there is nothing to update from."
 if ! docker compose exec -T db pg_isready -U vulnverdict -d vulnverdict >/dev/null 2>&1; then
@@ -225,9 +231,19 @@ pre_update_backup() {
   fi
   mv "$file.tmp" "$file"
   BACKUP="$file"
-  # keep the last few; older pre-update dumps go
+  # The encryption keys as they are now. The new console may rewrite them in place (VV_KEY_SECRET wraps every key file),
+  # and an older console cannot read a wrapped key: rollback.sh puts these back, or every saved credential is lost.
+  local keys="$BACKUP_DIR/pre-update-$STARTED.keys.tar"
+  if ( umask 077; docker compose run --rm --no-deps -T --entrypoint tar web -C /data -cf - keys > "$keys.tmp" ) \
+     && tar -tf "$keys.tmp" 2>/dev/null | grep -q '\.xml$'; then
+    mv "$keys.tmp" "$keys"; KEYS="$keys"
+  else
+    rm -f "$keys.tmp"
+    echo "The encryption keys could not be copied; a rollback after this update will keep the keys as the new version leaves them." >&2
+  fi
+  # keep the last few; older pre-update dumps and key copies go
   # shellcheck disable=SC2012
-  ls -1t "$BACKUP_DIR"/pre-update-*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | while IFS= read -r old; do rm -f "$old"; done
+  ls -1t "$BACKUP_DIR"/pre-update-*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | while IFS= read -r old; do rm -f "$old" "${old%.dump}.keys.tar"; done
 }
 
 echo "Stopping the console and worker..."
@@ -245,9 +261,52 @@ else
   exit 1
 fi
 
+# ---------------------------------------------------------------- 4b. this release's Compose file, Caddyfile and scripts
+# Every console image carries the deploy files of its release in /app/deploy (images before 1.2 do not; then nothing
+# here changes). The scripts are ours and are replaced. docker-compose.yml and the Caddyfile are replaced only when this
+# folder's copy is exactly the one the running release shipped, so nobody's edits are overwritten; an edited copy is
+# kept and the new one is written beside it as <name>.new. A replaced file is kept as <name>.before-<time>.
+release_files() {
+  mkdir -p "$2"
+  docker run --rm --entrypoint tar "$1" -C /app/deploy -cf - . 2>/dev/null | tar -xf - -C "$2" 2>/dev/null
+}
+
+refresh_deploy_files() {
+  local new old f
+  new="$(mktemp -d)"; old="$(mktemp -d)"
+  if ! release_files "$NEW" "$new" || [ ! -s "$new/docker-compose.yml" ]; then rm -rf "$new" "$old"; return 0; fi
+  release_files "$PREV_WEB_ID" "$old" || true
+  for f in docker-compose.yml Caddyfile; do
+    if [ ! -f "$new/$f" ] || [ ! -f "$f" ] || cmp -s "$f" "$new/$f"; then continue; fi
+    if [ -f "$old/$f" ] && cmp -s "$f" "$old/$f"; then
+      cp -p "$f" "$f.before-$STARTED" && cp "$new/$f" "$f.tmp" && mv "$f.tmp" "$f"
+      DEPLOY_CHANGED="$DEPLOY_CHANGED $f"
+      echo "Updated $f to the ${TAG} one (the previous one is kept as $f.before-$STARTED)."
+    else
+      cp "$new/$f" "$f.new"
+      echo "NOTE: $f here is not the one the running version shipped (edited, or from before 1.2), so it is left as it is." >&2
+      echo "      The ${TAG} one is in $f.new: compare the two, merge, and run 'docker compose up -d'." >&2
+    fi
+  done
+  # replaced by rename: this script keeps running from the copy it started with
+  for f in update.sh rollback.sh restore.sh; do
+    if [ -f "$new/$f" ]; then cp "$new/$f" "$f.tmp" && chmod 755 "$f.tmp" && mv "$f.tmp" "$f"; fi
+  done
+  if [ -f "$new/.env.example" ]; then cp "$new/.env.example" .env.example; fi
+  rm -rf "$new" "$old"
+}
+
+if [ "$DRY_RUN" = 1 ]; then
+  echo "  would take this release's update.sh, rollback.sh and restore.sh from $NEW, and its docker-compose.yml and Caddyfile where the copies here are unedited"
+else
+  refresh_deploy_files
+fi
+
 # ---------------------------------------------------------------- 5. the new images, one tier at a time
 roll_back() {
   echo "$1 Rolling back." >&2
+  # the Compose file and Caddyfile this run replaced go back first: the older images are started under the older file
+  for f in $DEPLOY_CHANGED; do if [ -f "$f.before-$STARTED" ]; then cp -p "$f.before-$STARTED" "$f"; fi; done
   ./rollback.sh --auto || echo "The rollback did not finish; see the messages above and docs/install.md." >&2
   exit 1
 }

@@ -32,7 +32,25 @@ public sealed class HealthNotices
         list.AddRange(await SecretsAsync(DateTime.UtcNow, ct));
         list.AddRange(await WebhookService.FailureNoticesAsync(_factory, ct));
         list.AddRange(await HostKeysAsync(ct));
+        if (DeployFilesNotice(Environment.GetEnvironmentVariable("Role"), Environment.GetEnvironmentVariable("VV_DEPLOY_FILES")) is { } files) list.Add(files);
         return list;
+    }
+
+    /// <summary>The generation of deploy/docker-compose.yml this console expects; the file passes it as VV_DEPLOY_FILES.</summary>
+    public const int DeployFilesVersion = 2;
+    public const string UpdatingDocs = "https://github.com/ayrshirepixels/VulnVerdict/blob/main/docs/install.md#updating-from-11x";
+
+    /// <summary>
+    /// A Compose or appliance install (Role web or worker) still running under an older docker-compose.yml: update.sh
+    /// before 1.2 changed images but never the file, so the backup folder, VV_KEY_SECRET and restore.sh are not wired up
+    /// there, and nothing else would say so. The all-in-one image has no Compose file and is never flagged.
+    /// </summary>
+    public static Notice? DeployFilesNotice(string? role, string? deployFiles)
+    {
+        if (role is null || !(role.Equals("web", StringComparison.OrdinalIgnoreCase) || role.Equals("worker", StringComparison.OrdinalIgnoreCase))) return null;
+        if (int.TryParse(deployFiles, out var v) && v >= DeployFilesVersion) return null;
+        return new Notice(false, "This install's docker-compose.yml and scripts are from an older release, so the backup folder (VV_BACKUP_DIR), "
+            + "VV_KEY_SECRET and restore.sh are not set up. Take the new ones from this release's vulnverdict-compose.tar.gz, as the install guide shows under Updating.", UpdatingDocs);
     }
 
     /// <summary>

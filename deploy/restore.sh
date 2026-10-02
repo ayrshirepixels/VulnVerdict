@@ -21,7 +21,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,20p' "$(basename "$0")" | sed 's/^# \{0,1\}//'; }
 die() { echo "restore: $*" >&2; exit 1; }
 
 YES=0

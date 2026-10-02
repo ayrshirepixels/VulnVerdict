@@ -30,6 +30,9 @@ services:
       Database__ConnectionString: "Host=db;Database=vulnverdict;Username=vulnverdict;Password=${DB_PASSWORD}"
       Worker__DataDir: /data
       KeyProtection__Secret: ${VV_KEY_SECRET:-}
+      # which generation of this file the console runs under: an older file lacks the backup and key settings, and the
+      # console says so (docs/install.md, Updating)
+      VV_DEPLOY_FILES: "2"
     volumes:
       - data:/data
       # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
@@ -51,6 +54,7 @@ services:
       Worker__DataDir: /data
       KeyProtection__Secret: ${VV_KEY_SECRET:-}
       Worker__CveMinYear: ${CVE_MIN_YEAR:-0}
+      VV_DEPLOY_FILES: "2"
     volumes:
       - data:/data
       # nightly backups (docs/backup.md). VV_BACKUP_DIR in .env puts them on a host path, such as a mounted share
