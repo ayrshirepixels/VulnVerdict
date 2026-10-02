@@ -195,7 +195,14 @@ public static partial class VexAssessor
         var level = Identity(s, st);
         // a fixed statement names the version that has the fix, not the one installed: the product is all that has to match
         if (level <= VexMatchLevel.Weak || st.Status == VexStatus.Fixed) return new VexMatch(st, level, false);
-        if (st.Version is null && st.VersionRange is null) return new VexMatch(st, level, false);
+        // No version and no range. A package statement names its stream through the platform (Red Hat's "openssh as a
+        // component of RHEL 9"), so it covers the stream. A product statement without one says nothing about which
+        // release: often the version was in the product's name and not parsed ("Cisco IOS XE Software 17.9.4", CPE
+        // version "-"). A "not affected" one confirms the product only, so it never clears a verdict on its own; an
+        // "affected" one may still raise the match, the direction that cannot hide anything.
+        if (st.Version is null && st.VersionRange is null)
+            return new VexMatch(st, s.Purl is not null || s.Ecosystem is not null || st.Status != VexStatus.KnownNotAffected
+                ? level : (VexMatchLevel)Math.Min((int)level, (int)VexMatchLevel.Product), false);
         if (string.IsNullOrWhiteSpace(s.Version)) return new VexMatch(st, VexMatchLevel.Product, false);
 
         var installed = StripEpoch(s.Version);
@@ -203,6 +210,9 @@ public static partial class VexAssessor
         {
             var named = StripEpoch(st.Version);
             var cmp = VersionCompare.Compare(installed, named);
+            // the comparator ignores bracketed parts, which in Cisco's 15.2(4)E10 and 15.2(7)E10 are the release itself
+            if (cmp == 0 && (installed.Contains('(') || named.Contains('(')) && VersionCompare.Compare(Unbracket(installed), Unbracket(named)) != 0)
+                return new VexMatch(st, VexMatchLevel.None, false);   // a statement about another release
             if (cmp == 0 || installed.Equals(named, StringComparison.OrdinalIgnoreCase)) return new VexMatch(st, level, true);
             if (cmp is null) return new VexMatch(st, VexMatchLevel.Weak, false);
             // "7.2" against an installed 7.2.5 may be the branch or may be 7.2.0 exactly: the product, not the version, is confirmed
@@ -279,6 +289,9 @@ public static partial class VexAssessor
     [GeneratedRegex(@"^\d+:")] private static partial Regex Epoch();
     /// <summary>"1:1.1.1k-14.el8_6" and "1.1.1k-14.el8_6" are the same package version for this purpose.</summary>
     public static string StripEpoch(string version) => Epoch().Replace(version.Trim(), "");
+
+    /// <summary>"15.2(4)E10" to "15.2.4.E10": the bracketed part kept as a segment, so the comparator sees it.</summary>
+    private static string Unbracket(string version) => Regex.Replace(version.Replace('(', '.').Replace(')', '.'), @"\.{2,}", ".").Trim('.');
 
     /// <summary>True when <paramref name="branch"/> ("7.2") is a leading part of <paramref name="installed"/> ("7.2.5") ending on a separator.</summary>
     public static bool IsBranchOf(string branch, string installed) =>
