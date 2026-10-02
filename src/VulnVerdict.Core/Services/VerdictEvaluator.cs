@@ -153,8 +153,11 @@ public sealed partial class VerdictEvaluator
         if (onlyEntry is not null) return list;
 
         var staleBefore = DateTime.UtcNow.AddDays(-30);
+        // An asset only unseen because its connector's listing was cut short is still there: keep evaluating it,
+        // or new CVEs would never reach it while its old verdicts stay open.
+        var held = await InventoryService.HeldByPartialRunsAsync(db, ct);
         var software = await db.Software.AsNoTracking().Include(s => s.Asset)
-            .Where(s => s.Asset != null && !s.Asset.Archived && s.Asset.LastSeen >= staleBefore
+            .Where(s => s.Asset != null && !s.Asset.Archived && (s.Asset.LastSeen >= staleBefore || held.Contains(s.Asset.Id))
                         && (s.MappingStatus == MappingStatus.Exact || s.MappingStatus == MappingStatus.Alias || s.MappingStatus == MappingStatus.Fuzzy || s.MappingStatus == MappingStatus.Package))
             .ToListAsync(ct);
         foreach (var s in software)
