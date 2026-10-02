@@ -63,6 +63,10 @@ To build the appliance yourself, see the header of `deploy/ova/build.pkr.hcl`: P
 4. Check **Needs mapping** once the first collections land: anything a connector reported that could not be tied to a vendor's CVE naming is listed there for a one-click mapping.
 5. **Sources** shows feed health and what each feed is doing.
 
+Until all of that is done, **Today** shows administrators a short setup checklist: mail, digest recipients, something to match (a watchlist entry or a connector), the CVE baseline, the first evaluation and the first digest. Each line links to the page that settles it, and the card can be hidden per browser.
+
+The console works on a phone (the menu is behind the button in the top bar) and follows the device's light or dark setting; the Auto / Light / Dark switch at the foot of the menu pins one for that browser. It can also be installed from the browser's menu ("Install app" or "Add to Home Screen"). An installed console is the same site in its own window: it needs its connection to the server and has no offline mode.
+
 ### What the first hour looks like
 
 The first start downloads what later runs only update, so give it about half an hour on a normal office line before judging the verdicts:

@@ -1,8 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- on a dark tab strip the charcoal tile would vanish, so it lifts a shade -->
-  <style>@media (prefers-color-scheme: dark) { .tile { fill: #2B313C; } }</style>
-  <rect class="tile" width="128" height="128" rx="24" fill="#1E222A"/>
-  <g transform="translate(4 4)">
+  <!-- full bleed with the mark inside the central safe zone, so a launcher can mask it to any shape -->
+  <rect width="128" height="128" fill="#1E222A"/>
+  <g transform="translate(22 22) scale(.7)">
     <path d="M60 10 L98 24 V58 C98 84 80 102 60 111 C40 102 22 84 22 58 V24 Z" fill="none" stroke="#F5F7FA" stroke-width="6" stroke-linejoin="round"/>
     <path d="M60 27 L36 36 V58 C36 74 46 86 60 93 Z" fill="#F5F7FA"/>
     <path d="M60 27 L84 36 V58 C84 74 74 86 60 93 C46 86 36 74 36 58 V36 Z" fill="none" stroke="#F5F7FA" stroke-width="4" stroke-linejoin="round"/>

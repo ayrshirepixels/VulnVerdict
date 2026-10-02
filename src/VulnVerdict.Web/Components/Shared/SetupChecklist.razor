@@ -1,0 +1,79 @@
+@inject SettingsService Settings
+@inject IDbContextFactory<VvDbContext> Db
+@inject IJSRuntime JS
+
+@* First-run checklist for administrators, shown on Today until every line is done or it is hidden. Everything is read
+   from existing settings and tables; hiding it is remembered in this browser only (localStorage), so nothing is stored. *@
+@if (_show && _steps.Count > 0)
+{
+    <div class="card">
+        <h2>Getting set up</h2>
+        <p class="muted" style="margin-top:0">@_steps.Count(s => s.Done) of @_steps.Count done. This card goes away by itself when the last one is.</p>
+        <ul class="checklist">
+            @foreach (var s in _steps)
+            {
+                <li class="@(s.Done ? "done" : null)">
+                    <span class="mark" aria-hidden="true">@(s.Done ? "✓" : "")</span>
+                    <div>
+                        <a href="@s.Link">@s.Title</a><span class="muted"> &middot; @(s.Done ? "done" : "to do")</span>
+                        @if (!s.Done) { <small class="muted">@s.Hint</small> }
+                    </div>
+                </li>
+            }
+        </ul>
+        <button type="button" class="btn btn-secondary btn-sm" @onclick="Dismiss">Hide this checklist</button>
+    </div>
+}
+
+@code {
+    private const string DismissedKey = "vv.setupChecklist.hidden";
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private sealed record Step(bool Done, string Title, string Link, string Hint);
+    private List<Step> _steps = new();
+    private bool _show;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Ui.IsAdminAsync(AuthState)) return;
+        try
+        {
+            var s = await Settings.LoadAsync();
+            await using var db = await Db.CreateDbContextAsync();
+            var inventory = await db.Watchlist.AnyAsync() || await db.Connectors.AnyAsync();
+            // the same feed state the Sources page shows; a signed bundle counts as the baseline too
+            var baseline = await db.FeedStatuses.AnyAsync(f => f.Name == "cvelist" && f.LastSuccess != null) || await db.Bundles.AnyAsync();
+            var evaluated = await Settings.GetStateAsync(SettingsService.Keys.LastEvaluation) is not null;
+            var digestSent = await db.DigestRuns.AnyAsync(r => r.SentAt != null);
+            var steps = new List<Step>
+            {
+                new(s.MailConfigured, "Set the mail server", "/settings", "Digests and alerts are sent by email, so nothing arrives until this is in."),
+                new(s.Recipients.Any(), "Add the digest recipients", "/settings", "Who gets the daily digest."),
+                new(inventory, "Add what you run", "/watchlist", "Add products to the watchlist, or let a connector under Connectors collect them."),
+                new(baseline, "Load the CVE baseline", "/sources", "Loading in the background. The first load is large and takes 10 to 20 minutes; Sources shows progress."),
+                new(evaluated, "Run the first evaluation", "/sources", "Runs by itself once the baseline is loaded and there is something to match."),
+                new(digestSent, "Send the first digest", "/digests", "Goes at the next scheduled time, or use Send digest now below.")
+            };
+            if (steps.Any(x => !x.Done)) _steps = steps;
+        }
+        catch { _steps = new(); }   // a checklist must never take the page down
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // localStorage is only reachable once the circuit is up, so the card stays out of the prerendered page
+        if (!firstRender || _steps.Count == 0) return;
+        var hidden = false;
+        try { hidden = await JS.InvokeAsync<string?>("localStorage.getItem", DismissedKey) is not null; }
+        catch { }   // storage blocked: show it
+        _show = !hidden;
+        if (_show) StateHasChanged();
+    }
+
+    private async Task Dismiss()
+    {
+        _show = false;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", DismissedKey, "1"); }
+        catch { }
+    }
+}

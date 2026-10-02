@@ -2,7 +2,7 @@
 
 Cut the noise. Know your risk.
 
-Verdicts are advisory: read the [advisory notice](docs/disclaimer.md). Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. It is offered free and without warranty; if you want to help, see [CONTRIBUTING.md](CONTRIBUTING.md) or email hello@ayrshirepixels.co.uk. The VulnVerdict name and logo are trademarks (`TRADEMARK.md`).
+Verdicts are advisory: read the [advisory notice](docs/disclaimer.md). Free and open source under the [AGPL-3.0](LICENSE). Run the whole product on your own VM with no asset cap and no registration. It is offered free and without warranty; if you want to help, see [CONTRIBUTING.md](CONTRIBUTING.md) or email hello@ayrshirepixels.co.uk. The VulnVerdict name and logo are trademarks: see [TRADEMARK.md](TRADEMARK.md).
 
 An on-premises vulnerability triage console for organisations with one IT person and no security team. It pulls the public vulnerability feeds, matches them against what you actually run, works out how an attacker would have to reach each one in your estate, and emails a short verdict in plain words: **Fix today**, **Fix this week**, **Next patch cycle**, or ignore. It is a prioritisation layer, not a scanner and not a patch tool.
 
@@ -23,8 +23,9 @@ This repository holds the whole console: the feeds, watchlist, decision table an
 - **Signed feed bundles** (optional): instead of pulling the public feeds, a console can take them as a signed bundle from a central service, or have one uploaded by hand on a site with no internet access. It verifies the ECDSA signature and every file hash and refuses unsigned or downgraded bundles. Without a bundle URL the console pulls the public feeds itself, which is the normal setup.
 - **Mail**: SMTP, Microsoft 365 through Microsoft Graph (an app registration allowed to send as one mailbox, since Exchange Online is retiring password sign-in for SMTP), or the SendGrid or Brevo HTTP API, chosen in Settings. See [docs/mail.md](docs/mail.md).
 - **AI explanations (optional, BYOM: bring your own model)**: "Explain in plain English" per CVE and "How an attacker would have to do it here" per verdict, from Anthropic, OpenAI or any OpenAI-compatible endpoint (Ollama for fully offline sites). The model never decides a verdict; it explains one. Only the product, version, exposure level and public CVE text are sent, never asset names or addresses. Results are cached with provider, model and prompt version recorded.
-- **Security**: local admin created at install, optional OpenID Connect (Entra, Google, generic) with group-to-role mapping, three roles, audit log, encrypted secrets, CSP and security headers, login rate limiting, only port 443 exposed through Caddy.
-- **API**: token-authenticated read endpoints for verdicts, watchlist and digest, plus watchlist import.
+- **Security**: local admin created at install, optional OpenID Connect (Entra, Google, generic) with group-to-role mapping, three roles, audit log, encrypted secrets, CSP and security headers, login rate limiting, and only Caddy exposed: port 443 for the console, plus port 80, which does nothing but redirect to HTTPS.
+- **API and webhooks**: token-authenticated read endpoints for verdicts, assets, watchlist and digest, plus watchlist and SBOM import with the read-write token; signed webhooks when a verdict is created, promoted or closed. See [docs/api.md](docs/api.md).
+- **On a phone, and in the dark**: the console lays itself out for a phone, with the menu behind a button and wide tables scrolling sideways. It follows the device's light or dark setting, or you can pin either. It can be installed from the browser as an app; it still needs its connection to the server, so there is no offline mode.
 
 ## Run it with Docker Compose
 
@@ -74,11 +75,20 @@ Settings that a customer changes live in the console (Settings page) and in the 
 ## Layout
 
 ```
-src/VulnVerdict.Core    domain model, EF Core context, feeds, decision engine, evaluator, digest, workflow, worker
+src/VulnVerdict.Core    domain model, EF Core context, feeds, adapters, decision engine, evaluator, digest, workflow, worker
 src/VulnVerdict.Web     Blazor Server console, auth, API, Program.cs
-tests/VulnVerdict.Tests decision table (all 16 rules), version comparison and matching, CVE record parsing, sentence
-deploy/                 docker-compose.yml, Caddyfile, .env.example
+tests/VulnVerdict.Tests decision table (all 16 rules), version comparison and matching, CVE record parsing, sentence;
+                        feeds and vendor advisories, the inventory, firewall and ticket adapters against recorded
+                        fixtures, signed bundles and licences, webhooks, access control
+docs/                   install, connectors, digest, mail, API, security, advisory notice
+deploy/                 docker-compose.yml, Caddyfile, .env.example, update.sh, rollback.sh, make-compose-bundle.sh
+deploy/allinone/        Caddyfile and entrypoint for the single all-in-one container
+deploy/ova/             the appliance build: Packer template, first-boot wizard, OVF packaging
+deploy/entra/           PowerShell script that creates the Entra app registrations
+deploy/images/          the database and proxy images released with each version
+site/                   the public website
 Dockerfile              single image for web and worker
+Dockerfile.allinone     the all-in-one image: PostgreSQL, console, worker and Caddy in one container
 watchlist.example.json  a starter watchlist to import
 ```
 
