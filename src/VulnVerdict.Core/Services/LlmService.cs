@@ -73,11 +73,16 @@ public sealed class LlmService
         var v = await db.Verdicts.AsNoTracking().Include(x => x.WatchlistEntry).FirstOrDefaultAsync(x => x.Id == verdictId, ct) ?? throw new KeyNotFoundException();
         var cve = await db.Cves.AsNoTracking().FirstOrDefaultAsync(c => c.Id == v.CveId, ct);
         var cvss = CvssVector.Parse(cve?.CvssV40Vector) ?? CvssVector.Parse(cve?.CvssV31Vector);
-        var e = v.WatchlistEntry!;
+        // a watchlist entry, or software seen on an asset (possibly since removed, so past the soft-delete filter)
+        string vendor, product; string? version;
+        if (v.WatchlistEntry is { } e) (vendor, product, version) = (e.Vendor, e.Product, e.Version);
+        else if (v.SoftwareInstanceId is { } sid && await db.Software.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == sid, ct) is { } sw)
+            (vendor, product, version) = (sw.Vendor, sw.Product, sw.Version == "" ? null : sw.Version);
+        else (vendor, product, version) = ("", "(product not recorded)", null);
 
         // abstracted: product and version only, never the asset name or addresses
         var input = "CVE: " + v.CveId + "\nTitle: " + (cve?.Title ?? "(none)") + "\nVendor description: " + (cve?.Description ?? "(none)")
-            + "\nThe organisation runs: " + e.Vendor + " " + e.Product + " " + (e.Version ?? "(version not recorded)")
+            + "\nThe organisation runs: " + (vendor + " " + product).Trim() + " " + (version ?? "(version not recorded)")
             + "\nWhere it sits: " + v.DeclaredExposure.Plain() + (v.EffectiveExposure != v.DeclaredExposure ? " (but the attack path does not benefit from that: " + v.AttackVector.Plain() + ")" : "")
             + "\nHow important the system is to the business: " + v.Criticality
             + "\nExploitation status: " + v.Exploitation.Plain() + (v.InKev ? " (CISA Known Exploited Vulnerabilities)" : "") + (v.Epss is { } ep ? "; EPSS probability " + ep.ToString("0.00") : "")
