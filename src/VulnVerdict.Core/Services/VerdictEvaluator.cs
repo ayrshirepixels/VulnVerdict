@@ -31,25 +31,33 @@ public sealed partial class VerdictEvaluator
         _factory = factory; _settings = settings; _sp = sp; _webhooks = webhooks; _log = log;
     }
 
+    /// <summary>
+    /// State key holding the subjects the last run could not evaluate (OSV down, a write that collided) and when to
+    /// try them again: JSON <see cref="FailedSubjects"/>, null when every subject evaluated.
+    /// </summary>
+    public const string FailedSubjectsKey = "state:evaluate:failed";
+    /// <summary>How long failed subjects wait before <see cref="RetryFailedAsync"/> tries them again.</summary>
+    public static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(15);
+
+    public sealed record FailedSubjects(DateTime RetryAt, List<Guid> Entries, List<Guid> Software);
+
     public async Task<EvaluationSummary> EvaluateAllAsync(CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
         await using var db = await _factory.CreateDbContextAsync(ct);
         var settings = await _settings.LoadAsync(ct);
         var subjects = await LoadSubjectsAsync(db, null, ct);
-        var timeline = new TimelineHolder();
-        int cand = 0, created = 0, changed = 0, removed = 0;
-        foreach (var s in subjects)
-        {
-            ct.ThrowIfCancellationRequested();
-            var r = await EvaluateSubjectAsync(db, s, settings, timeline, ct);
-            cand += r.Candidates; created += r.Created; changed += r.Changed; removed += r.Removed;
-        }
-        removed += await CloseGoneAsync(db, ct);
+        var run = new RunCache();
+        await PrefetchPackagesAsync(db, subjects, run, ct);
+        var (total, failed) = await EvaluateEachAsync(db, subjects, settings, run, ct);
+        var removed = total.Removed + await CloseGoneAsync(db, ct);
         await MaintainStatesAsync(db, ct);
+        // a run with failures still counts as a run: the failed subjects are retried on their own, not the whole run
+        // every minute
         await _settings.SetStateAsync(SettingsService.Keys.LastEvaluation, DateTime.UtcNow.ToString("O"), ct);
-        var summary = new EvaluationSummary(subjects.Count, cand, created, changed, removed, sw.Elapsed);
-        _log.LogInformation("Evaluated {Entries} subjects: {Candidates} candidates, {Created} new, {Changed} changed, {Removed} removed in {Elapsed}", summary.Entries, summary.Candidates, summary.Created, summary.Changed, summary.Removed, summary.Elapsed);
+        await RecordFailedAsync(failed, ct);
+        var summary = total with { Removed = removed, Elapsed = sw.Elapsed };
+        _log.LogInformation("Evaluated {Entries} subjects: {Candidates} candidates, {Created} new, {Changed} changed, {Removed} removed, {Failed} failed in {Elapsed}", summary.Entries, summary.Candidates, summary.Created, summary.Changed, summary.Removed, failed.Count, summary.Elapsed);
         return summary;
     }
 
@@ -59,16 +67,79 @@ public sealed partial class VerdictEvaluator
         await using var db = await _factory.CreateDbContextAsync(ct);
         var settings = await _settings.LoadAsync(ct);
         var subjects = await LoadSubjectsAsync(db, entryId, ct);
-        var timeline = new TimelineHolder();
-        var total = new EvaluationSummary(subjects.Count, 0, 0, 0, 0, TimeSpan.Zero);
-        foreach (var s in subjects)
-        {
-            var r = await EvaluateSubjectAsync(db, s, settings, timeline, ct);
-            total = total with { Candidates = total.Candidates + r.Candidates, Created = total.Created + r.Created, Changed = total.Changed + r.Changed, Removed = total.Removed + r.Removed };
-        }
+        var (total, _) = await EvaluateEachAsync(db, subjects, settings, new RunCache(), ct);
         if (subjects.Count == 0) await db.Verdicts.Where(v => v.WatchlistEntryId == entryId).ExecuteDeleteAsync(ct);
         await MaintainStatesAsync(db, ct);
         return total with { Elapsed = sw.Elapsed };
+    }
+
+    /// <summary>
+    /// Evaluates the subjects the last run could not, once their retry time has come. Returns null when there was
+    /// nothing due. Anything that fails again waits another <see cref="RetryAfter"/>.
+    /// </summary>
+    public async Task<EvaluationSummary?> RetryFailedAsync(CancellationToken ct = default)
+    {
+        var json = await _settings.GetStateAsync(FailedSubjectsKey, ct);
+        FailedSubjects? due = null;
+        try { if (json is not null) due = JsonSerializer.Deserialize<FailedSubjects>(json); } catch (JsonException) { }
+        if (due is null) { if (json is not null) await _settings.SetStateAsync(FailedSubjectsKey, null, ct); return null; }
+        if (DateTime.UtcNow < due.RetryAt) return null;
+
+        var sw = Stopwatch.StartNew();
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var settings = await _settings.LoadAsync(ct);
+        var entries = due.Entries.ToHashSet(); var software = due.Software.ToHashSet();
+        var subjects = (await LoadSubjectsAsync(db, null, ct))
+            .Where(s => (s.WatchlistEntryId is { } e && entries.Contains(e)) || (s.SoftwareInstanceId is { } i && software.Contains(i))).ToList();
+        var run = new RunCache();
+        await PrefetchPackagesAsync(db, subjects, run, ct);
+        var (total, failed) = await EvaluateEachAsync(db, subjects, settings, run, ct);
+        await RecordFailedAsync(failed, ct);
+        _log.LogInformation("Retried {Entries} subjects that failed last run: {Failed} failed again", subjects.Count, failed.Count);
+        return total with { Elapsed = sw.Elapsed };
+    }
+
+    private Task RecordFailedAsync(List<Subject> failed, CancellationToken ct) =>
+        _settings.SetStateAsync(FailedSubjectsKey, failed.Count == 0 ? null : JsonSerializer.Serialize(new FailedSubjects(DateTime.UtcNow + RetryAfter,
+            failed.Where(s => s.WatchlistEntryId is not null).Select(s => s.WatchlistEntryId!.Value).ToList(),
+            failed.Where(s => s.SoftwareInstanceId is not null).Select(s => s.SoftwareInstanceId!.Value).ToList())), ct);
+
+    /// <summary>
+    /// Evaluates each subject on its own: one that fails (OSV unreachable with nothing cached, a database error) is
+    /// logged and returned in the failed list, and the run carries on with the next. A unique-index collision (the
+    /// web saving a watchlist entry while the worker evaluates it) is retried once, when the other writer's verdict
+    /// is there to update.
+    /// </summary>
+    private async Task<(EvaluationSummary Total, List<Subject> Failed)> EvaluateEachAsync(VvDbContext db, List<Subject> subjects, AppSettings settings, RunCache run, CancellationToken ct)
+    {
+        var total = new EvaluationSummary(subjects.Count, 0, 0, 0, 0, TimeSpan.Zero);
+        var failed = new List<Subject>();
+        foreach (var s in subjects)
+        {
+            ct.ThrowIfCancellationRequested();
+            EvaluationSummary? r = null;
+            for (var attempt = 1; r is null; attempt++)
+            {
+                try { r = await EvaluateSubjectAsync(db, s, settings, run, ct); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (DbUpdateException ex) when (attempt == 1)
+                {
+                    db.ChangeTracker.Clear();
+                    _log.LogInformation(ex, "Verdicts for {Subject} were written by another process meanwhile; evaluating it again", s.Display);
+                }
+                catch (Exception ex)
+                {
+                    db.ChangeTracker.Clear();
+                    if (ex is PackageDataUnavailableException) _log.LogWarning("Skipped {Subject}: {Reason}", s.Display, ex.Message);
+                    else _log.LogError(ex, "Evaluating {Subject} failed; carrying on with the rest", s.Display);
+                    failed.Add(s);
+                    break;
+                }
+            }
+            if (r is null) continue;
+            total = total with { Candidates = total.Candidates + r.Candidates, Created = total.Created + r.Created, Changed = total.Changed + r.Changed, Removed = total.Removed + r.Removed };
+        }
+        return (total, failed);
     }
 
     // ------------------------------------------------------------------ subjects
@@ -101,27 +172,99 @@ public sealed partial class VerdictEvaluator
 
     private sealed record ProductMatch(CveAffected? Row, string CveId, MatchConfidence Confidence, string How, PackageVuln? Package = null);
 
-    private async Task<List<ProductMatch>> FindCandidatesAsync(VvDbContext db, Subject s, CancellationToken ct)
+    private static readonly TimeSpan PackageCacheTtl = TimeSpan.FromHours(24);
+
+    private static bool IsPackage(Subject s) => s.SoftwareInstanceId is not null && (s.Purl is not null || s.Ecosystem is not null);
+    private static PackageQuery PackageQueryFor(Subject s) =>
+        new((s.Purl ?? s.Ecosystem + "/" + s.Product) + "@" + s.Version, s.Ecosystem ?? "", s.Product, s.Version ?? "", s.Purl);
+
+    /// <summary>A package subject OSV could not answer for, with nothing cached to fall back on: skipped, not emptied.</summary>
+    private sealed class PackageDataUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
+
+    /// <summary>Fed by signed bundles (air-gapped, or the central service): OSV is never called, cached results only.</summary>
+    private async Task<bool> OfflineAsync(RunCache run, CancellationToken ct)
+    {
+        if (run.Offline is { } known) return known;
+        var bundles = _sp.GetService<BundleService>();
+        run.Offline = bundles is not null && await bundles.IsBundleModeAsync(ct);
+        return run.Offline.Value;
+    }
+
+    /// <summary>
+    /// One OSV batch for every package whose cached result is missing or older than a day, written to the cache before
+    /// the subjects are evaluated. If OSV fails the run carries on from the cache and marks OSV unavailable.
+    /// </summary>
+    private async Task PrefetchPackagesAsync(VvDbContext db, List<Subject> subjects, RunCache run, CancellationToken ct)
+    {
+        var queries = subjects.Where(IsPackage).Select(PackageQueryFor).DistinctBy(q => q.Key).ToList();
+        if (queries.Count == 0 || _sp.GetService<IPackageVulnSource>() is not { } source || await OfflineAsync(run, ct)) return;
+        var cutoff = DateTime.UtcNow - PackageCacheTtl;
+        var fresh = new HashSet<string>();
+        foreach (var chunk in queries.Select(q => q.Key).Chunk(400))
+            fresh.UnionWith(await db.PackageVulns.AsNoTracking().Where(p => chunk.Contains(p.Key) && p.FetchedAt >= cutoff).Select(p => p.Key).ToListAsync(ct));
+        var due = queries.Where(q => !fresh.Contains(q.Key)).ToList();
+        if (due.Count == 0) return;
+
+        IReadOnlyList<PackageVuln> found;
+        try { found = await source.LookupAsync(due, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            run.OsvUnavailable = true;
+            _log.LogWarning(ex, "OSV lookup for {Count} package(s) failed; using cached results where there are any", due.Count);
+            return;
+        }
+        var byKey = found.GroupBy(v => v.Key).ToDictionary(g => g.Key, g => g.ToList());
+        var now = DateTime.UtcNow;
+        foreach (var chunk in due.Chunk(400))
+        {
+            var keys = chunk.Select(q => q.Key).ToList();
+            var rows = await db.PackageVulns.Where(p => keys.Contains(p.Key)).ToDictionaryAsync(p => p.Key, ct);
+            foreach (var q in chunk)
+            {
+                if (!rows.TryGetValue(q.Key, out var row)) { row = new PackageVulnCache { Key = q.Key }; db.PackageVulns.Add(row); }
+                row.ResultJson = JsonSerializer.Serialize(byKey.GetValueOrDefault(q.Key) ?? new()); row.FetchedAt = now;
+            }
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+        }
+    }
+
+    private async Task<List<ProductMatch>> FindCandidatesAsync(VvDbContext db, Subject s, RunCache run, CancellationToken ct)
     {
         var result = new List<ProductMatch>();
 
         // packages: OSV by purl or ecosystem + name
-        if (s.SoftwareInstanceId is not null && (s.Purl is not null || s.Ecosystem is not null))
+        if (IsPackage(s))
         {
             var source = _sp.GetService<IPackageVulnSource>();
             if (source is null) return result;
-            var key = (s.Purl ?? s.Ecosystem + "/" + s.Product) + "@" + s.Version;
+            var query = PackageQueryFor(s);
+            var key = query.Key;
             var cached = await db.PackageVulns.AsNoTracking().FirstOrDefaultAsync(p => p.Key == key, ct);
+            List<PackageVuln> Cached() => JsonSerializer.Deserialize<List<PackageVuln>>(cached!.ResultJson) ?? new();
+            var offline = await OfflineAsync(run, ct);
             List<PackageVuln> vulns;
-            if (cached is not null && DateTime.UtcNow - cached.FetchedAt < TimeSpan.FromHours(24))
-                vulns = JsonSerializer.Deserialize<List<PackageVuln>>(cached.ResultJson) ?? new();
+            if (cached is not null && (DateTime.UtcNow - cached.FetchedAt < PackageCacheTtl || offline || run.OsvUnavailable))
+                vulns = Cached();
+            else if (offline) vulns = new();   // bundle-fed: OSV is never asked, and there is nothing cached for it
+            else if (run.OsvUnavailable) throw new PackageDataUnavailableException("OSV is unavailable and nothing is cached for " + key);
             else
             {
-                vulns = (await source.LookupAsync(new[] { new PackageQuery(key, s.Ecosystem ?? "", s.Product, s.Version ?? "", s.Purl) }, ct)).ToList();
-                var row = await db.PackageVulns.FirstOrDefaultAsync(p => p.Key == key, ct);
-                if (row is null) { row = new PackageVulnCache { Key = key }; db.PackageVulns.Add(row); }
-                row.ResultJson = JsonSerializer.Serialize(vulns); row.FetchedAt = DateTime.UtcNow;
-                await db.SaveChangesAsync(ct);
+                try
+                {
+                    vulns = (await source.LookupAsync(new[] { query }, ct)).ToList();
+                    var row = await db.PackageVulns.FirstOrDefaultAsync(p => p.Key == key, ct);
+                    if (row is null) { row = new PackageVulnCache { Key = key }; db.PackageVulns.Add(row); }
+                    row.ResultJson = JsonSerializer.Serialize(vulns); row.FetchedAt = DateTime.UtcNow;
+                    await db.SaveChangesAsync(ct);
+                }
+                catch (Exception ex) when (ex is not DbUpdateException && (ex is not OperationCanceledException || !ct.IsCancellationRequested))
+                {
+                    run.OsvUnavailable = true;   // one failure is enough: the rest of the run does not wait on retries again
+                    if (cached is null) throw new PackageDataUnavailableException("OSV lookup failed and nothing is cached for " + key + ": " + ex.Message, ex);
+                    _log.LogWarning(ex, "OSV lookup for {Key} failed; using the result cached {At:u}", key, cached.FetchedAt);
+                    vulns = Cached();
+                }
             }
             foreach (var v in vulns) result.Add(new ProductMatch(null, v.CveId, MatchConfidence.Exact, "package " + (s.Purl ?? s.Ecosystem + " " + s.Product) + " " + s.Version + " is affected according to " + v.Source, v));
             return result;
@@ -197,7 +340,7 @@ public sealed partial class VerdictEvaluator
 
     // ------------------------------------------------------------------ evaluation
 
-    private async Task<EvaluationSummary> EvaluateSubjectAsync(VvDbContext db, Subject s, AppSettings settings, TimelineHolder timelineHolder, CancellationToken ct)
+    private async Task<EvaluationSummary> EvaluateSubjectAsync(VvDbContext db, Subject s, AppSettings settings, RunCache run, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         int created = 0, changed = 0, removed = 0;
@@ -206,7 +349,7 @@ public sealed partial class VerdictEvaluator
             ? await db.Verdicts.Where(v => v.WatchlistEntryId == s.WatchlistEntryId).ToDictionaryAsync(v => v.CveId, ct)
             : await db.Verdicts.Where(v => v.SoftwareInstanceId == s.SoftwareInstanceId).ToDictionaryAsync(v => v.CveId, ct);
 
-        var matches = await FindCandidatesAsync(db, s, ct);
+        var matches = await FindCandidatesAsync(db, s, run, ct);
         var byCve = matches.GroupBy(m => m.CveId).ToDictionary(g => g.Key, g => g.ToList());
         var ids = byCve.Keys.ToList();
 
@@ -228,27 +371,42 @@ public sealed partial class VerdictEvaluator
         var vendorKey = AdvisoryVendor(s);
         if (ids.Count > 0 && vendorKey is not null)
         {
-            var rows = new List<Advisory>();
-            if (vendorKey is "microsoft" or "ubuntu" or "redhat")
+            if (vendorKey is "microsoft" or "ubuntu" or "redhat" or "debian")
             {
-                foreach (var chunk in ids.Chunk(400))
-                    rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey && chunk.Contains(a.AdvisoryId)).ToListAsync(ct));
+                // keyed by CVE or by package: a targeted query per subject
+                var rows = new List<Advisory>();
+                if (vendorKey == "debian")
+                {
+                    var suffix = ":" + s.Product;
+                    rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == "debian" && a.AdvisoryId.EndsWith(suffix)).ToListAsync(ct));
+                }
+                else
+                    foreach (var chunk in ids.Chunk(400))
+                        rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey && chunk.Contains(a.AdvisoryId)).ToListAsync(ct));
+                var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+                foreach (var a in rows)
+                    foreach (var id in Normalizer.ExtractCveIds(a.CveIdsJson).Distinct())
+                        if (idSet.Contains(id)) (advisories.TryGetValue(id, out var l) ? l : advisories[id] = new()).Add(a);
             }
-            else if (vendorKey == "debian")
+            else
             {
-                var suffix = ":" + s.Product;
-                rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == "debian" && a.AdvisoryId.EndsWith(suffix)).ToListAsync(ct));
+                // Fortinet, Cisco, VMware: the vendor's whole table, read and indexed by CVE once per run
+                if (!run.AdvisoriesByVendor.TryGetValue(vendorKey, out var index))
+                {
+                    index = new(StringComparer.OrdinalIgnoreCase);
+                    foreach (var a in await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey).ToListAsync(ct))
+                        foreach (var id in Normalizer.ExtractCveIds(a.CveIdsJson).Distinct(StringComparer.OrdinalIgnoreCase))
+                            (index.TryGetValue(id, out var l) ? l : index[id] = new()).Add(a);
+                    run.AdvisoriesByVendor[vendorKey] = index;
+                }
+                foreach (var id in ids)
+                    if (index.TryGetValue(id, out var l)) advisories[id] = l;
             }
-            else rows.AddRange(await db.Advisories.AsNoTracking().Where(a => a.Vendor == vendorKey).ToListAsync(ct));
-            var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
-            foreach (var a in rows)
-                foreach (var id in Normalizer.ExtractCveIds(a.CveIdsJson).Distinct())
-                    if (idSet.Contains(id)) (advisories.TryGetValue(id, out var l) ? l : advisories[id] = new()).Add(a);
         }
 
-        var windowsTimeline = await TimelineAsync(db, timelineHolder, s, ct);
-        var officeTimeline = await OfficeTimelineAsync(db, timelineHolder, s, ct);
-        var rules = await db.Suppressions.AsNoTracking().ToListAsync(ct);
+        var windowsTimeline = await TimelineAsync(db, run, s, ct);
+        var officeTimeline = await OfficeTimelineAsync(db, run, s, ct);
+        var rules = run.Rules ??= await db.Suppressions.AsNoTracking().ToListAsync(ct);
         var controls = await db.Controls.AsNoTracking()
             .Where(c => (c.Expiry == null || c.Expiry > now) && ((s.AssetId != null && c.AssetId == s.AssetId) || (s.WatchlistEntryId != null && c.WatchlistEntryId == s.WatchlistEntryId)))
             .ToListAsync(ct);
@@ -348,10 +506,20 @@ public sealed partial class VerdictEvaluator
         return true;
     }
 
-    /// <summary>Microsoft's Windows build history, read once per evaluation run and only when a Windows subject needs it.</summary>
-    private sealed class TimelineHolder { public bool Loaded; public WindowsBuildTimeline? Value; public bool OfficeLoaded; public OfficeBuildTimeline? Office; }
+    /// <summary>
+    /// What every subject in a run shares, read once per run: Microsoft's Windows and Office build history (only when a
+    /// subject needs it), suppression rules, the whole-table vendor advisories indexed by CVE, and whether OSV may be asked.
+    /// </summary>
+    private sealed class RunCache
+    {
+        public bool Loaded; public WindowsBuildTimeline? Value; public bool OfficeLoaded; public OfficeBuildTimeline? Office;
+        public List<SuppressionRule>? Rules;
+        public readonly Dictionary<string, Dictionary<string, List<Advisory>>> AdvisoriesByVendor = new();
+        public bool? Offline;
+        public bool OsvUnavailable;
+    }
 
-    private static async Task<OfficeBuildTimeline?> OfficeTimelineAsync(VvDbContext db, TimelineHolder holder, Subject s, CancellationToken ct)
+    private static async Task<OfficeBuildTimeline?> OfficeTimelineAsync(VvDbContext db, RunCache holder, Subject s, CancellationToken ct)
     {
         if (!s.ProductNorm.StartsWith("microsoft365apps", StringComparison.Ordinal)) return null;
         if (!holder.OfficeLoaded)
@@ -363,7 +531,7 @@ public sealed partial class VerdictEvaluator
         return holder.Office;
     }
 
-    private static async Task<WindowsBuildTimeline?> TimelineAsync(VvDbContext db, TimelineHolder holder, Subject s, CancellationToken ct)
+    private static async Task<WindowsBuildTimeline?> TimelineAsync(VvDbContext db, RunCache holder, Subject s, CancellationToken ct)
     {
         if (!s.ProductNorm.StartsWith("windows", StringComparison.Ordinal) || AdvisoryVendor(s) != "microsoft") return null;
         if (!holder.Loaded)
@@ -494,8 +662,10 @@ public sealed partial class VerdictEvaluator
             exploitation = Exploitation.Active;
             ev.Add(new EvidenceClaim("CISA Vulnrichment SSVC Exploitation: active", "CISA ADP container in CVE List V5", retrieved));
         }
-        // vendor advisories: the vendor's own affected/fixed statement and "exploited in the wild"
-        foreach (var adv in advisories.OrderByDescending(a => a.Updated ?? a.Published).Take(2))
+        // vendor advisories: the vendor's own affected/fixed statement and "exploited in the wild". Evidence from the two
+        // latest; the exploitation signal from any of them, with its own line when it is in an older one.
+        var latest = advisories.OrderByDescending(a => a.Updated ?? a.Published).Take(2).ToList();
+        foreach (var adv in latest)
         {
             string? fixText = null;
             try
@@ -520,7 +690,12 @@ public sealed partial class VerdictEvaluator
             }
             catch (JsonException) { }
             ev.Add(new EvidenceClaim("Vendor advisory " + adv.AdvisoryId + (adv.Title is null ? "" : ": " + adv.Title) + (fixText is null ? "" : " (" + fixText.TrimEnd(';', ' ') + ")") + (adv.ExploitedInTheWild ? "; the vendor states it is exploited in the wild" : ""), adv.Url ?? adv.Vendor + " PSIRT", adv.RetrievedAt));
-            if (adv.ExploitedInTheWild && exploitation == Exploitation.None) exploitation = Exploitation.Active;
+        }
+        if (advisories.FirstOrDefault(a => a.ExploitedInTheWild) is { } exploited)
+        {
+            if (!latest.Any(a => a.ExploitedInTheWild))
+                ev.Add(new EvidenceClaim("Vendor advisory " + exploited.AdvisoryId + (exploited.Title is null ? "" : ": " + exploited.Title) + "; the vendor states it is exploited in the wild", exploited.Url ?? exploited.Vendor + " PSIRT", exploited.RetrievedAt));
+            if (exploitation == Exploitation.None) exploitation = Exploitation.Active;
         }
 
         if (exploitation == Exploitation.None)
@@ -603,19 +778,18 @@ public sealed partial class VerdictEvaluator
         var tierChanged = !isNew && v.Tier != c.Decision.Tier;
         if (isNew && c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventCreated, v.Id));
 
-        // the software, asset or match that went away is back and still affected: the same verdict re-opens, with a
-        // fresh SLA and fresh alerts, instead of a second verdict appearing next to the closed one
-        var reopened = false;
-        if (!isNew && IsClosedAsGone(v) && c.Decision.Tier > VerdictTier.NotAffected)
+        // a closed verdict that is affected again re-opens, with a fresh SLA and fresh alerts, instead of a second verdict
+        // appearing next to the closed one (see ReopenReason for which closures re-open when)
+        var reopenWhy = isNew ? null : ReopenReason(v, c, s);
+        if (reopenWhy is not null)
         {
-            var why = v.StateReason!.StartsWith("no longer matches", StringComparison.Ordinal) ? "matches again"
-                : "reported again" + (s.Version is null ? "" : " at " + s.Version);
-            v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Closed", To = "Open", Reason = "re-opened: " + why });
+            v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "state", From = "Closed", To = "Open", Reason = "re-opened: " + reopenWhy });
             v.State = VerdictState.Open; v.StateReason = null; v.StateOwner = null; v.StateChangedAt = now;
             v.ImmediateEmailSentAt = null; v.TicketSentAt = null;
-            if (c.Decision.Tier >= VerdictTier.NextPatchCycle) events.Add((WebhookService.EventPromoted, v.Id));
-            reopened = true;
+            if (!tierChanged) v.TierChangeReason = "re-opened: " + reopenWhy;
+            if (c.Decision.Tier >= VerdictTier.NextPatchCycle && !(tierChanged && c.Decision.Tier > v.Tier)) events.Add((WebhookService.EventPromoted, v.Id));
         }
+        var reopened = reopenWhy is not null;
         if (tierChanged)
         {
             var reason = c.InKev && !v.InKev ? "now in CISA KEV"
@@ -629,6 +803,8 @@ public sealed partial class VerdictEvaluator
                 : c.Modifiers.Count > 0 && string.IsNullOrEmpty(v.AppliedModifiersJson) ? "compensating control recorded"
                 : c.Modifiers.Count == 0 && !string.IsNullOrEmpty(v.AppliedModifiersJson) ? "compensating control removed or expired"
                 : "inputs changed";
+            // carried on the tier line too, which is what the digest's "Changed" section reads
+            if (reopenWhy is not null) reason = (v.Tier == VerdictTier.NotAffected ? reopenWhy : reason) + " (re-opened)";
             v.History.Add(new VerdictHistory { At = now, Actor = "system", Kind = "tier", From = v.Tier.ToString(), To = c.Decision.Tier.ToString(), Reason = reason });
             v.PreviousTier = v.Tier;
             v.TierChangedAt = now;
@@ -723,6 +899,26 @@ public sealed partial class VerdictEvaluator
     /// <summary>Closed by the system because its subject went away, as opposed to fixed or closed by a person.</summary>
     public static bool IsClosedAsGone(Verdict v) => v.State == VerdictState.Closed && v.StateOwner == "system"
         && v.StateReason is { } r && (r.StartsWith(NoLongerReported, StringComparison.Ordinal) || r.StartsWith("no longer matches", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Why a closed verdict re-opens on this evaluation, or null if it stays closed. Closed by the system (gone, or
+    /// patched because a fixed version was seen): whenever it is affected again, as when a CNA widens the range or the
+    /// version rolls back. Closed by a person: only when it gets worse in a way they cannot have weighed, promoted to
+    /// Fix today or newly exploited in the wild.
+    /// </summary>
+    private static string? ReopenReason(Verdict v, Computed c, Subject s)
+    {
+        if (v.State != VerdictState.Closed || c.Decision.Tier <= VerdictTier.NotAffected) return null;
+        if (IsClosedAsGone(v))
+            return v.StateReason!.StartsWith("no longer matches", StringComparison.Ordinal) ? "matches again"
+                : "reported again" + (s.Version is null ? "" : " at " + s.Version);
+        if (v.StateOwner == "system")
+            return "affected again" + (s.Version is null ? "" : " at " + s.Version);
+        if (c.InKev && !v.InKev) return "now in CISA KEV";
+        if (c.Inputs.Exploitation == Exploitation.Active && v.Exploitation != Exploitation.Active) return "now exploited in the wild";
+        if (c.Decision.Tier == VerdictTier.FixToday && v.Tier < VerdictTier.FixToday) return "promoted to " + c.Decision.Tier.Plain();
+        return null;
+    }
 
     private static void CloseAsGone(VvDbContext db, Verdict v, string reason, DateTime now, List<(string Event, Guid VerdictId)> events)
     {
