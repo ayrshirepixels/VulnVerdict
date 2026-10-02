@@ -31,6 +31,7 @@ public sealed class FortinetAdvisoryPage
 /// Fortinet PSIRT. RSS index (https://www.fortiguard.com/rss/ir.xml, 50 most recent advisories) then each advisory page
 /// for the "Version / Affected / Solution" table, severity, CVE ids and the exploited-in-the-wild statement.
 /// Cursor: yyyy-MM-dd of the newest item date seen; items dated on or after it are (re)fetched, at most MaxPagesPerRun per run.
+/// Advisories stored index-only (AffectedJson null: the page fetch failed) are fetched again on every run until a page arrives.
 /// </summary>
 public sealed partial class FortinetPsirtFeed : IFeed
 {
@@ -58,6 +59,16 @@ public sealed partial class FortinetPsirtFeed : IFeed
         var cursor = PsirtStore.ParseDate(ctx.Cursor, "yyyy-MM-dd");
         var due = items.Where(i => cursor is null || i.ItemDate is null || i.ItemDate.Value.Date >= cursor.Value.Date)
                        .OrderByDescending(i => i.ItemDate ?? DateTime.MinValue).Take(MaxPagesPerRun).ToList();
+        // index-only rows (a page fetch failed when the advisory was new) have no affected rows yet: fetch them again,
+        // whether or not they are still in the RSS window, so the cursor moving on does not leave them empty for good
+        var dueIds = due.Select(i => i.AdvisoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var indexOnly = await ctx.Db.Advisories.AsNoTracking().Where(a => a.Vendor == Vendor && a.AffectedJson == null)
+            .OrderByDescending(a => a.Updated).Take(MaxPagesPerRun).ToListAsync(ct);
+        var retries = indexOnly.Where(a => !dueIds.Contains(a.AdvisoryId))
+            .Select(a => items.FirstOrDefault(i => i.AdvisoryId.Equals(a.AdvisoryId, StringComparison.OrdinalIgnoreCase))
+                         ?? new FortinetRssItem(a.AdvisoryId, a.Title ?? "", a.Url ?? "https://fortiguard.fortinet.com/psirt/" + a.AdvisoryId, a.Published, a.Updated))
+            .Take(Math.Max(0, MaxPagesPerRun - due.Count)).ToList();
+        due.AddRange(retries);
         var ids = due.Select(i => i.AdvisoryId).ToList();
         var stored = await ctx.Db.Advisories.AsNoTracking().Where(a => a.Vendor == Vendor && ids.Contains(a.AdvisoryId)).Select(a => a.AdvisoryId).ToListAsync(ct);
         var storedSet = stored.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -96,7 +107,7 @@ public sealed partial class FortinetPsirtFeed : IFeed
         }
         var count = await PsirtStore.UpsertAsync(ctx.Db, Vendor, rows, ct);
         var newest = items.Select(i => i.ItemDate).Where(d => d is not null).DefaultIfEmpty(cursor).Max();
-        var note = $"{items.Count} in feed, {due.Count} due, {count} stored" + (failures > 0 ? $", {failures} page fetches failed" : "");
+        var note = $"{items.Count} in feed, {due.Count} due ({retries.Count} index-only retried), {count} stored" + (failures > 0 ? $", {failures} page fetches failed, retried next run" : "");
         return new FeedResult(count, (newest ?? now).ToString("yyyy-MM-dd"), note);
     }
 

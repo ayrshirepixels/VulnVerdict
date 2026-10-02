@@ -12,7 +12,8 @@ public sealed record MsrcUpdateDoc(string Id, DateTime? InitialReleaseDate, Date
 /// Microsoft MSRC CVRF API v3. The updates list gives one document per month with its CurrentReleaseDate; each
 /// document is fetched as JSON and every Vulnerability becomes one Advisory (AdvisoryId = CVE). Threats of Type 1 carry the
 /// exploit status ("Exploited:Yes"), Type 3 the severity; Remediations of Type 2 give the KB and FixedBuild per product.
-/// Cursor: ISO 8601 of the newest CurrentReleaseDate processed. First run takes the last InitialMonths months only.
+/// Cursor: ISO 8601 of the newest CurrentReleaseDate processed; documents released on or after it are read again. First run
+/// takes the last InitialMonths months only.
 /// </summary>
 public sealed partial class MsrcFeed : IFeed
 {
@@ -47,7 +48,8 @@ public sealed partial class MsrcFeed : IFeed
         }
         else
         {
-            due = docs.Where(d => d.CurrentReleaseDate > cursor).ToList();
+            // >= so a document sharing its CurrentReleaseDate with the last one processed is not skipped; re-reading is idempotent
+            due = docs.Where(d => d.CurrentReleaseDate >= cursor).ToList();
             note = null;
         }
         due = due.OrderBy(d => d.CurrentReleaseDate ?? DateTime.MinValue).Take(MaxDocsPerRun).ToList();
@@ -62,7 +64,8 @@ public sealed partial class MsrcFeed : IFeed
             try
             {
                 using var json = await PsirtStore.GetJsonAsync(ctx.Http, CvrfUrlBase + doc.Id, ct);
-                var rows = Parse(json.RootElement, now);
+                var rows = Parse(json.RootElement, now, out var capped);
+                if (capped > 0) ctx.Log.LogWarning("MSRC {Id}: {Count} CVEs hit the {Max} affected-row cap and were truncated", doc.Id, capped, MaxAffectedRows);
                 total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, rows, ct);
                 processed++;
                 if (doc.CurrentReleaseDate is { } cr && (newCursor is null || cr > newCursor)) newCursor = cr;
@@ -75,7 +78,7 @@ public sealed partial class MsrcFeed : IFeed
                 break;
             }
         }
-        var forwardPending = due.Count > MaxDocsPerRun - 1 && docs.Count(d => cursor is null ? d.InitialReleaseDate >= now.AddMonths(-InitialMonths) : d.CurrentReleaseDate > cursor) > due.Count;
+        var forwardPending = due.Count > MaxDocsPerRun - 1 && newCursor != cursor && docs.Count(d => cursor is null ? d.InitialReleaseDate >= now.AddMonths(-InitialMonths) : d.CurrentReleaseDate >= cursor) > due.Count;
         if (forwardPending) note = (note is null ? "" : note + "; ") + "more documents pending, continuing shortly";
 
         // History: once the recent months are in, walk back through older monthly documents to HistoryFloor. Old Windows
@@ -93,7 +96,9 @@ public sealed partial class MsrcFeed : IFeed
                 try
                 {
                     using var json = await PsirtStore.GetJsonAsync(ctx.Http, CvrfUrlBase + doc.Id, ct);
-                    total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, Parse(json.RootElement, now), ct);
+                    var rows = Parse(json.RootElement, now, out var capped);
+                    if (capped > 0) ctx.Log.LogWarning("MSRC {Id}: {Count} CVEs hit the {Max} affected-row cap and were truncated", doc.Id, capped, MaxAffectedRows);
+                    total += await PsirtStore.UpsertAsync(ctx.Db, Vendor, rows, ct);
                     history = doc.InitialReleaseDate;
                     historyProcessed++;
                 }
@@ -146,9 +151,16 @@ public sealed partial class MsrcFeed : IFeed
 
     private static readonly string[] SeverityOrder = { "Critical", "Important", "Moderate", "Low" };
 
+    /// <summary>Affected rows kept per CVE after de-duplication. Windows CVEs list a few hundred product and build pairs.</summary>
+    public const int MaxAffectedRows = 3000;
+
     /// <summary>One Advisory per Vulnerability in a CVRF JSON document.</summary>
-    public static List<Advisory> Parse(JsonElement root, DateTime now)
+    public static List<Advisory> Parse(JsonElement root, DateTime now) => Parse(root, now, out _);
+
+    /// <summary>As <see cref="Parse(JsonElement, DateTime)"/>; <paramref name="capped"/> counts CVEs truncated at <see cref="MaxAffectedRows"/>.</summary>
+    public static List<Advisory> Parse(JsonElement root, DateTime now, out int capped)
     {
+        capped = 0;
         var products = new Dictionary<string, string>();
         if (root.TryGetProperty("ProductTree", out var tree))
             foreach (var p in PsirtStore.Arr(tree, "FullProductName"))
@@ -203,7 +215,16 @@ public sealed partial class MsrcFeed : IFeed
             adv.ExploitedInTheWild = exploited;
             adv.Severity = severity;
 
+            // de-duplicated as they are added so repeated remediations do not use up the cap
             var rows = new List<AffectedRow>();
+            var seen = new HashSet<AffectedRow>();
+            var full = false;
+            void Add(AffectedRow row)
+            {
+                if (full || !seen.Add(row)) return;
+                if (rows.Count >= MaxAffectedRows) { full = true; return; }
+                rows.Add(row);
+            }
             var fixedProducts = new HashSet<string>();
             foreach (var r in PsirtStore.Arr(v, "Remediations"))
             {
@@ -219,10 +240,8 @@ public sealed partial class MsrcFeed : IFeed
                 {
                     if (!products.TryGetValue(pid, out var name)) continue;
                     fixedProducts.Add(pid);
-                    rows.Add(new AffectedRow(name, "", fixedIn));
-                    if (rows.Count >= 300) break;
+                    Add(new AffectedRow(name, "", fixedIn));
                 }
-                if (rows.Count >= 300) break;
             }
             foreach (var ps in PsirtStore.Arr(v, "ProductStatuses"))
             {
@@ -230,10 +249,10 @@ public sealed partial class MsrcFeed : IFeed
                 foreach (var pid in PsirtStore.StrArr(ps, "ProductID"))
                 {
                     if (fixedProducts.Contains(pid) || !products.TryGetValue(pid, out var name)) continue;
-                    rows.Add(new AffectedRow(name, "affected", ""));
-                    if (rows.Count >= 300) break;
+                    Add(new AffectedRow(name, "affected", ""));
                 }
             }
+            if (full) capped++;
             adv.AffectedJson = PsirtStore.AffectedJson(rows);
 
             DateTime? first = null, last = null;
