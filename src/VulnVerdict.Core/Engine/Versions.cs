@@ -197,6 +197,8 @@ public static partial class VersionMatcher
     /// </summary>
     public static string NormaliseText(string ver) => PatchSuffix().Replace(LeadingVersionsWord().Replace(ver, ""), "-patch$1").Trim();
 
+    private static int DotCount(string s) => s.Count(c => c == '.');
+
     private static bool IsWild(string? s) => s is null || Wildcards.Contains(s.Trim().ToLowerInvariant());
     private static bool Inclusive(string s) => Regex.IsMatch(s, @"<=|≤|through|thru|up to|and earlier|and prior|or earlier|or prior|or lower|and below|and older|or older", RegexOptions.IgnoreCase);
 
@@ -263,9 +265,14 @@ public static partial class VersionMatcher
         }
         else
         {
-            foreach (var re in new[] { GluedDashRange(), BetweenRange(), WordRange(), DashRange() })
+            var forms = new[] { GluedDashRange(), BetweenRange(), WordRange(), DashRange() };
+            for (var i = 0; i < forms.Length; i++)
             {
-                if (!(m = re.Match(text)).Success) continue;
+                if (!(m = forms[i].Match(text)).Success) continue;
+                // "1.1.0-5.0.0" with no spaces is also how Debian and Ubuntu write one package version ("2.9.10-4.1",
+                // "5.15.0-91.101"). Read it as a range only when both ends have the same shape, and only for an affected
+                // entry: an unaffected range read from one version would clear releases nobody cleared.
+                if (i == 0 && (!affected || DotCount(m.Groups["a"].Value) != DotCount(m.Groups["b"].Value))) continue;
                 a = BoundVersion(m.Groups["a"].Value, allowWhole: true);
                 b = BoundVersion(m.Groups["b"].Value, allowWhole: true);
                 if (a is not null && b is not null) break;
