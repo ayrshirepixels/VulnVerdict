@@ -250,7 +250,9 @@ public sealed partial class VerdictEvaluator
             List<PackageVuln> vulns;
             if (cached is not null && (DateTime.UtcNow - cached.FetchedAt < PackageCacheTtl || offline || run.OsvUnavailable))
                 vulns = Cached();
-            else if (offline) vulns = new();   // bundle-fed: OSV is never asked, and there is nothing cached for it
+            // bundle-fed: OSV is never asked and nothing is cached for this version. "No data" is not "no vulnerabilities":
+            // skip the package, keeping its verdicts, rather than close every open one as no longer matching
+            else if (offline) throw new PackageDataUnavailableException("No package data for " + key + " in the feed bundles applied so far");
             else if (run.OsvUnavailable) throw new PackageDataUnavailableException("OSV is unavailable and nothing is cached for " + key);
             else
             {
