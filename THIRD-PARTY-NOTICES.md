@@ -42,6 +42,8 @@ VulnVerdict is licensed under the AGPL-3.0 (`LICENSE`). It builds on the followi
 | OSV.dev | public (Apache-2.0 data) |
 | Exploit-DB, Metasploit module index, Nuclei templates | referenced and linked only; never redistributed |
 | Vendor advisories (Fortinet, Microsoft MSRC, Cisco openVuln, Broadcom/VMware, Ubuntu, Debian, Red Hat) | each vendor's public terms; referenced and linked, with the vendor's affected and fixed statements stored for matching |
+| Vendor VEX statements (CSAF): Red Hat, SUSE; Microsoft, Siemens and Cisco when switched on | each vendor's CSAF terms (Red Hat: CC BY 4.0, attribution to Red Hat Inc.); statements for installed products stored with a link to the vendor's document, documents not redistributed |
+| endoflife.date | MIT licence, Copyright (c) endoflife.date contributors; release cycles and support end dates, https://endoflife.date |
 | Shodan (optional) | requires the customer's own API key and acceptance of Shodan's terms |
 
 SSVC is published by CISA and the Carnegie Mellon University Software Engineering Institute; the decision table here is derived from the deployer tree.

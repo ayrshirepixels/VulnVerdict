@@ -1,0 +1,60 @@
+@using VulnVerdict.Core.Feeds.Vex
+
+@* Settings card for vendor VEX providers, the end-of-life window and the Cisco API credentials. Saved with the rest of the Settings page. *@
+<div class="card">
+    <h2>Vendor statements and end of life</h2>
+    <p class="muted" style="margin-top:0">Vendors publish machine-readable statements (VEX) saying which of their products a CVE does and does not affect. A provider is only contacted when one of its products is on the watchlist or in the inventory, and only for CVEs that already have a verdict. None of this runs when the console is fed by signed bundles.</p>
+    <div class="form">
+        <div>
+            <label>VEX providers (JSON)</label>
+            <textarea rows="8" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px" value="@Settings.VexProviders" @onchange="OnProviders" placeholder="Leave blank for the built-in list"></textarea>
+            @if (_providerError is not null) { <div class="help" style="color:var(--today)">@_providerError</div> }
+            else { <div class="help">In use: @string.Join(", ", _providers.Select(p => p.Name + (p.Enabled ? "" : " (off)"))). Each entry has an id, a name, the URL of a CSAF directory, provider-metadata.json or ROLIE feed, the vendor names it speaks for, and enabled. <a href="" @onclick="ShowDefaults" @onclick:preventDefault="true">Fill in the built-in list to edit it</a>.</div> }
+        </div>
+        <div class="row-3">
+            <div><label>Flag end of life this many days ahead</label><input type="number" min="0" max="3650" @bind="Settings.EolWarnDays" /><div class="help">A product is flagged "End of life in N days" from this far out. The digest always counts the next 90 days.</div></div>
+            <div><label>Cisco openVuln client id</label><input type="password" @bind="Settings.CiscoClientId" autocomplete="new-password" placeholder="@SavedText(nameof(AppSettings.CiscoClientId))" />@RemoveBox(nameof(AppSettings.CiscoClientId))</div>
+            <div><label>Cisco openVuln client secret</label><input type="password" @bind="Settings.CiscoClientSecret" autocomplete="new-password" placeholder="@SavedText(nameof(AppSettings.CiscoClientSecret))" />@RemoveBox(nameof(AppSettings.CiscoClientSecret))<div class="help">Optional, for Cisco PSIRT advisories. Free registration at Cisco's API console. Stored encrypted.</div></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AppSettings Settings { get; set; } = default!;
+    /// <summary>The Settings page's record of which secrets are stored, and which the administrator ticked to remove.</summary>
+    [Parameter] public HashSet<string> Saved { get; set; } = new();
+    [Parameter] public HashSet<string> Clear { get; set; } = new();
+
+    private IReadOnlyList<VexProvider> _providers = VexProviders.Defaults;
+    private string? _providerError;
+
+    protected override void OnParametersSet() => Validate();
+
+    private void OnProviders(ChangeEventArgs e)
+    {
+        Settings.VexProviders = (e.Value as string ?? "").Trim();
+        Validate();
+    }
+
+    private void ShowDefaults()
+    {
+        Settings.VexProviders = VexProviders.DefaultsJson;
+        Validate();
+    }
+
+    private void Validate()
+    {
+        try { _providers = VexProviders.Parse(Settings.VexProviders); _providerError = null; }
+        catch (FormatException ex) { _providerError = ex.Message + " The VEX feed will not run until this is corrected."; }
+    }
+
+    private string SavedText(string name) => Saved.Contains(name) && !Clear.Contains(name) ? "saved - leave blank to keep" : "";
+
+    private RenderFragment RemoveBox(string name) => __builder =>
+    {
+        if (Saved.Contains(name))
+        {
+            <label class="check" style="font-weight:400;font-size:12px;margin-top:3px"><input type="checkbox" checked="@Clear.Contains(name)" @onchange="e => { if (e.Value is true) Clear.Add(name); else Clear.Remove(name); }" /> Remove the saved value</label>
+        }
+    };
+}

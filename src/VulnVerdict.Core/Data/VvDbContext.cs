@@ -38,6 +38,9 @@ public class VvDbContext : DbContext
     public DbSet<BundleState> Bundles => Set<BundleState>();
     public DbSet<Advisory> Advisories => Set<Advisory>();
     public DbSet<OfficeRelease> OfficeReleases => Set<OfficeRelease>();
+    public DbSet<VexStatement> VexStatements => Set<VexStatement>();
+    public DbSet<VexDocument> VexDocuments => Set<VexDocument>();
+    public DbSet<EolCycle> EolCycles => Set<EolCycle>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -110,6 +113,9 @@ public class VvDbContext : DbContext
         b.Entity<BundleState>(e => e.HasKey(x => x.Id));
         b.Entity<Advisory>(e => { e.HasIndex(x => new { x.Vendor, x.AdvisoryId }).IsUnique(); e.HasIndex(x => x.Updated); });
         b.Entity<OfficeRelease>(e => e.HasIndex(x => new { x.Build, x.Released }));
+        b.Entity<VexStatement>(e => { e.HasIndex(x => x.CveId); e.HasIndex(x => new { x.Provider, x.DocumentId }); });
+        b.Entity<VexDocument>(e => e.HasIndex(x => new { x.Provider, x.Path }).IsUnique());
+        b.Entity<EolCycle>(e => e.HasIndex(x => new { x.Slug, x.Cycle }).IsUnique());
     }
 }
 

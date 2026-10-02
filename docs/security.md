@@ -27,7 +27,7 @@ Content Security Policy (scripts only from the console itself, no inline scripts
 
 ## Feed bundles and licences
 
-The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
+The central service signs each bundle manifest (ECDSA P-256) and every file in it is hashed. The console verifies the signature against the public key it ships with, verifies every hash, and refuses unsigned bundles and any bundle whose version is not newer than the one applied. Vendor VEX statements and end-of-life dates travel as two optional files with their own signature over their hashes, checked the same way; a console that predates them ignores them. Licence keys are signed the same way; an absent licence means the internal build, which never blocks anything.
 
 ## Supply chain
 

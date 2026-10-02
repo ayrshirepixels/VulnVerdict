@@ -72,6 +72,15 @@ public sealed class AppSettings
     public string MspPortalUrl { get; set; } = "";
     public string MspTenantToken { get; set; } = "";
 
+    // vendor VEX statements: a JSON list of CSAF providers, blank for the built-in list (Feeds/Vex/VexProviders.cs)
+    public string VexProviders { get; set; } = "";
+    /// <summary>A product is flagged "End of life in N days" this many days before its vendor support ends.</summary>
+    public int EolWarnDays { get; set; } = 180;
+
+    // Cisco PSIRT openVuln API (optional, free registration)
+    public string CiscoClientId { get; set; } = "";
+    public string CiscoClientSecret { get; set; } = "";
+
     // AI explanations: none | anthropic | openai | openai-compatible (Ollama, vLLM, LM Studio)
     public string LlmProvider { get; set; } = "none";
     public string LlmApiKey { get; set; } = "";
@@ -98,7 +107,16 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken), nameof(AppSettings.LicenceKey) };
+    private static readonly HashSet<string> Secret = new(StringComparer.OrdinalIgnoreCase) { nameof(AppSettings.SmtpPassword), nameof(AppSettings.MailApiKey), nameof(AppSettings.M365ClientSecret), nameof(AppSettings.OidcClientSecret), nameof(AppSettings.LlmApiKey), nameof(AppSettings.WebhookSecret), nameof(AppSettings.MspTenantToken), nameof(AppSettings.LicenceKey), nameof(AppSettings.CiscoClientId), nameof(AppSettings.CiscoClientSecret) };
+    /// <summary>
+    /// State rows an earlier release read credentials from in plain text, and the secret setting each now lives in.
+    /// Moved (encrypted, old row deleted) the first time settings are read.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> LegacyPlaintext = new Dictionary<string, string>
+    {
+        ["psirt:cisco:clientId"] = nameof(AppSettings.CiscoClientId),
+        ["psirt:cisco:clientSecret"] = nameof(AppSettings.CiscoClientSecret),
+    };
     /// <summary>Settings stored encrypted and never sent back to the browser.</summary>
     public static IReadOnlySet<string> SecretNames => Secret;
     private readonly IDbContextFactory<VvDbContext> _factory;
@@ -136,7 +154,40 @@ public sealed class SettingsService
         }
         // a setting that became secret in a later release (the licence key) is encrypted the first time it is read
         if (plaintextSecrets.Count > 0) await EncryptPlaintextAsync(plaintextSecrets, ct);
+        // credentials that used to sit in plain state rows (the Cisco API pair): used from the old row this once, then moved
+        var legacy = false;
+        foreach (var (key, name) in LegacyPlaintext)
+        {
+            if (!rows.TryGetValue(key, out var old)) continue;
+            legacy = true;
+            var value = old.Encrypted ? SafeUnprotect(old.Value) : old.Value;
+            var p = typeof(AppSettings).GetProperty(name)!;
+            if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrEmpty((string?)p.GetValue(s))) p.SetValue(s, value.Trim());
+        }
+        if (legacy) await MoveLegacyAsync(ct);
         return s;
+    }
+
+    private async Task MoveLegacyAsync(CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var now = DateTime.UtcNow;
+        foreach (var (key, name) in LegacyPlaintext)
+        {
+            var old = await db.Settings.FirstOrDefaultAsync(r => r.Key == key, ct);
+            if (old is null) continue;
+            var value = (old.Encrypted ? SafeUnprotect(old.Value) : old.Value)?.Trim();
+            if (!string.IsNullOrEmpty(value))
+            {
+                // a value already saved under the new name wins: it is the newer one
+                var row = await db.Settings.FirstOrDefaultAsync(r => r.Key == name, ct);
+                if (row is null) db.Settings.Add(new AppSetting { Key = name, Value = _protector.Protect(value), Encrypted = true, UpdatedAt = now });
+                else if (string.IsNullOrEmpty(row.Value)) { row.Value = _protector.Protect(value); row.Encrypted = true; row.UpdatedAt = now; }
+            }
+            db.Settings.Remove(old);
+        }
+        // the web and the worker may both get here first; whichever loses finds the rows already moved
+        try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { }
     }
 
     private async Task EncryptPlaintextAsync(List<string> keys, CancellationToken ct)

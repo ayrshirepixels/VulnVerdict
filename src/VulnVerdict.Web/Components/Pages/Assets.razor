@@ -68,6 +68,7 @@
             @if (_rows.Count == 0) { <tr><td colspan="10" class="muted">No assets yet. Add a connector under <a href="/connectors">Connectors</a>.</td></tr> }
         </tbody>
     </table>
+    <EndOfLifeList Scope="inventory" />
 </div>
 
 @code {
