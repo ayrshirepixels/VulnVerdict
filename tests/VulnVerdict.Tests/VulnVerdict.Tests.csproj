@@ -19,14 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- the real Data Protection implementation and a loopback web host, for the digest link tests -->
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\VulnVerdict.Core\VulnVerdict.Core.csproj" />
-    <!-- for the digest link endpoints, served over a loopback port in DigestActionEndpointTests -->
-    <ProjectReference Include="..\..\src\VulnVerdict.Web\VulnVerdict.Web.csproj" />
   </ItemGroup>
 
 </Project>

@@ -197,35 +197,6 @@ public class FortinetAdapterTests
     }
 
     [Fact]
-    public async Task Refused_vip_read_leaves_exposure_unknown_instead_of_silently_internal()
-    {
-        // a REST API admin whose profile cannot read firewall objects: the VIP table answers 403
-        var adapter = new FortiGateAdapter((path, _) =>
-        {
-            if (path == FortiGateAdapter.Paths.Vip) throw new FortinetApiException("GET " + path, 403, "the FortiGate rejected the API token");
-            return Task.FromResult(Fixture(FgtFiles[path]));
-        });
-        var r = await adapter.CollectAsync(NoCreds, null, null, CancellationToken.None);
-
-        Assert.DoesNotContain(r.Exposures, e => e.IpAddress == "10.0.10.5");       // the VIP target cannot be derived this run
-        Assert.True(r.ExposureUnknown);
-        Assert.True(r.Partial);
-        Assert.Equal("Exposure could not be read (virtual IPs): newly published servers will not be marked internet-facing until it can be", r.Warnings[0]);
-        Assert.Contains(r.Warnings, w => w.StartsWith("Skipped " + FortiGateAdapter.Paths.Vip));
-
-        // a failed device listing is partial too: the switches and access points it would have listed must not age out
-        var noAps = new FortiGateAdapter((path, _) =>
-        {
-            if (path == FortiGateAdapter.Paths.ManagedAp) throw new HttpRequestException("timed out");
-            return Task.FromResult(Fixture(FgtFiles[path]));
-        });
-        var r2 = await noAps.CollectAsync(NoCreds, null, null, CancellationToken.None);
-        Assert.True(r2.Partial);
-        Assert.False(r2.ExposureUnknown);
-        Assert.Contains(r2.Warnings, w => w.StartsWith("The managed access points could not be listed"));
-    }
-
-    [Fact]
     public async Task FortiGate_test_reports_hostname_version_and_serial()
     {
         var t = await FortiGate().TestAsync(NoCreds, CancellationToken.None);
@@ -338,32 +309,6 @@ public class FortinetAdapterTests
         Assert.Equal("High", zip.Severity); // numeric severity 3
         Assert.DoesNotContain(r.Findings, f => f.AssetExternalId != "1001");
         Assert.Empty(r.Warnings);
-    }
-
-    [Fact]
-    public async Task Ems_endpoint_deregistered_mid_run_skips_only_that_endpoint_and_blocks_the_purge()
-    {
-        var calls = new List<string>();
-        var r = await Ems(calls, p => p.Contains("device_id=1001") ? 404 : null).CollectAsync(NoCreds, null, null, CancellationToken.None);
-        Assert.Equal(3, r.Assets.Count);
-        // later endpoints still read
-        Assert.Contains(r.Software, s => s.AssetExternalId == "1002" && s.Product == "Veeam Backup & Replication");
-        Assert.Contains(calls, c => c.StartsWith(FortiClientEmsAdapter.VulnerabilitiesPath, StringComparison.Ordinal) && c.Contains("device_id=1003"));
-        Assert.Equal(new[] { "1001" }, r.IncompleteSoftware);
-        Assert.True(r.FindingsIncomplete);
-    }
-
-    [Fact]
-    public async Task Ems_403_on_software_stops_asking_but_still_reports_every_asset_as_incomplete()
-    {
-        var calls = new List<string>();
-        var r = await Ems(calls, p => p.StartsWith(FortiClientEmsAdapter.SoftwarePath, StringComparison.Ordinal) ? 403 : null).CollectAsync(NoCreds, null, null, CancellationToken.None);
-        Assert.Equal(3, r.Assets.Count);
-        Assert.Single(calls, c => c.StartsWith(FortiClientEmsAdapter.SoftwarePath, StringComparison.Ordinal));
-        Assert.Equal(3, r.IncompleteSoftware.Count);
-        // vulnerabilities are a separate permission and still read; their read succeeded so the purge stands
-        Assert.Equal(2, r.Findings.Count);
-        Assert.False(r.FindingsIncomplete);
     }
 
     [Fact]

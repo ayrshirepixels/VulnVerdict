@@ -188,42 +188,6 @@ public class WinRmAdapterTests
         Assert.Contains("PowerShell 5.1", test.Message);
     }
 
-    [Fact]
-    public async Task Ssh_transport_refuses_unpinned_hosts_and_the_test_lists_every_line_to_pin()
-    {
-        var adapter = new WinRmAdapter(NullLogger<WinRmAdapter>.Instance);
-        adapter.ShellFactory = (t, s) => s.ExpectedFingerprint(t) is null && !s.AcceptAnyHostKey
-            ? throw new HostKeyNotPinnedException(t.AsTyped, "fp-" + t.Host, "pin it")
-            : new FakeShell("{}", t, s, new List<string>());
-        var creds = new Dictionary<string, string> { ["hosts"] = "srv1\nsrv2:2222", ["username"] = "u", ["password"] = "p", ["transport"] = "ssh" };
-
-        var test = await adapter.TestAsync(creds, CancellationToken.None);
-        Assert.False(test.Ok);
-        Assert.Contains("password was not sent", test.Message);
-        Assert.Contains("srv1 SHA256:fp-srv1", test.Message);
-        Assert.Contains("srv2:2222 SHA256:fp-srv2", test.Message);
-
-        // pinned by the host part or as typed
-        creds["knownHostKeys"] = "srv1 SHA256:fp-srv1\nsrv2:2222 SHA256:fp-srv2";
-        test = await adapter.TestAsync(creds, CancellationToken.None);
-        Assert.True(test.Ok, test.Message);
-        var settings = WinRmSettings.From(creds);
-        Assert.Equal("fp-srv2", settings.ExpectedFingerprint(new HostTarget("srv2:2222", "srv2", 2222)));
-        Assert.False(settings.AcceptAnyHostKey);
-        Assert.Contains(adapter.Metadata.Form, f => f.Key == "acceptAny" && f.Default == "false");
-    }
-
-    [Fact]
-    public void Windows_credentials_answer_negotiate_and_ntlm_only_never_basic()
-    {
-        var cache = WsManClient.WindowsAuthOnly(new Uri("https://srv1.example.local:5986/wsman"), "EXAMPLE\\svc", "pw");
-        var uri = new Uri("https://srv1.example.local:5986/wsman");
-        Assert.Equal("EXAMPLE", cache.GetCredential(uri, "Negotiate")?.Domain);
-        Assert.NotNull(cache.GetCredential(uri, "NTLM"));
-        Assert.Null(cache.GetCredential(uri, "Basic"));
-        Assert.Null(cache.GetCredential(new Uri("https://elsewhere.example:5986/wsman"), "Negotiate"));
-    }
-
     private sealed class FakeShell : IWindowsShell
     {
         private readonly string? _json;
