@@ -100,6 +100,8 @@ public sealed class AppSettings
     public string LlmApiKey { get; set; } = "";
     public string LlmModel { get; set; } = "";
     public string LlmBaseUrl { get; set; } = "";
+    /// <summary>How long to wait for one answer, in seconds (30 to 1800).</summary>
+    public int LlmTimeoutSeconds { get; set; } = 300;
     public bool LlmConfigured => LlmProvider is not ("none" or "") && !string.IsNullOrWhiteSpace(LlmModel)
         && (LlmProvider.Equals("openai-compatible", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(LlmApiKey));
 

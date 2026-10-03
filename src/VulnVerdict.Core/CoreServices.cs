@@ -44,7 +44,8 @@ public static class CoreServices
         });
         services.AddHttpClient("llm", c =>
         {
-            c.Timeout = TimeSpan.FromMinutes(3);
+            // the real limit is the AI time limit setting (LlmService); this only has to be longer than its maximum
+            c.Timeout = TimeSpan.FromSeconds(LlmService.MaxTimeoutSeconds + 60);
             c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("VulnVerdict", "0.2"));
         });
         // adapters talk to customer systems that often have private certificates; the connector form has a "verify TLS" switch

@@ -31,7 +31,7 @@
             @if (_sbomNotice is not null) { <div class="alert alert-ok">@_sbomNotice</div> }
             @if (_sbomError is not null) { <div class="alert alert-error">@_sbomError</div> }
             <div class="form"><div class="row-3">
-                <div><label>Application or site name</label><input type="text" @bind="_sbomAsset" placeholder="engage-web" /></div>
+                <div><label>Application or site name</label><input type="text" @bind="_sbomAsset" placeholder="customer-portal" /></div>
                 <div><label>SBOM file</label><InputFile OnChange="OnSbomFile" accept=".json,.cdx.json,.spdx.json" /></div>
                 <div style="align-self:end"><button class="btn" @onclick="UploadSbom" disabled="@(_sbomJson is null || string.IsNullOrWhiteSpace(_sbomAsset) || _sbomBusy)">Import</button></div>
             </div></div>

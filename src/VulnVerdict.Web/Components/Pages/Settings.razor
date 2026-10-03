@@ -168,6 +168,10 @@
                 {
                     <div><label>Base URL</label><input type="text" @bind="_s.LlmBaseUrl" placeholder="http://ollama:11434/v1" /><div class="help">The endpoint must serve /chat/completions. For a fully offline site, run Ollama on the same VM.</div></div>
                 }
+                @if (_s.LlmProvider != "none")
+                {
+                    <div><label>Time limit (seconds)</label><input type="number" min="30" max="1800" @bind="_s.LlmTimeoutSeconds" /><div class="help">How long to wait for one answer. A local model on modest hardware can need several minutes, more if it thinks before answering.</div></div>
+                }
                 <div class="btn-row"><button class="btn btn-secondary" @onclick="TestLlm" disabled="@_busy">Save and test the AI connection</button></div>
             </div>
         </div>

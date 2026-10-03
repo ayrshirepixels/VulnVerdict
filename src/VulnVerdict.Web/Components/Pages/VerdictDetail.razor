@@ -89,12 +89,12 @@
                     <div>
                         <h3>What this vulnerability is</h3>
                         @if (_narrative is null) { <AuthorizeView Roles="Administrator,Operator" Context="auth"><Authorized><button class="btn btn-secondary btn-sm" @onclick="() => Ai(false)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Explain in plain English")</button></Authorized><NotAuthorized><p class="muted">Not explained yet. An operator can ask for it.</p></NotAuthorized></AuthorizeView> }
-                        else { <p>@_narrative.Text</p><p class="muted" style="font-size:12px">@_narrative.Provider / @_narrative.Model, @Ui.Local(_narrative.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth"><a href="" @onclick="() => Ai(false, true)" @onclick:preventDefault="true">regenerate</a></AuthorizeView></p> }
+                        else { <p>@_narrative.Text</p><p class="muted" style="font-size:12px">@_narrative.Provider / @_narrative.Model, @Ui.Local(_narrative.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth">@if (_aiBusy) { <span>asking...</span> } else { <a href="" @onclick="() => Ai(false, true)" @onclick:preventDefault="true">regenerate</a> }</AuthorizeView></p> }
                     </div>
                     <div>
                         <h3>How an attacker would have to do it here</h3>
                         @if (_story is null) { <AuthorizeView Roles="Administrator,Operator" Context="auth"><Authorized><button class="btn btn-secondary btn-sm" @onclick="() => Ai(true)" disabled="@_aiBusy">@(_aiBusy ? "Asking..." : "Tell the attack story")</button></Authorized><NotAuthorized><p class="muted">Not written yet. An operator can ask for it.</p></NotAuthorized></AuthorizeView> }
-                        else { <p>@_story.Text</p><p class="muted" style="font-size:12px">@_story.Provider / @_story.Model, @Ui.Local(_story.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth"><a href="" @onclick="() => Ai(true, true)" @onclick:preventDefault="true">regenerate</a></AuthorizeView></p> }
+                        else { <p>@_story.Text</p><p class="muted" style="font-size:12px">@_story.Provider / @_story.Model, @Ui.Local(_story.CreatedAt, _tz) <AuthorizeView Roles="Administrator,Operator" Context="auth">@if (_aiBusy) { <span>asking...</span> } else { <a href="" @onclick="() => Ai(true, true)" @onclick:preventDefault="true">regenerate</a> }</AuthorizeView></p> }
                     </div>
                 </div>
             </div>
@@ -306,7 +306,8 @@
     // the model costs money per call, so asking for an explanation is an operator action
     private async Task Ai(bool story, bool refresh = false)
     {
-        if (!await Ui.CanOperateAsync(AuthState)) return;
+        // one request at a time: a local model answers them in turn, so a second click only waits behind the first
+        if (_aiBusy || !await Ui.CanOperateAsync(AuthState)) return;
         _aiBusy = true; _aiError = null;
         try
         {

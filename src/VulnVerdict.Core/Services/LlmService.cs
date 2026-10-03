@@ -113,17 +113,33 @@ public sealed class LlmService
 
     private async Task<string> CompleteAsync(AppSettings s, string system, string user, CancellationToken ct)
     {
-        switch (s.LlmProvider.ToLowerInvariant())
+        // a pasted model name or address often carries a space, which the endpoint reads as another model
+        s.LlmModel = s.LlmModel.Trim(); s.LlmBaseUrl = s.LlmBaseUrl.Trim();
+        // the wait is a setting: a local model on modest hardware can take minutes over one answer
+        var limit = TimeSpan.FromSeconds(Math.Clamp(s.LlmTimeoutSeconds, MinTimeoutSeconds, MaxTimeoutSeconds));
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(limit);
+        try
         {
-            case "anthropic": return await AnthropicAsync(s, system, user, ct);
-            case "openai": return await OpenAiCompatibleAsync(s, "https://api.openai.com/v1", system, user, ct);
-            case "openai-compatible":
-            case "ollama":
-                if (string.IsNullOrWhiteSpace(s.LlmBaseUrl)) throw new InvalidOperationException("Base URL is required for an OpenAI-compatible endpoint (for Ollama: http://ollama:11434/v1).");
-                return await OpenAiCompatibleAsync(s, s.LlmBaseUrl.TrimEnd('/'), system, user, ct);
-            default: throw new InvalidOperationException("Unknown AI provider " + s.LlmProvider);
+            switch (s.LlmProvider.ToLowerInvariant())
+            {
+                case "anthropic": return await AnthropicAsync(s, system, user, cts.Token);
+                case "openai": return await OpenAiCompatibleAsync(s, "https://api.openai.com/v1", system, user, cts.Token);
+                case "openai-compatible":
+                case "ollama":
+                    if (string.IsNullOrWhiteSpace(s.LlmBaseUrl)) throw new InvalidOperationException("Base URL is required for an OpenAI-compatible endpoint (for Ollama: http://ollama:11434/v1).");
+                    return await OpenAiCompatibleAsync(s, s.LlmBaseUrl.TrimEnd('/'), system, user, cts.Token);
+                default: throw new InvalidOperationException("Unknown AI provider " + s.LlmProvider);
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new InvalidOperationException("The AI endpoint did not answer within " + (int)limit.TotalSeconds + " seconds. A local model may need longer "
+                + "(Settings, AI explanations, time limit), or a smaller model, or one with its thinking or reasoning mode turned off.");
         }
     }
+
+    public const int MinTimeoutSeconds = 30, MaxTimeoutSeconds = 1800;
 
     private static async Task<string> AnthropicAsync(AppSettings s, string system, string user, CancellationToken ct)
     {
