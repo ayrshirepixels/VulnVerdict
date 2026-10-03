@@ -145,6 +145,25 @@ snap remove --purge core22 2>/dev/null || true
 snap remove --purge snapd 2>/dev/null || true
 apt-get purge -y snapd 2>/dev/null || true
 rm -rf /var/lib/snapd /var/cache/snapd /root/snap /home/*/snap
+# Docker's build tools (the stack only runs images, it never builds them), and services that do nothing on a VM:
+# firmware updates, modems, desktop disk automounting, multipath storage. The kernel and its drivers are left alone.
+for p in docker-buildx-plugin docker-ce-rootless-extras fwupd modemmanager udisks2 multipath-tools; do
+  if dpkg -s "$p" >/dev/null 2>&1; then apt-get purge -y "$p" || true; fi
+done
+# Documentation, manual pages and translations: kept out now and from later updates; licence files stay
+cat > /etc/dpkg/dpkg.cfg.d/01-vulnverdict-nodoc <<'NODOC'
+path-exclude /usr/share/doc/*
+path-include /usr/share/doc/*/copyright
+path-exclude /usr/share/man/*
+path-exclude /usr/share/info/*
+path-exclude /usr/share/locale/*
+path-include /usr/share/locale/en*
+path-include /usr/share/locale/locale.alias
+NODOC
+find /usr/share/doc -mindepth 1 ! -name copyright ! -type d -delete 2>/dev/null || true
+find /usr/share/doc -mindepth 1 -type d -empty -delete 2>/dev/null || true
+rm -rf /usr/share/man/* /usr/share/info/*
+find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' ! -name locale.alias -exec rm -rf {} + 2>/dev/null || true
 apt-get autoremove --purge -y
 apt-get clean
 rm -rf /var/lib/apt/lists/*
