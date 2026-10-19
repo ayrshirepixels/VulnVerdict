@@ -160,6 +160,11 @@ path-exclude /usr/share/locale/*
 path-include /usr/share/locale/en*
 path-include /usr/share/locale/locale.alias
 NODOC
+# Firmware for physical hardware (Wi-Fi, graphics, storage controllers): virtual NICs and disks need none. The files
+# are already compressed, so they cost nearly their full size in the OVA. The linux-firmware package stays installed,
+# so the kernel and its security updates are unchanged; only the files are kept off this disk, now and after updates.
+printf 'path-exclude /lib/firmware/*\npath-exclude /usr/lib/firmware/*\n' > /etc/dpkg/dpkg.cfg.d/02-vulnverdict-nofirmware   # packages list either path
+rm -rf /usr/lib/firmware/*
 find /usr/share/doc -mindepth 1 ! -name copyright ! -type d -delete 2>/dev/null || true
 find /usr/share/doc -mindepth 1 -type d -empty -delete 2>/dev/null || true
 rm -rf /usr/share/man/* /usr/share/info/*
