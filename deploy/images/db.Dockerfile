@@ -4,7 +4,8 @@
 # a fresh image so the removed file does not linger in a lower layer (scanners read every layer). Data directories
 # created by the official image are already owned by postgres, so existing installs start unchanged.
 FROM postgres:16-alpine AS base
-RUN rm -f /usr/local/bin/gosu
+# Alpine security updates since the official image was built, then gosu out
+RUN apk upgrade --no-cache && rm -f /usr/local/bin/gosu
 
 FROM scratch
 COPY --from=base / /

@@ -8,7 +8,7 @@ COPY caddy-build.sh /usr/local/bin/caddy-build
 RUN sh /usr/local/bin/caddy-build "${CADDY_VERSION}" /caddy
 
 FROM alpine:3
-RUN apk add --no-cache ca-certificates mailcap \
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates mailcap \
     && mkdir -p /config/caddy /data/caddy /etc/caddy /srv
 COPY --from=build /caddy /usr/bin/caddy
 ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data

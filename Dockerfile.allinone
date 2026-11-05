@@ -37,7 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
     && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends postgresql-${PG_MAJOR} \
+    # with every repository in place, the security updates published since the base image was built go in too
+    && apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends postgresql-${PG_MAJOR} \
     && rm -rf /var/lib/apt/lists/* \
     # the ssl-cert package's snakeoil key would be the same in every copy of the image; Postgres here listens on a
     # Unix socket only and never uses it

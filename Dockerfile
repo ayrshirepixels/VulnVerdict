@@ -16,7 +16,8 @@ WORKDIR /app
 # (deploy/images/db.Dockerfile): an older pg_dump refuses a newer server, and a newer one writes dumps the database
 # container's own pg_restore cannot read back. Raise both together.
 ARG PG_MAJOR=16
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl postgresql-client-${PG_MAJOR} && rm -rf /var/lib/apt/lists/* \
+# security updates published since the base image was built go in too, so an OS fix does not wait for its next refresh
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates tzdata curl postgresql-client-${PG_MAJOR} && rm -rf /var/lib/apt/lists/* \
     # /data/backups exists in the image so a volume mounted there starts out owned by the console's user
     && useradd --system --uid 10001 --create-home vulnverdict && mkdir -p /data/backups && chown vulnverdict /data /data/backups
 COPY --from=build /app .

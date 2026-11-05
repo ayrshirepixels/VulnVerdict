@@ -19,7 +19,7 @@ func main() { caddycmd.Main() }
 GO
 go get "github.com/caddyserver/caddy/v2@${version}"
 go get golang.org/x/crypto@latest golang.org/x/net@latest google.golang.org/grpc@v1.83.2 \
-  github.com/klauspost/compress@latest github.com/go-chi/chi/v5@latest
+  github.com/klauspost/compress@latest github.com/go-chi/chi/v5@latest github.com/go-jose/go-jose/v4@latest
 go mod tidy
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$out" .
 "$out" version
