@@ -112,6 +112,26 @@ On an air-gapped site, load the release's images with `docker load` and run `./u
 
 The all-in-one container updates by pulling the new `:allinone` image and recreating the container on the same volume. Press **Back up now** (Settings, Backups) first, or copy the latest file from the backups folder: rolling back means recreating the container from the previous image and, if the schema moved, restoring that backup with `restore.sh --container` (see [backup](backup.md)).
 
+### Knowing when a release is out
+
+Once a day the worker asks GitHub which VulnVerdict release is the latest (`api.github.com`; nothing about the install is sent). A newer one shows as a banner on every page and a line in the digest, saying how this install updates. Turn it off under Settings, *New releases*; it never runs on a site fed by signed bundles.
+
+### Automatic patch updates
+
+Off unless you turn it on. With `VV_AUTO_UPDATE=patch` in `.env`, `auto-update.sh` installs **patch releases** (1.2.3 to 1.2.4) by itself each night; a minor or major release (1.2 to 1.3) can change behaviour, so it is only announced and stays yours to run. Patch releases are where security fixes land.
+
+It runs `./update.sh`, so an automatic update gets the same protection as one by hand: database and keys backed up first, every image checked, all of it rolled back if the new version does not come up. The outcome is written to `auto-update.log` beside it and into the console: a failed or rolled-back update is a red banner for a week, and the digest mentions either outcome.
+
+- **Appliance:** a timer runs it at about 03:30. Set `VV_AUTO_UPDATE=patch` in `/opt/vulnverdict/.env` (with `sudo`) and that is all. A different time: `sudo systemctl edit vulnverdict-autoupdate.timer`.
+- **Compose host:** add a cron line for root (or a user in the `docker` group), with your install folder:
+
+  ```
+  30 3 * * * /opt/vulnverdict/auto-update.sh >/dev/null 2>&1
+  ```
+
+- **Try it first:** `./auto-update.sh --dry-run` says what it would do.
+- **All-in-one container:** not covered. Updating would need the container to control Docker, which it is deliberately never given; pull the new `:allinone` image when the banner says so.
+
 ## Air-gapped sites
 
 Set no bundle URL and upload a signed feed bundle under **Licence and updates** (see `docs/security.md` for how bundles are signed and verified). The console refuses unsigned or older bundles. While it is fed by bundles no feed calls out, including the vendor VEX and end-of-life feeds; that data arrives in the bundle when the central service includes it.

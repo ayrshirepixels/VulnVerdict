@@ -20,9 +20,11 @@ public sealed class HealthNotices
     private readonly IDbContextFactory<VvDbContext> _factory;
     private readonly ConnectorService _connectors;
 
-    public HealthNotices(SettingsService settings, IDbContextFactory<VvDbContext> factory, ConnectorService connectors)
+    private readonly UpdateCheckService? _updates;
+
+    public HealthNotices(SettingsService settings, IDbContextFactory<VvDbContext> factory, ConnectorService connectors, UpdateCheckService? updates = null)
     {
-        _settings = settings; _factory = factory; _connectors = connectors;
+        _settings = settings; _factory = factory; _connectors = connectors; _updates = updates;
     }
 
     public async Task<List<Notice>> GetAsync(CancellationToken ct = default)
@@ -33,7 +35,21 @@ public sealed class HealthNotices
         list.AddRange(await WebhookService.FailureNoticesAsync(_factory, ct));
         list.AddRange(await HostKeysAsync(ct));
         if (DeployFilesNotice(Environment.GetEnvironmentVariable("Role"), Environment.GetEnvironmentVariable("VV_DEPLOY_FILES")) is { } files) list.Add(files);
+        if (_updates is not null)
+        {
+            if (UpdateCheckService.AutoUpdateNotice(await _updates.AutoUpdateAsync(ct), DateTime.UtcNow) is { } failed) list.Add(failed);
+            if (UpdateCheckService.AvailableNotice(await _updates.LatestAsync(ct), AppVersion.Current, Environment.GetEnvironmentVariable("Role")) is { } available) list.Add(available);
+        }
         return list;
+    }
+
+    /// <summary>For the digest: a newer release (said once a day is plenty), or an automatic update in the last week.</summary>
+    public async Task<string?> UpdateLineAsync(DateTime utcNow, CancellationToken ct = default)
+    {
+        if (_updates is null) return null;
+        var auto = UpdateCheckService.DigestLine(await _updates.AutoUpdateAsync(ct), utcNow);
+        var available = UpdateCheckService.AvailableNotice(await _updates.LatestAsync(ct), AppVersion.Current, Environment.GetEnvironmentVariable("Role"))?.Text;
+        return auto is null && available is null ? null : string.Join(" ", new[] { auto, available }.Where(x => x is not null));
     }
 
     /// <summary>The generation of deploy/docker-compose.yml this console expects; the file passes it as VV_DEPLOY_FILES.</summary>

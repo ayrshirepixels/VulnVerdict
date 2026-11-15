@@ -48,6 +48,16 @@
     </div>
 </div>
 
+<div class="card">
+    <h2>New releases</h2>
+    <div class="form">
+        <div>
+            <label class="check"><input type="checkbox" @bind="Settings.UpdateCheck" /> Say when a newer VulnVerdict release is out</label>
+            <div class="help">Once a day the worker asks GitHub which release is the latest (api.github.com, outbound HTTPS); nothing about this install is sent. A newer one shows as a banner and a line in the digest. Installing it stays with you: ./update.sh, or the opt-in automatic patch updates in docs/install.md. Never checked on a site fed by signed bundles.</div>
+        </div>
+    </div>
+</div>
+
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
     /// <summary>The Settings page's own settings object, with stored secrets already blanked.</summary>

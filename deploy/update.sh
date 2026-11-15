@@ -14,7 +14,7 @@
 #   4. stops the console and worker and dumps the database to backups/pre-update-<time>.dump, checked with
 #      pg_restore --list, with a copy of the encryption keys beside it. No backup, no update: the old containers are
 #      started again and the script stops
-#   4b. takes the new release's update.sh, rollback.sh and restore.sh from its image, and its docker-compose.yml and
+#   4b. takes the new release's update.sh, rollback.sh, restore.sh and auto-update.sh from its image, and its docker-compose.yml and
 #      Caddyfile where the copies here are unedited (an edited one is left alone, the new one written as <name>.new)
 #   5. starts the database, then the console and worker, then the proxy on the new images, checking each
 #   6. if anything in step 5 fails, runs ./rollback.sh, which puts back all four images and, because the new console
@@ -289,7 +289,7 @@ refresh_deploy_files() {
     fi
   done
   # replaced by rename: this script keeps running from the copy it started with
-  for f in update.sh rollback.sh restore.sh; do
+  for f in update.sh rollback.sh restore.sh auto-update.sh; do
     if [ -f "$new/$f" ]; then cp "$new/$f" "$f.tmp" && chmod 755 "$f.tmp" && mv "$f.tmp" "$f"; fi
   done
   if [ -f "$new/.env.example" ]; then cp "$new/.env.example" .env.example; fi
@@ -297,7 +297,7 @@ refresh_deploy_files() {
 }
 
 if [ "$DRY_RUN" = 1 ]; then
-  echo "  would take this release's update.sh, rollback.sh and restore.sh from $NEW, and its docker-compose.yml and Caddyfile where the copies here are unedited"
+  echo "  would take this release's update.sh, rollback.sh, restore.sh and auto-update.sh from $NEW, and its docker-compose.yml and Caddyfile where the copies here are unedited"
 else
   refresh_deploy_files
 fi

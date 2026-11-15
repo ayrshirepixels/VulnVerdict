@@ -13,7 +13,7 @@ d="$work/vulnverdict"; mkdir -p "$d" "$OUT"
 sed '/^    build: \.\.$/d' "$here/docker-compose.yml" > "$d/docker-compose.yml"
 sed "s|^VV_IMAGE=.*|VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${VERSION}|; s|^# Comment it out to build from a checkout.*|# (This file came from the ${VERSION} release bundle.)|" "$here/.env.example" > "$d/.env.example"
 cp "$here/Caddyfile" "$d/"
-install -m 0755 "$here/update.sh" "$here/rollback.sh" "$here/restore.sh" "$d/"
+install -m 0755 "$here/update.sh" "$here/rollback.sh" "$here/restore.sh" "$here/auto-update.sh" "$d/"
 grep -q "^VV_IMAGE=ghcr.io/ayrshirepixels/vulnverdict:${VERSION}$" "$d/.env.example"
 ! grep -q "build:" "$d/docker-compose.yml"
 tar -czf "$OUT/vulnverdict-compose.tar.gz" -C "$work" vulnverdict

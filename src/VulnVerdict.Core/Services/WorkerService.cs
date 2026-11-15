@@ -85,6 +85,7 @@ public sealed class WorkerService : BackgroundService
         await StepAsync("daily digest", () => DailyDigestIfDueAsync(ct), ct);
         await StepAsync("weekly report", () => WeeklyReportIfDueAsync(ct), ct);
         await StepAsync("feed health alert", () => FeedHealthAlertAsync(ct), ct);
+        await StepAsync("release check", () => _sp.GetRequiredService<UpdateCheckService>().CheckIfDueAsync(ct), ct);
         await StepAsync("backup and SLA snapshot", () => OperationsJobs.RunAsync(_sp, _log, ct), ct);
         await StepAsync("telemetry", async () =>
         {

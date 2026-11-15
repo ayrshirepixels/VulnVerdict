@@ -22,7 +22,29 @@ systemctl enable --now docker
 # ── The stack ─────────────────────────────────────────────────────────────
 install -d -m 0755 /opt/vulnverdict
 install -m 0644 /tmp/vv/docker-compose.yml /tmp/vv/Caddyfile /opt/vulnverdict/
-install -m 0755 /tmp/vv/update.sh /tmp/vv/rollback.sh /tmp/vv/restore.sh /opt/vulnverdict/
+install -m 0755 /tmp/vv/update.sh /tmp/vv/rollback.sh /tmp/vv/restore.sh /tmp/vv/auto-update.sh /opt/vulnverdict/
+# nightly automatic patch updates: the timer always runs, the script does nothing unless VV_AUTO_UPDATE=patch in .env
+cat > /etc/systemd/system/vulnverdict-autoupdate.service <<'UNIT'
+[Unit]
+Description=VulnVerdict automatic patch update (only with VV_AUTO_UPDATE=patch)
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/vulnverdict/auto-update.sh
+UNIT
+cat > /etc/systemd/system/vulnverdict-autoupdate.timer <<'UNIT'
+[Unit]
+Description=Nightly VulnVerdict automatic patch update check
+[Timer]
+# 03:30 local time, give or take half an hour; change with: systemctl edit vulnverdict-autoupdate.timer
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=30m
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl enable vulnverdict-autoupdate.timer
 # DB_PASSWORD is a placeholder: the first-boot wizard generates the real one, so no two appliances
 # share it. The .env is root-only because it will hold that password.
 printf 'DB_PASSWORD=__SET_AT_FIRST_BOOT__\nVV_HOSTNAME=vulnverdict\nVV_IMAGE=%s\nVV_DB_IMAGE=%s\nVV_PROXY_IMAGE=%s\nCVE_MIN_YEAR=0\n' \

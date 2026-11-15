@@ -29,6 +29,8 @@ public sealed class DigestContent
     public string? SecretWarning { get; init; }
     /// <summary>Set when the last good database backup is older than 48 hours.</summary>
     public string? BackupWarning { get; init; }
+    /// <summary>A newer release, or an automatic update in the last week.</summary>
+    public string? UpdateLine { get; init; }
     public DateTime GeneratedAt { get; init; }
     public string Html { get; init; } = "";
     public string Text { get; init; } = "";
@@ -131,6 +133,7 @@ public sealed class DigestService
         var secretNotices = await _notices.SecretsAsync(now, ct);
         var secretWarning = secretNotices.Count > 0 ? string.Join(" ", secretNotices.Select(n => n.Text)) : null;
         var backupWarning = (await BackupService.HealthAsync(_settings, null, now, ct)).DigestWarning;
+        var updateLine = await _notices.UpdateLineAsync(now, ct);
 
         // one-click links, only in a digest that is being sent and only when there is an address to put in them
         var actions = new Dictionary<Guid, DigestActionLinks>();
@@ -145,7 +148,7 @@ public sealed class DigestService
         {
             Headline = headline, Subject = subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, UpdateLine = updateLine, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions
         };
         var html = RenderHtml(content, s.BaseUrl, localNow);
         var text = RenderText(content, s.BaseUrl, localNow);
@@ -153,7 +156,7 @@ public sealed class DigestService
         {
             Headline = content.Headline, Subject = content.Subject, FixToday = fixToday, FixThisWeek = fixWeek, CheckThese = check, Changed = changed, Overdue = overdue,
             NextPatchCycleCount = nextCycle, DismissedSinceMonday = dismissedSinceMonday, DismissedTotal = dismissedTotal,
-            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
+            CoverageLine = coverage, FeedWarning = warning, SecretWarning = secretWarning, BackupWarning = backupWarning, UpdateLine = updateLine, GeneratedAt = now, HistoryIdsIncluded = includedIds, Actions = actions, Html = html, Text = text
         };
     }
 
@@ -346,6 +349,7 @@ public sealed class DigestService
         if (c.FeedWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.FeedWarning) + "</p>");
         if (c.SecretWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.SecretWarning) + "</p>");
         if (c.BackupWarning is not null) sb.Append("<p style=\"color:#b3261e;font-size:13px\">" + WebUtility.HtmlEncode(c.BackupWarning) + "</p>");
+        if (c.UpdateLine is not null) sb.Append("<p style=\"color:#444;font-size:13px\">" + WebUtility.HtmlEncode(c.UpdateLine) + "</p>");
         sb.Append("<p style=\"color:#5c6470;font-size:12px;margin-top:14px\"><b style=\"color:#1E222A\"><span style=\"color:#FF9F0A\">VULN</span>VERDICT</b> &middot; Cut the noise. Know your risk.</p>");
         sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(Disclaimer) + "</p>");
         sb.Append("<p style=\"color:#888;font-size:11px\">" + WebUtility.HtmlEncode(EpssAttribution) + "</p>");
@@ -387,6 +391,7 @@ public sealed class DigestService
         if (c.FeedWarning is not null) sb.AppendLine(c.FeedWarning);
         if (c.SecretWarning is not null) sb.AppendLine(c.SecretWarning);
         if (c.BackupWarning is not null) sb.AppendLine(c.BackupWarning);
+        if (c.UpdateLine is not null) sb.AppendLine(c.UpdateLine);
         sb.AppendLine();
         sb.AppendLine(Disclaimer);
         sb.AppendLine();

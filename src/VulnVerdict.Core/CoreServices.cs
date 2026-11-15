@@ -76,6 +76,7 @@ public static class CoreServices
         services.AddSingleton<BundleService>();
         services.AddSingleton<LicenseService>();
         services.AddSingleton<TelemetryService>();
+        services.AddSingleton<UpdateCheckService>();
         services.AddSingleton<MspReportService>();
         services.AddSingleton<ChatNotificationService>().AddSingleton<DigestActionTokens>().AddSingleton<DigestActionService>();
         // operations: backups, /metrics, SLA trends

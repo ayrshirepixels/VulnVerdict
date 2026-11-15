@@ -73,6 +73,8 @@ public sealed class AppSettings
 
     /// <summary>Done and Snooze links in the digest email that work without signing in (see docs/digest.md).</summary>
     public bool DigestActionLinks { get; set; } = true;
+    /// <summary>Check GitHub once a day for a newer release and say so on screen and in the digest. Nothing about this install is sent.</summary>
+    public bool UpdateCheck { get; set; } = true;
 
     // weekly management report
     public string ReportRecipients { get; set; } = "";
@@ -306,6 +308,10 @@ public sealed class SettingsService
     public static class Keys
     {
         public const string WorkerHeartbeat = "state:worker:heartbeat";
+        /// <summary>The latest release GitHub reported (UpdateCheckService).</summary>
+        public const string UpdateLatest = "state:update:latest";
+        /// <summary>What deploy/auto-update.sh did last: result|from|to|time|message, written through psql.</summary>
+        public const string UpdateAuto = "state:update:auto";
         public const string LastDailyDigest = "state:digest:lastDaily";
         public const string LastAdminAlert = "state:alert:last";
         public const string LastWorkerStaleAlert = "state:alert:workerStale";

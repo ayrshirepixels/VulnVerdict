@@ -53,7 +53,7 @@ The console keeps running while the command runs. It removes that local account'
 ## Network
 
 - Only 443 (and 80 for redirects) is published, through Caddy. Postgres and the application containers are on the internal Compose network only.
-- Outbound: the worker needs HTTPS to the public feeds, or only to your central bundle URL, plus whatever your connectors and mail transport need. The AI provider, if enabled, receives the product, version, exposure level and public CVE text: never hostnames, addresses or asset names.
+- Outbound: the worker needs HTTPS to the public feeds, or only to your central bundle URL, plus whatever your connectors and mail transport need. Once a day it also asks api.github.com for the latest release (nothing about the install is sent; off under Settings, and never on a bundle-fed site). The AI provider, if enabled, receives the product, version, exposure level and public CVE text: never hostnames, addresses or asset names.
 
 ## Headers and browser
 
