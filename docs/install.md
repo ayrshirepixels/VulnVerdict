@@ -130,6 +130,11 @@ It runs `./update.sh`, so an automatic update gets the same protection as one by
   ```
 
 - **Try it first:** `./auto-update.sh --dry-run` says what it would do.
+- **An install from before 1.2.4:** its `update.sh` does not fetch `auto-update.sh`, and the timer is only set up on a new appliance. After updating to 1.2.4, take the script from the release and add the cron line above (on the appliance too, as root):
+
+  ```
+  curl -fsSL https://github.com/ayrshirepixels/VulnVerdict/releases/latest/download/vulnverdict-compose.tar.gz | tar -xz --strip-components=1 vulnverdict/auto-update.sh
+  ```
 - **All-in-one container:** not covered. Updating would need the container to control Docker, which it is deliberately never given; pull the new `:allinone` image when the banner says so.
 
 ## Air-gapped sites
