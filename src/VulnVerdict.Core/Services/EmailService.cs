@@ -115,7 +115,7 @@ public sealed class EmailService
         };
         await client.ConnectAsync(s.SmtpHost, s.SmtpPort, security, ct);
         if (!string.IsNullOrEmpty(s.SmtpUsername)) await client.AuthenticateAsync(s.SmtpUsername, s.SmtpPassword, ct);
-        await client.SendAsync(msg, ct);
+        await client.SendAsync(new MailKit.SendRequest(msg), ct);   // MailKit 5 wraps the message in a send request
         await client.DisconnectAsync(true, ct);
     }
 

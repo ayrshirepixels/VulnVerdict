@@ -149,7 +149,7 @@ public sealed class LlmService
             Model = s.LlmModel,
             MaxTokens = 1024,
             System = system,
-            Messages = [new() { Role = Role.User, Content = user }]
+            Messages = [new UserMessageParam { Content = user }]
         }, cancellationToken: ct);
         if (response.StopReason == "refusal")
             throw new InvalidOperationException("The model declined to answer" + (response.StopDetails is { } d ? " (" + d.Category + ": " + d.Explanation + ")" : "") + ".");

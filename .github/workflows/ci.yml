@@ -15,8 +15,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
       - run: dotnet restore
@@ -26,7 +26,7 @@ jobs:
           ! grep -q "has the following vulnerable packages" packages.txt
       - run: dotnet build --no-restore -c Release
       - run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
@@ -41,9 +41,9 @@ jobs:
       # Trivy 0.74.0, pinned by digest
       TRIVY: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
@@ -51,7 +51,7 @@ jobs:
           tags: vv-ci/web
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.allinone
@@ -59,13 +59,13 @@ jobs:
           tags: vv-ci/allinone
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: deploy/images
           file: deploy/images/db.Dockerfile
           load: true
           tags: vv-ci/db
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: deploy/images
           file: deploy/images/proxy.Dockerfile

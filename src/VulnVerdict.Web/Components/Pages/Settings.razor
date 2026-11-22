@@ -161,7 +161,7 @@
                             <option value="openai">OpenAI</option>
                             <option value="openai-compatible">OpenAI-compatible endpoint (Ollama, vLLM, LM Studio)</option>
                         </select></div>
-                    <div><label>Model</label><input type="text" @bind="_s.LlmModel" placeholder="@(_s.LlmProvider == "anthropic" ? "claude-opus-5" : _s.LlmProvider == "openai" ? "the model name from your OpenAI account" : "llama3.1")" /></div>
+                    <div><label>Model</label><input type="text" @bind="_s.LlmModel" placeholder="@(_s.LlmProvider == "anthropic" ? "claude-opus-5-5" : _s.LlmProvider == "openai" ? "the model name from your OpenAI account" : "llama3.1")" /></div>
                     <div><label>API key</label><input type="password" @bind="_s.LlmApiKey" autocomplete="new-password" placeholder="@Saved(nameof(AppSettings.LlmApiKey))" />@Remove(nameof(AppSettings.LlmApiKey))<div class="help">Stored encrypted. Optional for a local endpoint.</div></div>
                 </div>
                 @if (_s.LlmProvider == "openai-compatible")
